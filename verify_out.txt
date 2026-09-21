@@ -1,0 +1,258 @@
+PASS pet spawned  (x=960 y=1080)
+PASS not home
+PASS parked cursor earns a glance  (dir=1)
+PASS no cursor mounting exists  (ride feature removed)
+PASS hunt stalk triggers
+PASS pounce resolved  (huntCd=11695)
+PASS sig shade/umbral
+PASS sig prism/spectrum
+PASS sig gold/shower
+PASS sig kitty/pounce
+PASS sig bolt/zap
+PASS sig void/voidpull
+PASS sig stella/starburst
+PASS sig cliff/landslide
+PASS sig bites/frenzy
+PASS sig aurora/veil
+PASS sig toxic/bubbleup
+PASS sig mecha/beep
+PASS sig ghost/phase
+PASS sig astro/orbit
+PASS sig ninja/smokebomb
+PASS sig comet/reentry
+PASS sig molten/eruption
+PASS sig siren/song
+PASS sig yule/jingle
+PASS sig spidr/webshot
+PASS sig drago/firebreath
+PASS sig pulsar/singularity
+PASS sig rex/decree
+PASS sig pinata/burst
+PASS sig lant/flare
+PASS sig dice/rollout
+PASS sig frog/ribbit
+PASS species sprout: profile+face  (ps=bouncy mv=walk)
+PASS species sprout: act "prop"  (started=true )
+PASS species berry: profile+face  (ps=bouncy mv=walk)
+PASS species berry: act "monocle"  (started=true )
+PASS species pebble: profile+face  (ps=calm mv=walk)
+PASS species pebble: act "stache"  (started=true )
+PASS species tide: profile+face  (ps=calm mv=walk)
+PASS species tide: act "phones"  (started=true )
+PASS species ember: profile+face  (ps=hyper mv=walk)
+PASS species ember: act "halo"  (started=true )
+PASS species mochi: profile+face  (ps=lazy mv=walk)
+PASS species mochi: act "antenna"  (started=true )
+PASS species shade: profile+face  (ps=shy mv=walk)
+PASS species shade: act "leaf"  (started=true )
+PASS species prism: profile+face  (ps=calm mv=walk)
+PASS species prism: act "scarf"  (started=true )
+PASS species gold: profile+face  (ps=bold mv=hover)
+PASS species gold: act "shades"  (started=true )
+PASS species moss: profile+face  (ps=lazy mv=walk)
+PASS species moss: act "crown"  (started=true )
+PASS species candy: profile+face  (ps=hyper mv=walk)
+PASS species candy: act "tiara"  (started=true )
+PASS species frost: profile+face  (ps=calm mv=walk)
+PASS species frost: act "wiz"  (started=true )
+PASS species bloom: profile+face  (ps=bouncy mv=walk)
+PASS species bloom: act "flower"  (started=true )
+PASS species kitty: profile+face  (ps=hyper mv=walk)
+PASS species kitty: act "horns"  (started=true )
+PASS species bolt: profile+face  (ps=hyper mv=walk)
+PASS species bolt: act "party"  (started=true )
+PASS species void: profile+face  (ps=calm mv=walk)
+PASS species void: act "specs"  (started=true )
+PASS species stella: profile+face  (ps=bold mv=blink)
+PASS species stella: act "mohawk"  (started=true )
+PASS species mud: profile+face  (ps=lazy mv=walk)
+PASS species mud: act "wings"  (started=true )
+PASS species sunny: profile+face  (ps=hyper mv=walk)
+PASS species sunny: act "prop"  (started=true )
+PASS species bubble: profile+face  (ps=bouncy mv=walk)
+PASS species bubble: act "monocle"  (started=true )
+PASS species inky: profile+face  (ps=shy mv=walk)
+PASS species inky: act "stache"  (started=true )
+PASS species cliff: profile+face  (ps=calm mv=walk)
+PASS species cliff: act "phones"  (started=true )
+PASS species bites: profile+face  (ps=hyper mv=scurry)
+PASS species bites: act "halo"  (started=true )
+PASS species choco: profile+face  (ps=calm mv=walk)
+PASS species choco: act "antenna"  (started=true )
+PASS species lime: profile+face  (ps=bouncy mv=walk)
+PASS species lime: act "leaf"  (started=true )
+PASS species grape: profile+face  (ps=shy mv=walk)
+PASS species grape: act "scarf"  (started=true )
+PASS species peach: profile+face  (ps=bouncy mv=walk)
+PASS species peach: act "shades"  (started=true )
+PASS species coal: profile+face  (ps=lazy mv=walk)
+PASS species coal: act "crown"  (started=true )
+PASS species cloud: profile+face  (ps=lazy mv=walk)
+PASS species cloud: act "tiara"  (started=true )
+PASS species bean: profile+face  (ps=hyper mv=walk)
+PASS species bean: act "wiz"  (started=true )
+PASS species snowy: profile+face  (ps=shy mv=walk)
+PASS species snowy: act "flower"  (started=true )
+PASS species rust: profile+face  (ps=calm mv=walk)
+PASS species rust: act "horns"  (started=true )
+PASS species waffle: profile+face  (ps=lazy mv=walk)
+PASS species waffle: act "party"  (started=true )
+PASS species cherry: profile+face  (ps=hyper mv=walk)
+PASS species cherry: act "specs"  (started=true )
+PASS species ocean: profile+face  (ps=calm mv=walk)
+PASS species ocean: act "mohawk"  (started=true )
+PASS species minty: profile+face  (ps=shy mv=walk)
+PASS species minty: act "wings"  (started=true )
+PASS species taro: profile+face  (ps=lazy mv=walk)
+PASS species taro: act "prop"  (started=true )
+PASS species honey: profile+face  (ps=lazy mv=walk)
+PASS species honey: act "monocle"  (started=true )
+PASS species coral: profile+face  (ps=bouncy mv=walk)
+PASS species coral: act "stache"  (started=true )
+PASS species slate: profile+face  (ps=calm mv=walk)
+PASS species slate: act "phones"  (started=true )
+PASS species fungi: profile+face  (ps=lazy mv=walk)
+PASS species fungi: act "halo"  (started=true )
+PASS species aurora: profile+face  (ps=bold mv=walk)
+PASS species aurora: act "antenna"  (started=true )
+PASS species toxic: profile+face  (ps=bold mv=walk)
+PASS species toxic: act "leaf"  (started=true )
+PASS species mecha: profile+face  (ps=calm mv=walk)
+PASS species mecha: act "scarf"  (started=true )
+PASS species ghost: profile+face  (ps=shy mv=hover)
+PASS species ghost: act "shades"  (started=true )
+PASS species astro: profile+face  (ps=bold mv=hover)
+PASS species astro: act "crown"  (started=true )
+PASS species ninja: profile+face  (ps=hyper mv=scurry)
+PASS species ninja: act "tiara"  (started=true )
+PASS species comet: profile+face  (ps=hyper mv=blink)
+PASS species comet: act "wiz"  (started=true )
+PASS species molten: profile+face  (ps=bold mv=walk)
+PASS species molten: act "flower"  (started=true )
+PASS species siren: profile+face  (ps=bold mv=hover)
+PASS species siren: act "horns"  (started=true )
+PASS species pumkin: profile+face  (ps=bouncy mv=walk)
+PASS species pumkin: act "party"  (started=true )
+PASS species yule: profile+face  (ps=calm mv=walk)
+PASS species yule: act "specs"  (started=true )
+PASS species spidr: profile+face  (ps=bold mv=scurry)
+PASS species spidr: act "mohawk"  (started=true )
+PASS species drago: profile+face  (ps=hyper mv=walk)
+PASS species drago: act "wings"  (started=true )
+PASS species pulsar: profile+face  (ps=calm mv=hover)
+PASS species pulsar: act "prop"  (started=true )
+PASS species rex: profile+face  (ps=bold mv=walk)
+PASS species rex: act "monocle"  (started=true )
+PASS species pinata: profile+face  (ps=hyper mv=scurry)
+PASS species pinata: act "stache"  (started=true )
+PASS species lant: profile+face  (ps=shy mv=hover)
+PASS species lant: act "phones"  (started=true )
+PASS species dice: profile+face  (ps=bouncy mv=scurry)
+PASS species dice: act "halo"  (started=true )
+PASS species frog: profile+face  (ps=bouncy mv=hop)
+PASS species frog: act "antenna"  (started=true )
+PASS legFlair all legendaries
+PASS hold-cuddle triggers
+PASS cursor circle trick  (circScore=0.00 cdist=150 flying=false sigT0=0)
+PASS cursor scritch (petting)  (rubCount=1.0)
+PASS boop hops away + pout
+PASS main pet eats treat  (treats=1 tx=-1 petX=196 wt=210.37240000003692 sig=0 snack=false fly=false)
+PASS pal can eat treat
+PASS walk gait advances with speed  (gait=12.14 spd=195)
+PASS pal bump → hop + face  (fly=true face=shock)
+PASS tag chase resolves  (t0=null t1=null)
+PASS tag ends with a beat (catch or timeout laugh)  (faces=laugh,laugh)
+PASS ball settles on a platform  (y=1080 vy=0)
+PASS pal nudges the ball  (vx=108 vy=-23)
+PASS discovery hint fires  (until=172599)
+PASS bowl stroll → munch ritual  (munchUntil=176815 bowlCd=219415)
+PASS bowl cooldown set
+PASS cushion stroll → nap  (nap=189707 now=176753)
+PASS nap face = sleeping  (sleeping)
+PASS stale prop goal ignored  (bowlCd=0)
+PASS box stroll → hide inside  (hide=184210.16603110297 now=178857)
+PASS hidden pet stays parked  (dx=0.0)
+PASS box tap ejects the squatter  (hide=0 fly=true)
+FAIL plant sniff ritual fires  (cd=0 content=0 shock=0)
+FAIL music winds → pet dances  (dance=0 cd=0)
+FAIL music key spinning  (spin=undefined)
+PASS pal bounces to the tune  (fly=true face=happy)
+PASS toybox spawns a box  (box={"x":780.173402570041,"y":1080,"plat":{"x":0,"y":1080,"w":1920}})
+PASS toybox toggles the box off
+FAIL toybox spawns a plant  (tb=true fab=true box=false strip="[1651,134,220,34]")
+FAIL toybox spawns a music box  (tb=true fab=true)
+PASS pal dives into the box  (hide=186238.8236090991 now=180727)
+PASS hidden pal stays parked  (dx=0.0)
+PASS hidden pal can't be poked
+PASS card gear cells built  (n=3)
+PASS card click equips on this pal  ({"tide":"scarf"})
+PASS '-' cell unequips  ({})
+PASS bond gain lands
+PASS bond trickle gate
+PASS bond level thresholds  (xp=95 → lvl 3)
+PASS persist stores props  ({"bowl":{"x":1384.4537492003446,"y":1080,"fill":1},"cushion":{"x":584.4537492003446,"y":1080},"box":{"x":920.173402570041,"y":1080},"plant":null,"music":null})
+FAIL persist stores new props  ({"bowl":{"x":1384.4537492003446,"y":1080,"fill":1},"cushion":{"x":584.4537492003446,"y":1080},"box":{"x":920.173402570041,"y":1080},"plant":null,"music":null})
+PASS persist stores bond
+PASS accessory physics render clean
+PASS pal slides off window side face  (x=510 (from 620) fly=false y=1080 vy=0 vx=0 n=2 rest=0 held=false web=0 stack=null crashes=[])
+PASS dropped prop lands on deck  (y=1080 x=770.173402570041)
+PASS window close → startled fall
+PASS lands dazed  (dizzy=185066.80000002062 pout=185566.80000002062)
+PASS startle flag cleared
+PASS fab defaults top-right  (pos=1892,28)
+PASS accordion opens below  (iy=54 fy=28)
+PASS item hit-test works
+PASS accordion flips up near bottom  (iy=988)
+PASS strip hangs off toys item
+PASS settings fits small screen  (ph=390 py=35)
+PASS scroll range appears when short  (max=32)
+PASS last row starts below viewport  (qy=403 vy1=391)
+PASS wheel handler installed
+PASS wheel outside panel ignored
+PASS wheel inside panel scrolls  (s=26)
+PASS scroll clamps at content end  (s=32 max=32)
+PASS quit reachable at bottom  (qbot=391 vy1=391)
+PASS hidden row takes no click  (open=true)
+PASS resize clamps scroll  (s=192 max=192)
+PASS tiny screen still shows footer zone  (ph=230 py=35)
+PASS no scrollbar at full size  (max=0)
+PASS egg dropped on deck  (egg={"x":894.8389635441829,"y":1080,"plat":{"x":0,"y":1080,"w":1920},"t0":6200.3274,"wob":1.2353851833988823})
+PASS egg hatches (species or jelly)  (owned=9>8 jelly=5041>5041)
+PASS copy peek perks  (shock=8249.028699999999)
+PASS sleeping pet ignores cursor  (wt=null dx=0.0 state=sleeping)
+PASS sleeping pet ignores startle + hunt  (fly=false hunt=0 sig=0 dx=0.0)
+PASS cushion nap: zero movement/acts  (dx=0.00 dy=0.00 wt=null acc=null treat=true)
+PASS cushion nap face = sleeping  (sleeping)
+PASS grab wakes cushion nap  (held=true nap=0)
+PASS napping pal stays put  (dx=0.0 wt=null fly=false tag=null)
+PASS napping pal doesn't dodge the ball  (fly=false rest=true)
+PASS grab wakes napping pal  (held=true rest=0)
+PASS second pal can't nap on a taken cushion  (rest=0 pg=null)
+PASS first pal still napping
+PASS pet arrival evicts the napping pal  (rest=0 fly=true)
+PASS pet takes the cushion  (nap=200833.32185226446)
+PASS walking pal leapfrogs a standing pal  (p0=333 p1=328)
+PASS blocked pal treads on the blocker  (stepped=198929.40000003084)
+PASS stepped pal squished + reacts by its own personality  (face=grumpy want=grumpy wt=null)
+PASS napping blocker is hopped, never stepped  (stepped=0 rest=true)
+PASS pal nap cooldown scales with sleep  (cd=22500 want=22500)
+PASS all 18 accessory acts start + finish clean
+PASS cooldown pushed  (next=326695.9940101985 t=239795.30000005968)
+PASS flyby starts  (act=flyby fly=true)
+PASS blades spun + landed clean, no render crash  (spun=1 done=true spin=0 crash=0)
+PASS all 14 timed scripts complete
+PASS grab aborts mid-act
+PASS reduceMotion suppresses acts
+FAIL pal acc bit fires
+PASS all 29 pal bits run to completion
+PASS pal bit abort tolerated
+PASS wedged act self-heals  (act=null spin=0)
+PASS munch spends kibble  (fill=0)
+PASS empty bowl pouts  (pout=10303.248)
+PASS tap refills bowl
+PASS tap fluffs cushion
+PASS ball splats on bounce  (sq=0.5339257142855885 vy=-217.71899999996003)
+PASS all 22 faces render
+PASS legendary species exist  (gold,stella,cliff,bites,comet,molten,siren,spidr,drago,pulsar,rex)
+
+=== 249 passed, 7 failed ===

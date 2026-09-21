@@ -1,0 +1,63 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  overflow: hidden;
+  height: 100%;
+  user-select: none;
+  font-family: "Segoe UI", sans-serif;
+}
+
+#c {
+  display: block;
+  image-rendering: pixelated;
+}
+
+/* ranch + nursery + status card: single canvas each, drawn as pixels */
+#ranch,
+#nursery,
+#card {
+  display: none;
+  position: fixed;
+  padding: 0;
+  border: 3px solid #5c4632;
+  border-radius: 10px;
+  overflow: hidden;
+  z-index: 10;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+#ranch.open,
+#nursery.open,
+#card.open {
+  display: block;
+}
+
+#card {
+  z-index: 12;
+}
+
+#rc,
+#nc,
+#kc {
+  display: block;
+  image-rendering: pixelated;
+}
+
+/* bestiary card: own fullscreen overlay above the ranch window so the
+   card never hides behind panels and survives their closing */
+#info {
+  display: none;
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 20;
+}
+#info.open {
+  display: block;
+}
+#ic {
+  display: block;
+}
+

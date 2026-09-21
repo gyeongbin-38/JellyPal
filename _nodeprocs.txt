@@ -1,0 +1,82 @@
+﻿
+
+ProcessId       : 27584
+ParentProcessId : 27124
+CommandLine     : "C:\ProgramData\Penta Security Systems\DAmoWebCrypto\node.exe" "C:\ProgramData\Penta Security Systems
+                  \DAmoWebCrypto\index.js"
+
+ProcessId       : 27180
+ParentProcessId : 27188
+CommandLine     : "C:\ProgramData\Penta Security Systems\DAmoWebCrypto\node.exe" "C:\ProgramData\Penta Security Systems
+                  \DAmoWebCrypto\index.js"
+
+ProcessId       : 28700
+ParentProcessId : 33056
+CommandLine     : "C:\Program Files\nodejs\\node.exe"  "C:\Program Files\nodejs\\node_modules\npm\bin\npm-cli.js" run j
+                  obs watch
+
+ProcessId       : 29992
+ParentProcessId : 2788
+CommandLine     : "C:\Program Files\nodejs\\node.exe"  "C:\Program Files\nodejs\\node_modules\npm\bin\npm-cli.js" run s
+                  tart --workspace @erp/jobs -- watch
+
+ProcessId       : 18228
+ParentProcessId : 33604
+CommandLine     : "node"   "C:\Users\박남표\Desktop\ERP\node_modules\.bin\\..\tsx\dist\cli.mjs" src/index.ts watch
+
+ProcessId       : 10016
+ParentProcessId : 18228
+CommandLine     : "C:\Program Files\nodejs\node.exe" --require C:\Users\박남표\Desktop\ERP\node_modules\tsx\dist\preflight
+                  .cjs --import file:///C:/Users/%EB%B0%95%EB%82%A8%ED%91%9C/Desktop/ERP/node_modules/tsx/dist/loader.m
+                  js src/index.ts watch
+
+ProcessId       : 16164
+ParentProcessId : 25152
+CommandLine     : "C:\Program Files\nodejs\\node.exe"  "C:\Program Files\nodejs\\node_modules\npm\bin\npm-cli.js" run d
+                  ev
+
+ProcessId       : 23484
+ParentProcessId : 28236
+CommandLine     : "node"   "C:\Users\박남표\Desktop\plugview\node_modules\.bin\\..\next\dist\bin\next" dev
+
+ProcessId       : 21004
+ParentProcessId : 23484
+CommandLine     : "C:\Program Files\nodejs\node.exe" C:\Users\박남표\Desktop\plugview\node_modules\next\dist\server\lib\st
+                  art-server.js
+
+ProcessId       : 10260
+ParentProcessId : 21004
+CommandLine     : "node" C:\Users\박남표\Desktop\plugview\.next\dev\build\chunks\pool_entry-[turbopack-node]_transforms_po
+                  stcss_ts_0tp-k2v._.js 50068
+
+ProcessId       : 31544
+ParentProcessId : 21004
+CommandLine     : "node" C:\Users\박남표\Desktop\plugview\.next\dev\build\chunks\pool_entry-[turbopack-node]_transforms_we
+                  bpack-loaders_ts_21971j8._.js 56768
+
+ProcessId       : 28600
+ParentProcessId : 24452
+CommandLine     : "C:\Program Files\nodejs\\node.exe"  "C:\Program Files\nodejs\\node_modules\npm\bin\npx-cli.js" next 
+                  start -p 3100
+
+ProcessId       : 21624
+ParentProcessId : 11052
+CommandLine     : "node"   "C:\Users\박남표\Desktop\ERP\node_modules\.bin\\..\next\dist\bin\next" start -p 3100
+
+ProcessId       : 11484
+ParentProcessId : 9800
+CommandLine     : node C:\Users\박남표\AppData\Roaming\npm\node_modules\chrome-devtools-mcp\build\src\bin\chrome-devtools-
+                  mcp.js --browserUrl http://127.0.0.1:9222
+
+ProcessId       : 22136
+ParentProcessId : 11484
+CommandLine     : "C:\Program Files\nodejs\node.exe" C:\Users\박남표\AppData\Roaming\npm\node_modules\chrome-devtools-mcp\
+                  build\src\telemetry\watchdog\main.js --parent-pid=11484 --app-version=1.8.0 --os-type=1
+
+ProcessId       : 20784
+ParentProcessId : 32572
+CommandLine     : "C:\Program Files\nodejs\\node.exe"  "C:\Program Files\nodejs\\node_modules\npm\bin\npx-cli.js" eslin
+                  t components/make/export-dialog.tsx
+
+
+

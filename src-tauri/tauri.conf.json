@@ -1,0 +1,51 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Jellypal",
+  "version": "0.2.0",
+  "identifier": "com.jellypal.app",
+  "build": {
+    "frontendDist": "../src"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "jellypal",
+        "width": 480,
+        "height": 140,
+        "focus": false,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "shadow": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "C:/dev/assets/icon.ico"
+    ],
+    "category": "Entertainment",
+    "shortDescription": "Desktop slime companion",
+    "longDescription": "Jellypal — cute pixel-art slimes that live on your desktop, play on your windows, and keep you company while you work.",
+    "resources": {
+      "target/release/WebView2Loader.dll": "WebView2Loader.dll"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  }
+}
