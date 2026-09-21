@@ -23,6 +23,12 @@ const stage = path.join(DIST, tag);
 fs.rmSync(stage, { recursive: true, force: true });
 fs.mkdirSync(stage);
 fs.copyFileSync(EXE, path.join(stage, "jellypal.exe"));
+// GNU target links the WebView2 loader dynamically — without this DLL
+// next to the exe the app exits instantly with 0xC0000135
+fs.copyFileSync(
+  path.join(ROOT, "src-tauri", "target", "release", "WebView2Loader.dll"),
+  path.join(stage, "WebView2Loader.dll")
+);
 fs.copyFileSync(path.join(ROOT, "README.txt"), path.join(stage, "README.txt"));
 // the exe checks for this marker next to itself to enable demo mode
 if (DEMO) fs.writeFileSync(path.join(stage, "demo.flag"), "free demo — see README\n");
