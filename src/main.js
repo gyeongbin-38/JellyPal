@@ -1271,8 +1271,8 @@ function ac() {
   if (AC.state === "suspended") AC.resume();
   return AC;
 }
-function blip({ f = 600, f2, d = 0.08, type = "square", v = 0.05, at = 0 }) {
-  if (VOL_STEPS[volStep] === 0) return;
+function blip({ f = 600, f2, d = 0.08, type = "square", v = 0.05, at = 0, atk = 0.008 }) {
+  if (vol <= 0.001) return;
   try {
     const a = ac();
     const o = a.createOscillator();
@@ -1281,7 +1281,10 @@ function blip({ f = 600, f2, d = 0.08, type = "square", v = 0.05, at = 0 }) {
     o.type = type;
     o.frequency.setValueAtTime(f, t);
     if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + d);
-    g.gain.setValueAtTime(v * VOL_STEPS[volStep], t);
+    // soft attack: ramping in kills the oscillator click that made every
+    // note read as a machine beep
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(v * vol, t + atk);
     g.gain.exponentialRampToValueAtTime(0.0001, t + d);
     o.connect(g).connect(a.destination);
     o.start(t);
@@ -1292,16 +1295,19 @@ function blip({ f = 600, f2, d = 0.08, type = "square", v = 0.05, at = 0 }) {
 // DLC can override entries (or pitch/vol-shift the whole board) without
 // touching any call site. fr = random range added to f per play
 const SFX_DEFS = {
-  munch:  [{ f: 520, fr: 240, f2: 950, d: 0.05, v: 0.035 }],
-  pop:    [{ f: 230, f2: 120, d: 0.09, type: "triangle", v: 0.07 }],
-  boing:  [{ f: 320, f2: 150, d: 0.12, type: "sine", v: 0.06 }],
-  heart:  [{ f: 880, d: 0.07, type: "sine", v: 0.045 }, { f: 1320, d: 0.09, type: "sine", v: 0.04, at: 0.06 }],
-  giggle: [{ f: 900, f2: 1250, d: 0.05, v: 0.045 }, { f: 1000, f2: 1400, d: 0.05, v: 0.045, at: 0.07 }, { f: 1150, f2: 1500, d: 0.06, v: 0.04, at: 0.14 }],
-  shock:  [{ f: 420, f2: 1400, d: 0.11, v: 0.05 }],
-  angry:  [{ f: 210, f2: 130, d: 0.13, type: "sawtooth", v: 0.045 }],
-  drop:   [{ f: 200, f2: 90, d: 0.14, type: "triangle", v: 0.08 }],
-  reveal: [{ f: 660, d: 0.09, type: "sine", v: 0.05 }, { f: 880, d: 0.09, type: "sine", v: 0.05, at: 0.08 }, { f: 1320, d: 0.15, type: "sine", v: 0.055, at: 0.16 }],
-  zzz:    [{ f: 700, f2: 500, d: 0.06, type: "sine", v: 0.02 }],
+  // cute board: sine/triangle bases, upward chirps and consonant jumps —
+  // nothing reads as a machine beep once the attack ramp (in blip) rounds
+  // the note heads. munch carries a random detune so repeats stay organic
+  munch:  [{ f: 470, fr: 120, f2: 700, d: 0.055, type: "triangle", v: 0.05 }, { f: 620, f2: 500, d: 0.06, type: "sine", v: 0.035, at: 0.06 }],
+  pop:    [{ f: 400, f2: 780, d: 0.08, type: "sine", v: 0.08 }],
+  boing:  [{ f: 300, f2: 560, d: 0.13, type: "triangle", v: 0.07 }],
+  heart:  [{ f: 880, f2: 1174, d: 0.08, type: "sine", v: 0.05 }, { f: 1174, f2: 1568, d: 0.1, type: "sine", v: 0.045, at: 0.07 }],
+  giggle: [{ f: 980, f2: 1318, d: 0.05, type: "sine", v: 0.05 }, { f: 1174, f2: 1568, d: 0.05, type: "sine", v: 0.045, at: 0.06 }, { f: 1318, f2: 1760, d: 0.07, type: "sine", v: 0.04, at: 0.12 }],
+  shock:  [{ f: 740, f2: 1480, d: 0.1, type: "sine", v: 0.055 }],
+  angry:  [{ f: 170, f2: 120, d: 0.1, type: "triangle", v: 0.06 }, { f: 150, f2: 110, d: 0.1, type: "triangle", v: 0.05, at: 0.11 }],
+  drop:   [{ f: 330, f2: 160, d: 0.13, type: "sine", v: 0.08 }],
+  reveal: [{ f: 523, d: 0.09, type: "sine", v: 0.05 }, { f: 659, d: 0.09, type: "sine", v: 0.05, at: 0.08 }, { f: 784, d: 0.16, type: "sine", v: 0.055, at: 0.16 }, { f: 1568, d: 0.12, type: "sine", v: 0.025, at: 0.2 }],
+  zzz:    [{ f: 780, f2: 540, d: 0.08, type: "sine", v: 0.022 }],
 };
 // active pack: defs overrides merge over SFX_DEFS, pitch/vol shift every
 // note — a "8-bit" pack could drop pitch 0.5, a "toy" pack raise it 1.5
@@ -1616,6 +1622,10 @@ let settingsOpen = false;
 let panelPos = {};
 let muted = false;
 let volStep = 0;
+// continuous master volume 0..1 — the settings row drives it as a slider;
+// volStep/muted survive only as save-compat shims for older profiles
+let vol = 1;
+let volDrag = null; // {tx, tw} while the volume slider is being dragged
 const VOL_STEPS = [1, 0.6, 0.3, 0];
 // pomodoro companion mode: focus sprints get cheers, breaks get naps
 let pomo = false;
@@ -1915,6 +1925,12 @@ invoke("load_state").then((txt) => {
   muted = !!s.muted;
   volStep = Math.min(3, Math.max(0, s.volStep | 0));
   if (muted) volStep = 3;
+  // new continuous volume wins when present; legacy saves migrate via
+  // their old discrete step
+  if (typeof s.vol === "number") vol = Math.min(1, Math.max(0, s.vol));
+  else vol = VOL_STEPS[volStep];
+  muted = vol <= 0.001;
+  volStep = Math.round((1 - vol) * 3); // keep the shim field coherent
   pomo = !!s.pomo;
   if (POMO_FOCI.includes(s.pomoFocusMin)) pomoFocusMin = s.pomoFocusMin;
   if (POMO_BREAKS.includes(s.pomoBreakMin)) pomoBreakMin = s.pomoBreakMin;
@@ -2034,7 +2050,7 @@ function persist() {
     json: JSON.stringify({
       ver: 2, xp, x: petX, jelly, owned, active: SPECIES[active].id,
       pityRare, pityLeg, hybSeq, accOwned, accEquip, breedReadyAt,
-      muted, sizeMul, seen, savedAt: Date.now(),
+      muted, vol, sizeMul, seen, savedAt: Date.now(),
       reduceMotion, treatKind, stats, volStep, pomo, dexMile,
       lastDaily, dailyStreak, lastWeekly, pomoFocusMin, pomoBreakMin,
       redeemed,
@@ -3157,9 +3173,16 @@ cv.addEventListener("pointerdown", (e) => {
     // drawn there either, so an invisible row must never take a hit
     const inRow = (R) => mx >= R[0] && mx <= R[0] + R[2] && my >= R[1] && my <= R[1] + R[3] && my >= py + SET_VIEW_TOP && my <= py + ph - SET_VIEW_BOT;
     if (inRow(rows[0])) {
-      volStep = (volStep + 1) % 4;
-      muted = volStep === 3;
+      // volume slider: press anywhere on the row to set, then keep
+      // dragging — the track maps x-position to 0..100%
+      volDrag = { x0: rows[0][0] + 8, w: rows[0][2] - 16 };
+      vol = Math.min(1, Math.max(0, (mx - volDrag.x0) / volDrag.w));
+      muted = vol <= 0.001;
+      volStep = Math.round((1 - vol) * 3);
+      grabT0 = performance.now();
       dirty = true;
+      try { cv.setPointerCapture(e.pointerId); } catch {}
+      invoke("set_dragging", { on: true }).catch(() => {});
       sfx.pop();
     }
     else if (inRow(rows[1])) {
@@ -3446,6 +3469,16 @@ cv.addEventListener("pointermove", (e) => {
   cv.style.cursor = held || palHeld || ballHeld || fabDrag ? "grabbing" : hitTest(mx, my) || palAt(mx, my) || (ball && Math.hypot(mx - ball.x, my - (ball.y - ball.r)) < ball.r + 12) ? "grab" : "default";
   const now = performance.now();
 
+  // volume slider: follows the cursor while the settings row is held
+  if (volDrag) {
+    vol = Math.min(1, Math.max(0, (mx - volDrag.x0) / volDrag.w));
+    muted = vol <= 0.001;
+    volStep = Math.round((1 - vol) * 3);
+    grabT0 = now;
+    dirty = true;
+    return;
+  }
+
   // dragging the menu circle: past 6px it's a move, under it stays a click
   if (fabDrag) {
     if (!fabDrag.moved && Math.hypot(mx - fabDrag.sx, my - fabDrag.sy) > 6) fabDrag.moved = true;
@@ -3595,6 +3628,13 @@ cv.addEventListener("pointermove", (e) => {
 });
 
 cv.addEventListener("pointerup", (e) => {
+  // volume slider release
+  if (volDrag) {
+    volDrag = null;
+    dirty = true;
+    invoke("set_dragging", { on: false }).catch(() => {});
+    return;
+  }
   // menu circle release: a still press toggles the accordion, a moved
   // one just parked the menu somewhere nicer
   if (fabDrag) {
@@ -3785,6 +3825,7 @@ cv.addEventListener("pointerup", (e) => {
 // if the OS cancels a drag mid-hold, release cleanly or clicks get swallowed
 cv.addEventListener("pointercancel", () => {
   fabDrag = null;
+  if (volDrag) { volDrag = null; invoke("set_dragging", { on: false }); }
   if (propHeld) { propHeld = null; invoke("set_dragging", { on: false }); }
   if (ballHeld) { ballHeld = false; invoke("set_dragging", { on: false }); }
   if (palHeld) { palHeld = null; invoke("set_dragging", { on: false }); }
@@ -5882,9 +5923,9 @@ function frame(now) {
     // click-through flip mid-gesture) the held flag would pin DRAGGING on
     // forever and the overlay would eat every click — looks like a freeze.
     // 20s of uninterrupted hold is longer than any real gesture here
-    if ((held || palHeld || ballHeld || propHeld || fabDrag) && grabT0 && now - grabT0 > 20000) {
-      try { invoke("log_crash", { msg: `GRAB-STUCK held=${held} pal=${!!palHeld} ball=${ballHeld} prop=${propHeld} fab=${!!fabDrag}` }); } catch {}
-      held = false; palHeld = null; ballHeld = false; propHeld = null; fabDrag = null;
+    if ((held || palHeld || ballHeld || propHeld || fabDrag || volDrag) && grabT0 && now - grabT0 > 20000) {
+      try { invoke("log_crash", { msg: `GRAB-STUCK held=${held} pal=${!!palHeld} ball=${ballHeld} prop=${propHeld} fab=${!!fabDrag} vol=${!!volDrag}` }); } catch {}
+      held = false; palHeld = null; ballHeld = false; propHeld = null; fabDrag = null; volDrag = null;
       cv.style.cursor = "default";
       try { invoke("set_dragging", { on: false }); } catch {}
     }
@@ -9025,7 +9066,7 @@ function frameBody(now) {
       ? `${pomoPhase === "focus" ? "FOCUS" : "BREAK"} ${Math.max(0, Math.ceil((pomoUntil - Date.now()) / 60000))}M`
       : "POMO OFF";
     const lbls = [
-      volStep === 3 ? "SOUND OFF" : `SOUND ${Math.round(VOL_STEPS[volStep] * 100)}%`,
+      vol <= 0.001 ? "SOUND OFF" : `SOUND ${Math.round(vol * 100)}%`,
       `SIZE ${sizeMul.toFixed(1)}X`,
       reduceMotion ? "MOTION LOW" : "MOTION FULL",
       "PHOTO",
@@ -9056,7 +9097,20 @@ function frameBody(now) {
       ctx.strokeStyle = "#8a6b4a";
       ctx.lineWidth = 1;
       ctx.strokeRect(R[0] + 0.5, R[1] + 0.5, R[2] - 1, R[3] - 1);
-      drawText(ctx, lbls[i], px + pw / 2 - textW(lbls[i], 1) / 2, R[1] + 7, 1, i === rows.length - 1 ? "#fff6e8" : "#5c4632");
+      drawText(ctx, lbls[i], px + pw / 2 - textW(lbls[i], 1) / 2, R[1] + 6, 1, i === rows.length - 1 ? "#fff6e8" : "#5c4632");
+      if (i === 0) {
+        // volume slider: the row's bottom strip is a progress bar —
+        // click/drag anywhere on the row sets the level
+        const tx = R[0] + 8, tw = R[2] - 16, ty = R[1] + R[3] - 5;
+        ctx.fillStyle = "#8a6b4a";
+        ctx.fillRect(tx, ty, tw, 3);
+        if (vol > 0.001) {
+          ctx.fillStyle = "#e08a5a";
+          ctx.fillRect(tx, ty, Math.round(tw * vol), 3);
+          // knob nub at the fill edge — reads as a draggable handle
+          ctx.fillRect(tx + Math.round(tw * vol) - 2, ty - 2, 4, 7);
+        }
+      }
     }
     ctx.restore();
     // scrollbar: only exists when the content actually overflows

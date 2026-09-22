@@ -1,0 +1,14 @@
+feat: volume slider + cuter sfx + slime-sprite icon
+
+- settings row 0 is now a real slider: click/drag maps to continuous vol
+  (0..1), persisted as vol; volStep kept as a save-compat shim
+- SFX redesigned: sine/triangle chirps with soft attack ramp replace the
+  square-wave beeps; autonomous rate-limit unchanged
+- app icon is now the actual sprout pal rendered through buildSprite
+  (_icon.cjs regenerates it); bundled in-repo instead of a dev-local path
+- window title capitalized to Jellypal + tray tooltip so the process is
+  findable in Task Manager (Apps section) and the tray
+
+Generated with [Devin](https://devin.ai)
+
+Co-Authored-By: Devin <158243242+devin-ai-integration[bot]@users.noreply.github.com>

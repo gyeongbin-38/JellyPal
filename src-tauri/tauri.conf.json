@@ -10,7 +10,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "jellypal",
+        "title": "Jellypal",
         "width": 480,
         "height": 140,
         "focus": false,
@@ -34,7 +34,7 @@
       "nsis"
     ],
     "icon": [
-      "C:/dev/assets/icon.ico"
+      "icons/icon.ico"
     ],
     "category": "Entertainment",
     "shortDescription": "Desktop slime companion",

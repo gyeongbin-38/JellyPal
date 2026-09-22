@@ -519,6 +519,7 @@ pub fn run() {
             let menu = Menu::with_items(app, &[&summon, &quit])?;
             TrayIconBuilder::with_id("tray")
                 .icon(app.default_window_icon().unwrap().clone())
+                .tooltip("Jellypal")
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id().as_ref() {
                     "summon" => {
