@@ -1,22 +1,8 @@
-feat: cross-platform port — macOS support + portability fixes
+fix: macOS compile errors + bundle job npm ci
 
-- split all Win32 code behind #[cfg(windows)]: window enum, autostart
-  (HKCU Run), console attach; macOS impls via CGWindowList + LaunchAgent
-- active-win-pos-rs replaces hand-rolled foreground-window code — emits
-  [title, "stem app_name"] so existing frontend classifiers keep working
-  (added safari to browser regex; Cmd is the copy/paste modifier on macOS)
-- tauri-plugin-single-instance replaces the Win32 mutex — covers
-  macOS/Linux too, and a duplicate launch now summons the pal instead
-  of exiting silently
-- identifier com.jellypal.app -> com.jellypal.desktop (the .app suffix
-  conflicts with macOS bundle semantics) with one-time save migration
-- panic log -> temp dir, hook.log -> app data dir (no more hardcoded
-  C:/dev); release binaries stripped of local paths via remap-path-prefix
-- regenerated icon.icns from the sprout sprite; bundle targets nsis+app+dmg;
-  WebView2Loader.dll committed as a stable resource path
-- macOS: menu-bar tray + Accessory activation policy (no Dock icon),
-  visibleOnAllWorkspaces for the overlay
-- GitHub Actions: cargo check+test on windows+macos, tauri bundle on macOS
+- CFNumberGetValue returns bool in core-foundation 0.10
+- set_activation_policy returns () not Result
+- bundle job was missing npm ci (tauri CLI not found)
 
 Generated with [Devin](https://devin.ai)
 

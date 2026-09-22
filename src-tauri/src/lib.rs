@@ -472,9 +472,11 @@ fn collect_window_rects(scale: f64) -> Vec<[i32; 4]> {
             return None;
         }
         let mut out = 0f64;
-        if CFNumberGetValue(v as CFNumberRef, kCFNumberFloat64Type, &mut out as *mut _ as *mut c_void)
-            == 0
-        {
+        if !CFNumberGetValue(
+            v as CFNumberRef,
+            kCFNumberFloat64Type,
+            &mut out as *mut _ as *mut c_void,
+        ) {
             return None;
         }
         Some(out)
@@ -719,7 +721,8 @@ pub fn run() {
             // desktop companion shouldn't take a Dock slot on macOS — the
             // menu-bar tray icon is the only persistent UI affordance
             #[cfg(target_os = "macos")]
-            app.set_activation_policy(tauri::ActivationPolicy::Accessory)?;
+            app.handle()
+                .set_activation_policy(tauri::ActivationPolicy::Accessory);
 
             let summon = MenuItem::with_id(app, "summon", "Summon", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
