@@ -29,5 +29,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: npm ci
       - uses: tauri-apps/tauri-action@v0
+        with:
+          args: --bundles app,dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

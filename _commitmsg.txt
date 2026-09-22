@@ -1,8 +1,7 @@
-fix: macOS compile errors + bundle job npm ci
+ci: macOS bundle job — explicit app,dmg targets
 
-- CFNumberGetValue returns bool in core-foundation 0.10
-- set_activation_policy returns () not Result
-- bundle job was missing npm ci (tauri CLI not found)
+nsis in bundle.targets would attempt a Windows installer cross-build
+on the macOS runner.
 
 Generated with [Devin](https://devin.ai)
 
