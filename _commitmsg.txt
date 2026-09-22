@@ -1,7 +1,4 @@
-ci: macOS bundle job — explicit app,dmg targets
-
-nsis in bundle.targets would attempt a Windows installer cross-build
-on the macOS runner.
+ci: upload macOS bundle artifacts (dmg + app.tar.gz)
 
 Generated with [Devin](https://devin.ai)
 

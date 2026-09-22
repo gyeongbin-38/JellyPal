@@ -1,132 +1,164 @@
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
+Refreshing run status every 25 seconds. Press Ctrl+C to quit.
 
-* main build · 35751705887
+* main build · 35751931358
 Triggered via push less than a minute ago
 
 JOBS
-* bundle (ID 106827221870)
+* check (windows-latest) (ID 106828006164)
   ✓ Set up job
   ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Run npm ci
-  * Run tauri-apps/tauri-action@v0
-  * Post Run actions/checkout@v4
-* check (windows-latest) (ID 106827222100)
-  ✓ Set up job
-  * Run actions/checkout@v4
   * Run dtolnay/rust-toolchain@stable
   * Frontend harness
   * Rust check + tests
   * Post Run actions/checkout@v4
-* check (macos-latest) (ID 106827222274)
+* check (macos-latest) (ID 106828006510)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
   ✓ Frontend harness
   * Rust check + tests
   * Post Run actions/checkout@v4
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
+* bundle (ID 106828006614)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Run npm ci
+  * Run tauri-apps/tauri-action@v0
+  * Post Run actions/checkout@v4
+Refreshing run status every 25 seconds. Press Ctrl+C to quit.
 
-* main build · 35751705887
+* main build · 35751931358
 Triggered via push less than a minute ago
 
 JOBS
-* bundle (ID 106827221870)
+* check (windows-latest) (ID 106828006164)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  * Rust check + tests
+  * Post Run actions/checkout@v4
+* check (macos-latest) (ID 106828006510)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  * Rust check + tests
+  * Post Run actions/checkout@v4
+* bundle (ID 106828006614)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
   ✓ Run npm ci
   * Run tauri-apps/tauri-action@v0
   * Post Run actions/checkout@v4
-* check (windows-latest) (ID 106827222100)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Frontend harness
-  * Rust check + tests
-  * Post Run actions/checkout@v4
-* check (macos-latest) (ID 106827222274)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Frontend harness
-  * Rust check + tests
-  * Post Run actions/checkout@v4
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
+Refreshing run status every 25 seconds. Press Ctrl+C to quit.
 
-* main build · 35751705887
+* main build · 35751931358
 Triggered via push about 1 minute ago
 
 JOBS
-* bundle (ID 106827221870)
+* check (windows-latest) (ID 106828006164)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  * Rust check + tests
+  * Post Run actions/checkout@v4
+* check (macos-latest) (ID 106828006510)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  * Rust check + tests
+  * Post Run actions/checkout@v4
+* bundle (ID 106828006614)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
   ✓ Run npm ci
   * Run tauri-apps/tauri-action@v0
   * Post Run actions/checkout@v4
-* check (windows-latest) (ID 106827222100)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Frontend harness
-  * Rust check + tests
-  * Post Run actions/checkout@v4
-* check (macos-latest) (ID 106827222274)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Frontend harness
-  * Rust check + tests
-  * Post Run actions/checkout@v4
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
+Refreshing run status every 25 seconds. Press Ctrl+C to quit.
 
-* main build · 35751705887
+* main build · 35751931358
 Triggered via push about 1 minute ago
 
 JOBS
-* bundle (ID 106827221870)
+* check (windows-latest) (ID 106828006164)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  * Rust check + tests
+  * Post Run actions/checkout@v4
+✓ check (macos-latest) in 1m23s (ID 106828006510)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  ✓ Rust check + tests
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete job
+* bundle (ID 106828006614)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
   ✓ Run npm ci
   * Run tauri-apps/tauri-action@v0
   * Post Run actions/checkout@v4
-* check (windows-latest) (ID 106827222100)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Frontend harness
-  * Rust check + tests
-  * Post Run actions/checkout@v4
-* check (macos-latest) (ID 106827222274)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Frontend harness
-  * Rust check + tests
-  * Post Run actions/checkout@v4
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
 
-* main build · 35751705887
-Triggered via push about 1 minute ago
+ANNOTATIONS
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+check (macos-latest): .github#2
+
+Refreshing run status every 25 seconds. Press Ctrl+C to quit.
+
+* main build · 35751931358
+Triggered via push about 2 minutes ago
 
 JOBS
-* bundle (ID 106827221870)
+* check (windows-latest) (ID 106828006164)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  * Rust check + tests
+  * Post Run actions/checkout@v4
+✓ check (macos-latest) in 1m23s (ID 106828006510)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  ✓ Rust check + tests
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete job
+* bundle (ID 106828006614)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
   ✓ Run npm ci
   * Run tauri-apps/tauri-action@v0
   * Post Run actions/checkout@v4
-* check (windows-latest) (ID 106827222100)
+
+ANNOTATIONS
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+check (macos-latest): .github#2
+
+Refreshing run status every 25 seconds. Press Ctrl+C to quit.
+
+* main build · 35751931358
+Triggered via push about 2 minutes ago
+
+JOBS
+* check (windows-latest) (ID 106828006164)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
   ✓ Frontend harness
   * Rust check + tests
   * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
+✓ check (macos-latest) in 1m23s (ID 106828006510)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -134,65 +166,32 @@ JOBS
   ✓ Rust check + tests
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
-
-ANNOTATIONS
-! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
-check (macos-latest): .github#2
-
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
-
-* main build · 35751705887
-Triggered via push about 2 minutes ago
-
-JOBS
-* bundle (ID 106827221870)
+* bundle (ID 106828006614)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
   ✓ Run npm ci
   * Run tauri-apps/tauri-action@v0
   * Post Run actions/checkout@v4
-* check (windows-latest) (ID 106827222100)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Frontend harness
-  * Rust check + tests
-  * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Frontend harness
-  ✓ Rust check + tests
-  ✓ Post Run actions/checkout@v4
-  ✓ Complete job
 
 ANNOTATIONS
 ! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
 check (macos-latest): .github#2
 
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
+Refreshing run status every 25 seconds. Press Ctrl+C to quit.
 
-* main build · 35751705887
+* main build · 35751931358
 Triggered via push about 2 minutes ago
 
 JOBS
-* bundle (ID 106827221870)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Run npm ci
-  ✓ Run tauri-apps/tauri-action@v0
-  * Post Run actions/checkout@v4
-* check (windows-latest) (ID 106827222100)
+* check (windows-latest) (ID 106828006164)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
   ✓ Frontend harness
   * Rust check + tests
   * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
+✓ check (macos-latest) in 1m23s (ID 106828006510)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -200,18 +199,7 @@ JOBS
   ✓ Rust check + tests
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
-
-ANNOTATIONS
-! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
-check (macos-latest): .github#2
-
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
-
-* main build · 35751705887
-Triggered via push about 2 minutes ago
-
-JOBS
-✓ bundle in 2m22s (ID 106827221870)
+✓ bundle in 2m35s (ID 106828006614)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -219,48 +207,28 @@ JOBS
   ✓ Run tauri-apps/tauri-action@v0
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
-* check (windows-latest) (ID 106827222100)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Frontend harness
-  * Rust check + tests
-  * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Frontend harness
-  ✓ Rust check + tests
-  ✓ Post Run actions/checkout@v4
-  ✓ Complete job
 
 ANNOTATIONS
 ! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
 check (macos-latest): .github#2
 
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+bundle: .github#2
 
-* main build · 35751705887
+Refreshing run status every 25 seconds. Press Ctrl+C to quit.
+
+* main build · 35751931358
 Triggered via push about 3 minutes ago
 
 JOBS
-✓ bundle in 2m22s (ID 106827221870)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Run npm ci
-  ✓ Run tauri-apps/tauri-action@v0
-  ✓ Post Run actions/checkout@v4
-  ✓ Complete job
-* check (windows-latest) (ID 106827222100)
+* check (windows-latest) (ID 106828006164)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
   ✓ Frontend harness
   * Rust check + tests
   * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
+✓ check (macos-latest) in 1m23s (ID 106828006510)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -268,33 +236,36 @@ JOBS
   ✓ Rust check + tests
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
+✓ bundle in 2m35s (ID 106828006614)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Run npm ci
+  ✓ Run tauri-apps/tauri-action@v0
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete job
 
 ANNOTATIONS
 ! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
 check (macos-latest): .github#2
 
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+bundle: .github#2
 
-* main build · 35751705887
+Refreshing run status every 25 seconds. Press Ctrl+C to quit.
+
+* main build · 35751931358
 Triggered via push about 3 minutes ago
 
 JOBS
-✓ bundle in 2m22s (ID 106827221870)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Run npm ci
-  ✓ Run tauri-apps/tauri-action@v0
-  ✓ Post Run actions/checkout@v4
-  ✓ Complete job
-* check (windows-latest) (ID 106827222100)
+* check (windows-latest) (ID 106828006164)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
   ✓ Frontend harness
   * Rust check + tests
   * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
+✓ check (macos-latest) in 1m23s (ID 106828006510)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -302,18 +273,7 @@ JOBS
   ✓ Rust check + tests
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
-
-ANNOTATIONS
-! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
-check (macos-latest): .github#2
-
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
-
-* main build · 35751705887
-Triggered via push about 3 minutes ago
-
-JOBS
-✓ bundle in 2m22s (ID 106827221870)
+✓ bundle in 2m35s (ID 106828006614)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -321,48 +281,28 @@ JOBS
   ✓ Run tauri-apps/tauri-action@v0
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
-* check (windows-latest) (ID 106827222100)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Frontend harness
-  * Rust check + tests
-  * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Frontend harness
-  ✓ Rust check + tests
-  ✓ Post Run actions/checkout@v4
-  ✓ Complete job
 
 ANNOTATIONS
 ! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
 check (macos-latest): .github#2
 
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+bundle: .github#2
 
-* main build · 35751705887
+Refreshing run status every 25 seconds. Press Ctrl+C to quit.
+
+* main build · 35751931358
 Triggered via push about 4 minutes ago
 
 JOBS
-✓ bundle in 2m22s (ID 106827221870)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Run npm ci
-  ✓ Run tauri-apps/tauri-action@v0
-  ✓ Post Run actions/checkout@v4
-  ✓ Complete job
-* check (windows-latest) (ID 106827222100)
+* check (windows-latest) (ID 106828006164)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
   ✓ Frontend harness
   * Rust check + tests
   * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
+✓ check (macos-latest) in 1m23s (ID 106828006510)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -370,33 +310,36 @@ JOBS
   ✓ Rust check + tests
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
+✓ bundle in 2m35s (ID 106828006614)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Run npm ci
+  ✓ Run tauri-apps/tauri-action@v0
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete job
 
 ANNOTATIONS
 ! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
 check (macos-latest): .github#2
 
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+bundle: .github#2
 
-* main build · 35751705887
+Refreshing run status every 25 seconds. Press Ctrl+C to quit.
+
+* main build · 35751931358
 Triggered via push about 4 minutes ago
 
 JOBS
-✓ bundle in 2m22s (ID 106827221870)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Run npm ci
-  ✓ Run tauri-apps/tauri-action@v0
-  ✓ Post Run actions/checkout@v4
-  ✓ Complete job
-* check (windows-latest) (ID 106827222100)
+* check (windows-latest) (ID 106828006164)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
   ✓ Frontend harness
   * Rust check + tests
   * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
+✓ check (macos-latest) in 1m23s (ID 106828006510)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -404,18 +347,7 @@ JOBS
   ✓ Rust check + tests
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
-
-ANNOTATIONS
-! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
-check (macos-latest): .github#2
-
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
-
-* main build · 35751705887
-Triggered via push about 4 minutes ago
-
-JOBS
-✓ bundle in 2m22s (ID 106827221870)
+✓ bundle in 2m35s (ID 106828006614)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -423,48 +355,28 @@ JOBS
   ✓ Run tauri-apps/tauri-action@v0
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
-* check (windows-latest) (ID 106827222100)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Frontend harness
-  * Rust check + tests
-  * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Frontend harness
-  ✓ Rust check + tests
-  ✓ Post Run actions/checkout@v4
-  ✓ Complete job
 
 ANNOTATIONS
 ! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
 check (macos-latest): .github#2
 
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+bundle: .github#2
 
-* main build · 35751705887
+Refreshing run status every 25 seconds. Press Ctrl+C to quit.
+
+* main build · 35751931358
 Triggered via push about 5 minutes ago
 
 JOBS
-✓ bundle in 2m22s (ID 106827221870)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Run npm ci
-  ✓ Run tauri-apps/tauri-action@v0
-  ✓ Post Run actions/checkout@v4
-  ✓ Complete job
-* check (windows-latest) (ID 106827222100)
+* check (windows-latest) (ID 106828006164)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
   ✓ Frontend harness
   * Rust check + tests
   * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
+✓ check (macos-latest) in 1m23s (ID 106828006510)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -472,33 +384,36 @@ JOBS
   ✓ Rust check + tests
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
+✓ bundle in 2m35s (ID 106828006614)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Run npm ci
+  ✓ Run tauri-apps/tauri-action@v0
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete job
 
 ANNOTATIONS
 ! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
 check (macos-latest): .github#2
 
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+bundle: .github#2
 
-* main build · 35751705887
+Refreshing run status every 25 seconds. Press Ctrl+C to quit.
+
+* main build · 35751931358
 Triggered via push about 5 minutes ago
 
 JOBS
-✓ bundle in 2m22s (ID 106827221870)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Run npm ci
-  ✓ Run tauri-apps/tauri-action@v0
-  ✓ Post Run actions/checkout@v4
-  ✓ Complete job
-* check (windows-latest) (ID 106827222100)
+* check (windows-latest) (ID 106828006164)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
   ✓ Frontend harness
   * Rust check + tests
   * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
+✓ check (macos-latest) in 1m23s (ID 106828006510)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -506,33 +421,36 @@ JOBS
   ✓ Rust check + tests
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
+✓ bundle in 2m35s (ID 106828006614)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Run npm ci
+  ✓ Run tauri-apps/tauri-action@v0
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete job
 
 ANNOTATIONS
 ! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
 check (macos-latest): .github#2
 
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+bundle: .github#2
 
-* main build · 35751705887
+Refreshing run status every 25 seconds. Press Ctrl+C to quit.
+
+* main build · 35751931358
 Triggered via push about 6 minutes ago
 
 JOBS
-✓ bundle in 2m22s (ID 106827221870)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Run npm ci
-  ✓ Run tauri-apps/tauri-action@v0
-  ✓ Post Run actions/checkout@v4
-  ✓ Complete job
-* check (windows-latest) (ID 106827222100)
+* check (windows-latest) (ID 106828006164)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
   ✓ Frontend harness
   * Rust check + tests
   * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
+✓ check (macos-latest) in 1m23s (ID 106828006510)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -540,33 +458,36 @@ JOBS
   ✓ Rust check + tests
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
+✓ bundle in 2m35s (ID 106828006614)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Run npm ci
+  ✓ Run tauri-apps/tauri-action@v0
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete job
 
 ANNOTATIONS
 ! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
 check (macos-latest): .github#2
 
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+bundle: .github#2
 
-* main build · 35751705887
+Refreshing run status every 25 seconds. Press Ctrl+C to quit.
+
+* main build · 35751931358
 Triggered via push about 6 minutes ago
 
 JOBS
-✓ bundle in 2m22s (ID 106827221870)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Run npm ci
-  ✓ Run tauri-apps/tauri-action@v0
-  ✓ Post Run actions/checkout@v4
-  ✓ Complete job
-* check (windows-latest) (ID 106827222100)
+* check (windows-latest) (ID 106828006164)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
   ✓ Frontend harness
   * Rust check + tests
   * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
+✓ check (macos-latest) in 1m23s (ID 106828006510)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -574,33 +495,36 @@ JOBS
   ✓ Rust check + tests
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
+✓ bundle in 2m35s (ID 106828006614)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Run npm ci
+  ✓ Run tauri-apps/tauri-action@v0
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete job
 
 ANNOTATIONS
 ! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
 check (macos-latest): .github#2
 
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+bundle: .github#2
 
-* main build · 35751705887
+Refreshing run status every 25 seconds. Press Ctrl+C to quit.
+
+* main build · 35751931358
 Triggered via push about 6 minutes ago
 
 JOBS
-✓ bundle in 2m22s (ID 106827221870)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Run npm ci
-  ✓ Run tauri-apps/tauri-action@v0
-  ✓ Post Run actions/checkout@v4
-  ✓ Complete job
-* check (windows-latest) (ID 106827222100)
+* check (windows-latest) (ID 106828006164)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
   ✓ Frontend harness
   * Rust check + tests
   * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
+✓ check (macos-latest) in 1m23s (ID 106828006510)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -608,33 +532,36 @@ JOBS
   ✓ Rust check + tests
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
+✓ bundle in 2m35s (ID 106828006614)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Run npm ci
+  ✓ Run tauri-apps/tauri-action@v0
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete job
 
 ANNOTATIONS
 ! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
 check (macos-latest): .github#2
 
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+bundle: .github#2
 
-* main build · 35751705887
+Refreshing run status every 25 seconds. Press Ctrl+C to quit.
+
+* main build · 35751931358
 Triggered via push about 7 minutes ago
 
 JOBS
-✓ bundle in 2m22s (ID 106827221870)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Run npm ci
-  ✓ Run tauri-apps/tauri-action@v0
-  ✓ Post Run actions/checkout@v4
-  ✓ Complete job
-* check (windows-latest) (ID 106827222100)
+* check (windows-latest) (ID 106828006164)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
   ✓ Frontend harness
   * Rust check + tests
   * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
+✓ check (macos-latest) in 1m23s (ID 106828006510)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -642,33 +569,36 @@ JOBS
   ✓ Rust check + tests
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
+✓ bundle in 2m35s (ID 106828006614)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Run npm ci
+  ✓ Run tauri-apps/tauri-action@v0
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete job
 
 ANNOTATIONS
 ! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
 check (macos-latest): .github#2
 
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+bundle: .github#2
 
-* main build · 35751705887
+Refreshing run status every 25 seconds. Press Ctrl+C to quit.
+
+* main build · 35751931358
 Triggered via push about 7 minutes ago
 
 JOBS
-✓ bundle in 2m22s (ID 106827221870)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Run npm ci
-  ✓ Run tauri-apps/tauri-action@v0
-  ✓ Post Run actions/checkout@v4
-  ✓ Complete job
-* check (windows-latest) (ID 106827222100)
+* check (windows-latest) (ID 106828006164)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
   ✓ Frontend harness
   * Rust check + tests
   * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
+✓ check (macos-latest) in 1m23s (ID 106828006510)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -676,18 +606,7 @@ JOBS
   ✓ Rust check + tests
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
-
-ANNOTATIONS
-! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
-check (macos-latest): .github#2
-
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
-
-* main build · 35751705887
-Triggered via push about 7 minutes ago
-
-JOBS
-✓ bundle in 2m22s (ID 106827221870)
+✓ bundle in 2m35s (ID 106828006614)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -695,48 +614,28 @@ JOBS
   ✓ Run tauri-apps/tauri-action@v0
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
-* check (windows-latest) (ID 106827222100)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Frontend harness
-  * Rust check + tests
-  * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Frontend harness
-  ✓ Rust check + tests
-  ✓ Post Run actions/checkout@v4
-  ✓ Complete job
 
 ANNOTATIONS
 ! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
 check (macos-latest): .github#2
 
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+bundle: .github#2
 
-* main build · 35751705887
+Refreshing run status every 25 seconds. Press Ctrl+C to quit.
+
+* main build · 35751931358
 Triggered via push about 8 minutes ago
 
 JOBS
-✓ bundle in 2m22s (ID 106827221870)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Run npm ci
-  ✓ Run tauri-apps/tauri-action@v0
-  ✓ Post Run actions/checkout@v4
-  ✓ Complete job
-* check (windows-latest) (ID 106827222100)
+* check (windows-latest) (ID 106828006164)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
   ✓ Frontend harness
   * Rust check + tests
   * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
+✓ check (macos-latest) in 1m23s (ID 106828006510)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -744,33 +643,36 @@ JOBS
   ✓ Rust check + tests
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
+✓ bundle in 2m35s (ID 106828006614)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Run npm ci
+  ✓ Run tauri-apps/tauri-action@v0
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete job
 
 ANNOTATIONS
 ! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
 check (macos-latest): .github#2
 
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+bundle: .github#2
 
-* main build · 35751705887
+Refreshing run status every 25 seconds. Press Ctrl+C to quit.
+
+* main build · 35751931358
 Triggered via push about 8 minutes ago
 
 JOBS
-✓ bundle in 2m22s (ID 106827221870)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Run npm ci
-  ✓ Run tauri-apps/tauri-action@v0
-  ✓ Post Run actions/checkout@v4
-  ✓ Complete job
-* check (windows-latest) (ID 106827222100)
+* check (windows-latest) (ID 106828006164)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
   ✓ Frontend harness
   * Rust check + tests
   * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
+✓ check (macos-latest) in 1m23s (ID 106828006510)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -778,18 +680,7 @@ JOBS
   ✓ Rust check + tests
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
-
-ANNOTATIONS
-! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
-check (macos-latest): .github#2
-
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
-
-* main build · 35751705887
-Triggered via push about 8 minutes ago
-
-JOBS
-✓ bundle in 2m22s (ID 106827221870)
+✓ bundle in 2m35s (ID 106828006614)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -797,48 +688,28 @@ JOBS
   ✓ Run tauri-apps/tauri-action@v0
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
-* check (windows-latest) (ID 106827222100)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Frontend harness
-  * Rust check + tests
-  * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Frontend harness
-  ✓ Rust check + tests
-  ✓ Post Run actions/checkout@v4
-  ✓ Complete job
 
 ANNOTATIONS
 ! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
 check (macos-latest): .github#2
 
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+bundle: .github#2
 
-* main build · 35751705887
+Refreshing run status every 25 seconds. Press Ctrl+C to quit.
+
+* main build · 35751931358
 Triggered via push about 9 minutes ago
 
 JOBS
-✓ bundle in 2m22s (ID 106827221870)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Run npm ci
-  ✓ Run tauri-apps/tauri-action@v0
-  ✓ Post Run actions/checkout@v4
-  ✓ Complete job
-* check (windows-latest) (ID 106827222100)
+* check (windows-latest) (ID 106828006164)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
   ✓ Frontend harness
   * Rust check + tests
   * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
+✓ check (macos-latest) in 1m23s (ID 106828006510)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -846,33 +717,36 @@ JOBS
   ✓ Rust check + tests
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
+✓ bundle in 2m35s (ID 106828006614)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Run npm ci
+  ✓ Run tauri-apps/tauri-action@v0
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete job
 
 ANNOTATIONS
 ! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
 check (macos-latest): .github#2
 
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+bundle: .github#2
 
-* main build · 35751705887
+Refreshing run status every 25 seconds. Press Ctrl+C to quit.
+
+* main build · 35751931358
 Triggered via push about 9 minutes ago
 
 JOBS
-✓ bundle in 2m22s (ID 106827221870)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Run npm ci
-  ✓ Run tauri-apps/tauri-action@v0
-  ✓ Post Run actions/checkout@v4
-  ✓ Complete job
-* check (windows-latest) (ID 106827222100)
+* check (windows-latest) (ID 106828006164)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
   ✓ Frontend harness
   * Rust check + tests
   * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
+✓ check (macos-latest) in 1m23s (ID 106828006510)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -880,18 +754,7 @@ JOBS
   ✓ Rust check + tests
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
-
-ANNOTATIONS
-! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
-check (macos-latest): .github#2
-
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
-
-* main build · 35751705887
-Triggered via push about 10 minutes ago
-
-JOBS
-✓ bundle in 2m22s (ID 106827221870)
+✓ bundle in 2m35s (ID 106828006614)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -899,14 +762,28 @@ JOBS
   ✓ Run tauri-apps/tauri-action@v0
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
-* check (windows-latest) (ID 106827222100)
+
+ANNOTATIONS
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+check (macos-latest): .github#2
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+bundle: .github#2
+
+Refreshing run status every 25 seconds. Press Ctrl+C to quit.
+
+* main build · 35751931358
+Triggered via push about 10 minutes ago
+
+JOBS
+* check (windows-latest) (ID 106828006164)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
   ✓ Frontend harness
   * Rust check + tests
   * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
+✓ check (macos-latest) in 1m23s (ID 106828006510)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -914,18 +791,7 @@ JOBS
   ✓ Rust check + tests
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
-
-ANNOTATIONS
-! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
-check (macos-latest): .github#2
-
-Refreshing run status every 20 seconds. Press Ctrl+C to quit.
-
-* main build · 35751705887
-Triggered via push about 10 minutes ago
-
-JOBS
-✓ bundle in 2m22s (ID 106827221870)
+✓ bundle in 2m35s (ID 106828006614)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -933,14 +799,19 @@ JOBS
   ✓ Run tauri-apps/tauri-action@v0
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
-* check (windows-latest) (ID 106827222100)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Frontend harness
-  ✓ Rust check + tests
-  * Post Run actions/checkout@v4
-✓ check (macos-latest) in 1m33s (ID 106827222274)
+
+ANNOTATIONS
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+check (macos-latest): .github#2
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+bundle: .github#2
+
+✓ main build · 35751931358
+Triggered via push about 10 minutes ago
+
+JOBS
+✓ check (windows-latest) in 10m2s (ID 106828006164)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -948,16 +819,15 @@ JOBS
   ✓ Rust check + tests
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
-
-ANNOTATIONS
-! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
-check (macos-latest): .github#2
-
-✓ main build · 35751705887
-Triggered via push about 10 minutes ago
-
-JOBS
-✓ bundle in 2m22s (ID 106827221870)
+✓ check (macos-latest) in 1m23s (ID 106828006510)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  ✓ Rust check + tests
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete job
+✓ bundle in 2m35s (ID 106828006614)
   ✓ Set up job
   ✓ Run actions/checkout@v4
   ✓ Run dtolnay/rust-toolchain@stable
@@ -965,24 +835,11 @@ JOBS
   ✓ Run tauri-apps/tauri-action@v0
   ✓ Post Run actions/checkout@v4
   ✓ Complete job
-✓ check (windows-latest) in 10m21s (ID 106827222100)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Frontend harness
-  ✓ Rust check + tests
-  ✓ Post Run actions/checkout@v4
-  ✓ Complete job
-✓ check (macos-latest) in 1m33s (ID 106827222274)
-  ✓ Set up job
-  ✓ Run actions/checkout@v4
-  ✓ Run dtolnay/rust-toolchain@stable
-  ✓ Frontend harness
-  ✓ Rust check + tests
-  ✓ Post Run actions/checkout@v4
-  ✓ Complete job
 
 ANNOTATIONS
 ! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
 check (macos-latest): .github#2
+
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+bundle: .github#2
 
