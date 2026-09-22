@@ -10,6 +10,9 @@ use windows_sys::Win32::Foundation::{CloseHandle, HWND, LPARAM, POINT, RECT, TRU
 use windows_sys::Win32::System::Threading::{
     OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
 };
+use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+    GetAsyncKeyState, VK_LBUTTON, VK_MBUTTON, VK_RBUTTON,
+};
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     EnumWindows, GetCursorPos, GetForegroundWindow, GetWindowRect,
     GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
@@ -623,7 +626,15 @@ pub fn run() {
                             .any(|r| {
                                 lx >= r[0] && lx <= r[0] + r[2] && ly >= r[1] && ly <= r[1] + r[3]
                             });
-                    if now_inside != inside {
+                    // never flip click-through while a mouse button is held —
+                    // toggling WS_EX_TRANSPARENT mid-gesture can deadlock
+                    // WebView2's input pipeline and hang the window
+                    let btn_held = unsafe {
+                        GetAsyncKeyState(VK_LBUTTON as i32) < 0
+                            || GetAsyncKeyState(VK_RBUTTON as i32) < 0
+                            || GetAsyncKeyState(VK_MBUTTON as i32) < 0
+                    };
+                    if now_inside != inside && !btn_held {
                         inside = now_inside;
                         let _ = win_poll.set_ignore_cursor_events(!inside);
                     }

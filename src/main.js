@@ -1509,6 +1509,7 @@ let jar = null;            // cookie jar — nibbles inside, a tap spills a real
 let toyboxOpen = false;    // the chooser strip under the toy button
 let propHeld = null;       // furniture kind string — the prop being dragged
 let propGrabX = 0, propGrabY = 0; // grab origin — a tap (not a drag) refills/fluffs
+let grabT0 = 0;            // when any hold started — watchdog frees a stuck grab
 let cushionPoof = 0;       // fluff-burst timestamp for the tap interaction
 let matPoof = 0;           // bounce-mat over-inflate timestamp
 // radial menu: a single draggable circle that accordions into the action
@@ -2722,6 +2723,9 @@ function petRect() {
 }
 
 function hitTest(mx, my) {
+  // parked at the ranch: the pet has no body on the desktop — without this
+  // gate its last position leaves a ghost hitbox that eats prop clicks
+  if (petHome) return false;
   const [x, y, w, h] = petRect();
   return mx >= x && mx <= x + w && my >= y && my <= y + h;
 }
@@ -3252,6 +3256,7 @@ cv.addEventListener("pointerdown", (e) => {
   const [fbx, fby] = fabPos();
   if (Math.hypot(mx - fbx, my - fby) < 22) {
     fabDrag = { ox: mx - fbx, oy: my - fby, sx: mx, sy: my, moved: false };
+    grabT0 = performance.now();
     return;
   }
   // accordion items — only while the menu is unfolded
@@ -3329,10 +3334,11 @@ cv.addEventListener("pointerdown", (e) => {
   const _grabPal = palAt(mx, my);
   const _petHit = hitTest(mx, my);
   if (!propHeld && !_grabPal && !_petHit) {
-    for (const [kind, q, rad, oy] of [["bowl", bowl, 30, 9], ["cushion", cushion, 34, 11], ["box", box, 36, 8], ["plant", plant, 28, 16], ["music", music, 30, 9], ["mirror", mirror, 26, 18], ["mat", mat, 32, 7], ["jar", jar, 24, 12]]) {
+    for (const [kind, q, rad, oy] of [["bowl", bowl, 30, 13], ["cushion", cushion, 34, 14], ["box", box, 36, 14], ["plant", plant, 28, 17], ["music", music, 30, 12], ["mirror", mirror, 26, 18], ["mat", mat, 32, 14], ["jar", jar, 24, 15]]) {
       if (q && Math.hypot(mx - q.x, my - (q.y - oy)) < rad) {
         propHeld = kind;
         propGrabX = mx; propGrabY = my;
+        grabT0 = performance.now();
         touch();
         cv.setPointerCapture(e.pointerId);
         cv.style.cursor = "grabbing";
@@ -3344,6 +3350,7 @@ cv.addEventListener("pointerdown", (e) => {
   // the ball is grabbable too — drag and release to toss it to them
   if (ball && Math.hypot(mx - ball.x, my - (ball.y - ball.r)) < ball.r + 12) {
     ballHeld = true;
+    grabT0 = performance.now();
     touch();
     ballDX = mx - ball.x; ballDY = my - ball.y;
     ballLX = mx; ballLY = my; ballLT = e.timeStamp;
@@ -3358,6 +3365,7 @@ cv.addEventListener("pointerdown", (e) => {
   const grabPal = palAt(mx, my);
   if (grabPal && !hitTest(mx, my)) {
     palHeld = grabPal;
+    grabT0 = performance.now();
     touch();
     grabPal.walkT = null;
     grabPal.fly = false;
@@ -3382,6 +3390,7 @@ cv.addEventListener("pointerdown", (e) => {
   }
   if (!hitTest(mx, my) || petHome) return;
   held = true;
+  grabT0 = performance.now();
   touch();
   flying = false;
   // grabbing a dangling webby keeps the line: tap = twirl, drag = torn free
@@ -5712,15 +5721,17 @@ setInterval(() => {
   if (fabOpen) for (let k = 0; k < FAB_ITEMS.length; k++) rects.push(fabItemRect(k));
   for (const p of pals) rects.push(palRect(p));
   if (ball) rects.push([ball.x - 14, ball.y - 22, 28, 24]); // the toy is grabbable
-  if (bowl) rects.push([bowl.x - 27, bowl.y - 26, 54, 30]);   // furniture grab zones
-  if (cushion) rects.push([cushion.x - 30, cushion.y - 26, 60, 30]);
-  if (box) rects.push([box.x - 32, box.y - 26, 64, 30]);
-  if (plant) rects.push([plant.x - 24, plant.y - 34, 48, 40]);
-  if (music) rects.push([music.x - 26, music.y - 26, 52, 30]);
-  if (mirror) rects.push([mirror.x - 26, mirror.y - 26, 52, 42]);
-  if (mat) rects.push([mat.x - 32, mat.y - 24, 64, 30]);
-  if (jar) rects.push([jar.x - 23, jar.y - 22, 46, 32]);
-  if (egg) rects.push([egg.x - 16, egg.y - 22, 32, 24]);      // egg is a promise, not a wall
+  // furniture grab zones — sized to the sprite bounds: top covers the
+  // lifted floor position, bottom covers the unlifted overhang on decks
+  if (bowl) rects.push([bowl.x - 27, bowl.y - 33, 54, 49]);
+  if (cushion) rects.push([cushion.x - 32, cushion.y - 33, 64, 49]);
+  if (box) rects.push([box.x - 34, box.y - 33, 68, 49]);
+  if (plant) rects.push([plant.x - 24, plant.y - 39, 48, 55]);
+  if (music) rects.push([music.x - 26, music.y - 30, 52, 46]);
+  if (mirror) rects.push([mirror.x - 26, mirror.y - 42, 52, 58]);
+  if (mat) rects.push([mat.x - 34, mat.y - 33, 68, 49]);
+  if (jar) rects.push([jar.x - 23, jar.y - 36, 46, 52]);
+  if (egg) rects.push([egg.x - 16, egg.y - 36, 32, 52]);      // egg is a promise, not a wall
   if (fabOpen && toyboxOpen) rects.push(toyboxStripRect()); // chooser strip
   if (awayReport) rects.push([Math.round(winW / 2 - 95), 54, 190, 78]);
   if (treatAim || infoPick !== null || albumOpen || redeemMode) rects.push([0, 0, winW, winH]);
@@ -5851,6 +5862,16 @@ function frame(now) {
     }
     if (!accAct && propSpin !== 0) propSpin = 0; // stray blades parked
     if (sigT0 && now - sigT0 > 20000) { sigT0 = 0; sigInit = 0; try { invoke("log_crash", { msg: `SIG-WEDGED id=${sigId}` }); } catch {} }
+    // stuck-grab watchdog: if a pointerup is ever lost (capture dropped,
+    // click-through flip mid-gesture) the held flag would pin DRAGGING on
+    // forever and the overlay would eat every click — looks like a freeze.
+    // 20s of uninterrupted hold is longer than any real gesture here
+    if ((held || palHeld || ballHeld || propHeld || fabDrag) && grabT0 && now - grabT0 > 20000) {
+      try { invoke("log_crash", { msg: `GRAB-STUCK held=${held} pal=${!!palHeld} ball=${ballHeld} prop=${propHeld} fab=${!!fabDrag}` }); } catch {}
+      held = false; palHeld = null; ballHeld = false; propHeld = null; fabDrag = null;
+      cv.style.cursor = "default";
+      try { invoke("set_dragging", { on: false }); } catch {}
+    }
     if (spinT0 && now - spinT0 > 4000) spinT0 = 0;
     for (const p of pals) {
       if (!isFinite(p.x) || !isFinite(p.y) || !isFinite(p.squash)) {
@@ -8687,6 +8708,11 @@ function frameBody(now) {
   if (treat) drawTreat(treat.x, treat.y - 6 + Math.sin(t * 5) * 1.5, 0, treat.kind);
   // placed props: bowl sits flat, cushion gets a soft squish pulse
   if (bowl) {
+    // lift floor-sitting props fully on-screen — center-anchored sprites
+    // would otherwise spill a few px past the bottom edge
+    const lift = Math.min(0, winH - (bowl.y + 9));
+    ctx.save();
+    ctx.translate(0, lift);
     drawSpr(ctx, "bowl", bowl.x, bowl.y - 5, 3);
     const fill = bowl.fill ?? 2; // saves from before fill-tracking: half
     if (fill <= 1) { // mask the baked-in kibble with the dark interior
@@ -8712,6 +8738,7 @@ function frameBody(now) {
       ctx.fillRect(Math.round(bowl.x - 1), Math.round(bowl.y - 21), 3, 3);
       ctx.fillRect(Math.round(bowl.x - 7), Math.round(bowl.y - 19), 3, 3);
     }
+    ctx.restore();
   }
   if (cushion) {
     // the puff squashes under whoever's napping on it — scale dips while
@@ -8722,7 +8749,7 @@ function frameBody(now) {
     const poof = now < cushionPoof ? 1 + Math.sin((cushionPoof - now) / 700 * Math.PI) * 0.12 : 1;
     const csq = occupied ? 0.82 : (1 + Math.sin(t * 1.4) * 0.03) * poof;
     ctx.save();
-    ctx.translate(cushion.x, cushion.y);
+    ctx.translate(cushion.x, cushion.y + Math.min(0, winH - (cushion.y + 6)));
     ctx.scale(1 / csq * (2 - csq) * 0.5 + 0.5, csq); // widen a touch as it flattens
     drawSpr(ctx, "cushion", 0, -8 / csq + (occupied ? 1 : Math.sin(t * 1.4) * 0.8), 3);
     ctx.restore();
@@ -8731,7 +8758,7 @@ function frameBody(now) {
     // the lid shivers when a slime just dove in or is rustling inside
     const rustle = now < boxHide || pals.some((p) => now < (p.hideUntil || 0) && Math.abs(p.x - box.x) < 30);
     ctx.save();
-    ctx.translate(box.x + (rustle ? Math.sin(t * 23) * 1.4 : 0), box.y - 5);
+    ctx.translate(box.x + (rustle ? Math.sin(t * 23) * 1.4 : 0), box.y - 5 + Math.min(0, winH - (box.y + 9)));
     drawSpr(ctx, "box", 0, 0, 3);
     ctx.restore();
     if (rustle && Math.random() < dt * 3) fx.push({ x: box.x + (Math.random() - 0.5) * 26, y: box.y - 12, vx: (Math.random() - 0.5) * 20, vy: -12, life: 0.5, c: "#d8c49a" });
@@ -8740,7 +8767,7 @@ function frameBody(now) {
     // leaves sway; a watering makes them perk and sparkle for a bit
     const perk = Date.now() < (plant.steamUntil || 0);
     ctx.save();
-    ctx.translate(plant.x, plant.y - 5);
+    ctx.translate(plant.x, plant.y - 5 + Math.min(0, winH - (plant.y + 12)));
     ctx.rotate(Math.sin(t * (perk ? 5 : 1.6)) * (perk ? 0.1 : 0.04));
     drawSpr(ctx, "plant", 0, 0, 3);
     ctx.restore();
@@ -8750,7 +8777,7 @@ function frameBody(now) {
     // the key turns while the tune plays — a small wobble sells it
     const spinning = Date.now() < (music.spinUntil || 0);
     ctx.save();
-    ctx.translate(music.x + (spinning ? Math.sin(t * 31) * 0.8 : 0), music.y - 4);
+    ctx.translate(music.x + (spinning ? Math.sin(t * 31) * 0.8 : 0), music.y - 4 + Math.min(0, winH - (music.y + 8)));
     drawSpr(ctx, "music", 0, 0, 3);
     ctx.restore();
     if (spinning && Math.random() < dt * 7) bangs.push({ x: music.x + (Math.random() - 0.5) * 30, y: music.y - 30 - Math.random() * 12, life: 0.9, t: "♪" });
@@ -8759,7 +8786,7 @@ function frameBody(now) {
     // the glass gleams once in a while — a slow shine sweep across the pane
     const gleam = (Math.sin(t * 0.9) + 1) / 2;
     ctx.save();
-    ctx.translate(mirror.x, mirror.y - 5);
+    ctx.translate(mirror.x, mirror.y - 5 + Math.min(0, winH - (mirror.y + 13)));
     drawSpr(ctx, "mirror", 0, 0, 3);
     if (gleam > 0.86) {
       ctx.globalAlpha = (gleam - 0.86) / 0.14 * 0.7;
@@ -8775,7 +8802,7 @@ function frameBody(now) {
     const poof = now < matPoof ? 1 + Math.sin((matPoof - now) / 800 * Math.PI) * 0.16 : 1;
     const msq = (1 + Math.sin(t * 1.8) * 0.025) * poof;
     ctx.save();
-    ctx.translate(mat.x, mat.y);
+    ctx.translate(mat.x, mat.y + Math.min(0, winH - (mat.y + 6)));
     ctx.scale(1 + (1 - msq) * 0.6, msq);
     drawSpr(ctx, "mat", 0, -8 / msq, 3);
     ctx.restore();
@@ -8785,7 +8812,7 @@ function frameBody(now) {
     // lifts a crack while the spill-cooldown is fresh
     const raid = Date.now() < (jar.raidUntil || 0);
     ctx.save();
-    ctx.translate(jar.x + (raid ? Math.sin(t * 27) * 1.2 : 0), jar.y - 5);
+    ctx.translate(jar.x + (raid ? Math.sin(t * 27) * 1.2 : 0), jar.y - 5 + Math.min(0, winH - (jar.y + 10)));
     drawSpr(ctx, "jar", 0, 0, 3);
     if ((jar.fill ?? 2) <= 0) { // empty — dim the cookie lumps
       ctx.fillStyle = "rgba(92,70,50,0.55)";
@@ -8798,7 +8825,7 @@ function frameBody(now) {
   // hairline cracks creep in as hatch time nears
   if (egg) {
     ctx.save();
-    ctx.translate(egg.x, egg.y - 7);
+    ctx.translate(egg.x, egg.y - 7 + Math.min(0, winH - (egg.y + 8)));
     const wob = Math.min(0.22, 0.09 + (now - egg.t0) / 150000 * 0.2);
     ctx.rotate(Math.sin(t * (3 + (now - egg.t0) / 50000) + egg.wob) * wob);
     drawSpr(ctx, "egg", 0, 0, 3);
