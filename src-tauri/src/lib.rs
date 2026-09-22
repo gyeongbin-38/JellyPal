@@ -627,6 +627,23 @@ pub fn run() {
                         inside = now_inside;
                         let _ = win_poll.set_ignore_cursor_events(!inside);
                     }
+                    // live click-state snapshot every ~1s — proves whether the
+                    // frontend's rects arrived and whether the poll loop is
+                    // alive, without needing the app to be instrumented
+                    if tick % 33 == 2 {
+                        if let Ok(dir) = win_poll.app_handle().path().app_data_dir() {
+                            let n = CLICKABLE.lock().unwrap().len();
+                            let body = format!(
+                                "{{\"inside\":{},\"rects\":{},\"cursor\":[{},{}],\"dragging\":{}}}",
+                                inside,
+                                n,
+                                lx,
+                                ly,
+                                DRAGGING.load(Ordering::Relaxed)
+                            );
+                            let _ = std::fs::write(dir.join("clickdbg.json"), body);
+                        }
+                    }
                 }
             });
 

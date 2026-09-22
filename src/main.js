@@ -1,6 +1,21 @@
 const { listen } = window.__TAURI__.event;
 const { invoke } = window.__TAURI__.core;
 
+// surface silent failures: a throw inside a setInterval callback (like the
+// clickable-rect updater) would otherwise die with zero log evidence and
+// leave the whole overlay click-through. beforeunload marks clean teardown —
+// ticks stopping with no UNLOAD means the process was killed externally
+window.addEventListener("error", (e) => {
+  try { invoke("log_crash", { msg: "JSERR " + (e.message || "?") + " @" + String(e.filename || "").split("/").pop() + ":" + e.lineno }); } catch {}
+});
+window.addEventListener("unhandledrejection", (e) => {
+  const r = e.reason;
+  try { invoke("log_crash", { msg: "JSREJ " + String((r && (r.stack || r.message)) || r).slice(0, 400) }); } catch {}
+});
+window.addEventListener("beforeunload", () => {
+  try { invoke("log_crash", { msg: "UNLOAD" }); } catch {}
+});
+
 const cv = document.getElementById("c");
 const ctx = cv.getContext("2d");
 
