@@ -1307,8 +1307,19 @@ const SFX_DEFS = {
 // note — a "8-bit" pack could drop pitch 0.5, a "toy" pack raise it 1.5
 let sfxPack = { pitch: 1, vol: 1, defs: null };
 const sfx = {};
+// ambient rate-limit: while you haven't touched the slime for a bit, the
+// autonomous bustle (pals hopping, idles, eats) shares one sound budget —
+// interaction feedback (clicks, menus, drags) always plays full-rate
+let lastAmbSfx = 0;
+const AMB_SFX_GAP = 2200;
+let lastUiTap = 0; // any real click on the overlay — panel taps count as interaction too
 for (const k of Object.keys(SFX_DEFS)) {
   sfx[k] = () => {
+    const now = Date.now();
+    if (now - Math.max(awakeAt, lastUiTap) > 1500) {
+      if (now - lastAmbSfx < AMB_SFX_GAP) return;
+      lastAmbSfx = now;
+    }
     const defs = (sfxPack.defs && sfxPack.defs[k]) || SFX_DEFS[k];
     for (const n of defs) {
       blip({ ...n, f: (n.f + (n.fr ? Math.random() * n.fr : 0)) * sfxPack.pitch, v: n.v * sfxPack.vol });
@@ -2762,7 +2773,7 @@ function eat() {
   for (const p of pals) {
     if (SPECIES[p.sp].kr) { p.faceId = "munch"; p.faceT = performance.now() + 150; }
   }
-  if (now > lastMunchSfx + 120) { lastMunchSfx = now; sfx.munch(); }
+  if (now > lastMunchSfx + 600) { lastMunchSfx = now; sfx.munch(); }
   if (state !== "idle") state = "idle";
   if (Math.random() < 0.35 && crumbs.length < 12) {
     crumbs.push({ x: petX + (Math.random() * 60 - 30), y: petY - 80, vy: 0, life: 1 });
@@ -3086,6 +3097,7 @@ function recall() {
 
 cv.addEventListener("pointerdown", (e) => {
   ac();
+  lastUiTap = Date.now();
   const [mx, my] = canvasPos(e);
   if (e.button === 2) {
     // right-click the snack item cycles the treat kind; right-clicking
@@ -4232,6 +4244,7 @@ const infoEl = document.getElementById("info");
 const ic = document.getElementById("ic");
 const ictx = ic.getContext("2d");
 infoEl.addEventListener("pointerdown", (e) => {
+  lastUiTap = Date.now();
   if (redeemMode) return; // code entry is keyboard-only; swallow the click
   if (infoPick !== null) { infoPick = null; sfx.pop(); return; }
   if (albumOpen) albumClick(e.clientX, e.clientY);
@@ -4859,6 +4872,7 @@ function drawNursery(ms) {
 }
 
 nc.addEventListener("pointerdown", (e) => {
+  lastUiTap = Date.now();
   if (e.button !== 0) return;
   const r = nc.getBoundingClientRect();
   const mx = e.clientX - r.left, my = e.clientY - r.top;
@@ -5141,6 +5155,7 @@ function drawCard(now) {
   }
 }
 kc.addEventListener("pointerdown", (e) => {
+  lastUiTap = Date.now();
   if (e.button !== 0) return;
   const r = kc.getBoundingClientRect();
   const mx = e.clientX - r.left, my = e.clientY - r.top;
@@ -5331,6 +5346,7 @@ function toggleRanch(force) {
 }
 
 rc.addEventListener("pointerdown", (e) => {
+  lastUiTap = Date.now();
   if (e.button !== 0) return;
   nameEdit = null; // any ranch click abandons an in-progress rename
   const r = rc.getBoundingClientRect();
