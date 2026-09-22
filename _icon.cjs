@@ -203,6 +203,23 @@ function icoEncode(frames) {
   return Buffer.concat([dir, ...datas]);
 }
 
+// icns container: 'icns' magic + total len, then entries of
+// (4-byte OSType + u32 len + PNG payload). modern macOS accepts
+// PNG-encoded entries — ic07=128, ic08=256, ic09=512, ic10=1024
+function icnsEncode(entries) {
+  const parts = entries.map(([type, png]) => {
+    const h = Buffer.alloc(8);
+    h.write(type, 0, "ascii");
+    h.writeUInt32BE(png.length + 8, 4);
+    return Buffer.concat([h, png]);
+  });
+  const total = 8 + parts.reduce((a, p) => a + p.length, 0);
+  const head = Buffer.alloc(8);
+  head.write("icns", 0, "ascii");
+  head.writeUInt32BE(total, 4);
+  return Buffer.concat([head, ...parts]);
+}
+
 // ---------- emit
 const outDir = path.join(__dirname, "src-tauri", "icons");
 const sizes = [16, 24, 32, 48, 64, 128, 256];
@@ -215,5 +232,11 @@ fs.writeFileSync(path.join(outDir, "icon.png"), frames[frames.length - 1].png);
 fs.writeFileSync(path.join(outDir, "32x32.png"), frames.find((f) => f.size === 32).png);
 fs.writeFileSync(path.join(outDir, "128x128.png"), frames.find((f) => f.size === 128).png);
 fs.writeFileSync(path.join(outDir, "128x128@2x.png"), frames.find((f) => f.size === 256).png);
-console.log("icon.ico + pngs written to", outDir);
+fs.writeFileSync(path.join(outDir, "icon.icns"), icnsEncode([
+  ["ic07", frames.find((f) => f.size === 128).png],
+  ["ic08", frames.find((f) => f.size === 256).png],
+  ["ic09", pngEncode(512, 512, renderIcon(512))],
+  ["ic10", pngEncode(1024, 1024, renderIcon(1024))],
+]));
+console.log("icon.ico + icon.icns + pngs written to", outDir);
 process.exit(0);

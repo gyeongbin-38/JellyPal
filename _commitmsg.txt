@@ -1,13 +1,22 @@
-feat: volume slider + cuter sfx + slime-sprite icon
+feat: cross-platform port — macOS support + portability fixes
 
-- settings row 0 is now a real slider: click/drag maps to continuous vol
-  (0..1), persisted as vol; volStep kept as a save-compat shim
-- SFX redesigned: sine/triangle chirps with soft attack ramp replace the
-  square-wave beeps; autonomous rate-limit unchanged
-- app icon is now the actual sprout pal rendered through buildSprite
-  (_icon.cjs regenerates it); bundled in-repo instead of a dev-local path
-- window title capitalized to Jellypal + tray tooltip so the process is
-  findable in Task Manager (Apps section) and the tray
+- split all Win32 code behind #[cfg(windows)]: window enum, autostart
+  (HKCU Run), console attach; macOS impls via CGWindowList + LaunchAgent
+- active-win-pos-rs replaces hand-rolled foreground-window code — emits
+  [title, "stem app_name"] so existing frontend classifiers keep working
+  (added safari to browser regex; Cmd is the copy/paste modifier on macOS)
+- tauri-plugin-single-instance replaces the Win32 mutex — covers
+  macOS/Linux too, and a duplicate launch now summons the pal instead
+  of exiting silently
+- identifier com.jellypal.app -> com.jellypal.desktop (the .app suffix
+  conflicts with macOS bundle semantics) with one-time save migration
+- panic log -> temp dir, hook.log -> app data dir (no more hardcoded
+  C:/dev); release binaries stripped of local paths via remap-path-prefix
+- regenerated icon.icns from the sprout sprite; bundle targets nsis+app+dmg;
+  WebView2Loader.dll committed as a stable resource path
+- macOS: menu-bar tray + Accessory activation policy (no Dock icon),
+  visibleOnAllWorkspaces for the overlay
+- GitHub Actions: cargo check+test on windows+macos, tauri bundle on macOS
 
 Generated with [Devin](https://devin.ai)
 

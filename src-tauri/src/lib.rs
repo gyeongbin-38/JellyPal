@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{
@@ -6,21 +6,20 @@ use tauri::{
     tray::TrayIconBuilder,
     Emitter, Manager,
 };
-use windows_sys::Win32::Foundation::{CloseHandle, HWND, LPARAM, POINT, RECT, TRUE};
-use windows_sys::Win32::System::Threading::{
-    OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
-};
-use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-    GetAsyncKeyState, VK_LBUTTON, VK_MBUTTON, VK_RBUTTON,
-};
+#[cfg(windows)]
+use windows_sys::Win32::Foundation::{HWND, LPARAM, RECT, TRUE};
+#[cfg(windows)]
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GetCursorPos, GetForegroundWindow, GetWindowRect,
-    GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
+    EnumWindows, GetWindowRect, IsIconic, IsWindowVisible,
 };
 
 // Rects (logical px, relative to our window) that should capture the mouse.
 static CLICKABLE: Mutex<Vec<[f64; 4]>> = Mutex::new(Vec::new());
 static DRAGGING: AtomicBool = AtomicBool::new(false);
+// global mouse-button state via the rdev listener — cross-platform
+// replacement for GetAsyncKeyState; a missed release only delays a
+// click-through toggle until the next press cycle, never wedges it
+static MOUSE_HELD: AtomicI32 = AtomicI32::new(0);
 // per-monitor rects in window-logical px [x, y, w, h] — filled at setup
 // when the overlay spans more than one display
 static MON_LIST: Mutex<Vec<[f64; 4]>> = Mutex::new(Vec::new());
@@ -153,6 +152,20 @@ fn photos_dir(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
     app.path().app_data_dir().ok().map(|d| d.join("photos"))
 }
 
+// tiny recursive copy for the identifier-migration (photos/ dir)
+fn copy_dir(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for e in std::fs::read_dir(src)?.flatten() {
+        let dest = dst.join(e.file_name());
+        if e.path().is_dir() {
+            copy_dir(&e.path(), &dest)?;
+        } else {
+            std::fs::copy(e.path(), dest)?;
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn list_photos(app: tauri::AppHandle) -> Vec<String> {
     let Some(dir) = photos_dir(&app) else { return vec![] };
@@ -209,11 +222,7 @@ fn delete_photo(app: tauri::AppHandle, name: String) -> Result<(), String> {
 fn open_photos(app: tauri::AppHandle) -> Result<(), String> {
     let Some(dir) = photos_dir(&app) else { return Err("no photos dir".into()) };
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    std::process::Command::new("explorer")
-        .arg(&dir)
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    Ok(())
+    open_with_shell(&dir.to_string_lossy())
 }
 
 #[tauri::command]
@@ -222,11 +231,7 @@ fn open_url(url: String) -> Result<(), String> {
     if !url.starts_with("https://") {
         return Err("refusing non-https url".into());
     }
-    std::process::Command::new("explorer")
-        .arg(&url)
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    Ok(())
+    open_with_shell(&url)
 }
 
 // gem-code verification: codes are Ed25519 signatures minted offline by
@@ -342,23 +347,56 @@ fn get_weather() -> Option<i64> {
 
 #[tauri::command]
 fn set_autostart(enable: bool) -> Result<(), String> {
-    // HKCU Run key — the slime is meant to live on the desktop, so it
-    // belongs in startup when the user asks for it
-    let key = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
-    if enable {
-        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-        let path = format!("\"{}\"", exe.display());
-        std::process::Command::new("reg")
-            .args(["add", key, "/v", "Jellypal", "/t", "REG_SZ", "/d", &path, "/f"])
-            .output()
-            .map_err(|e| e.to_string())?;
-    } else {
-        std::process::Command::new("reg")
-            .args(["delete", key, "/v", "Jellypal", "/f"])
-            .output()
-            .map_err(|e| e.to_string())?;
+    #[cfg(windows)]
+    {
+        // HKCU Run key — the slime is meant to live on the desktop, so it
+        // belongs in startup when the user asks for it
+        let key = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
+        if enable {
+            let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+            let path = format!("\"{}\"", exe.display());
+            std::process::Command::new("reg")
+                .args(["add", key, "/v", "Jellypal", "/t", "REG_SZ", "/d", &path, "/f"])
+                .output()
+                .map_err(|e| e.to_string())?;
+        } else {
+            std::process::Command::new("reg")
+                .args(["delete", key, "/v", "Jellypal", "/f"])
+                .output()
+                .map_err(|e| e.to_string())?;
+        }
+        return Ok(());
     }
-    Ok(())
+    #[cfg(target_os = "macos")]
+    {
+        // per-user LaunchAgent — the macOS equivalent of the Run key
+        let home = std::env::var("HOME").map_err(|e| e.to_string())?;
+        let dir = std::path::PathBuf::from(home).join("Library/LaunchAgents");
+        let plist = dir.join("com.jellypal.desktop.plist");
+        if enable {
+            std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+            let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+            let body = format!(
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+                 <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
+                 <plist version=\"1.0\"><dict>\n\
+                 <key>Label</key><string>com.jellypal.desktop</string>\n\
+                 <key>ProgramArguments</key><array><string>{}</string></array>\n\
+                 <key>RunAtLoad</key><true/>\n\
+                 </dict></plist>\n",
+                exe.display()
+            );
+            std::fs::write(&plist, body).map_err(|e| e.to_string())?;
+        } else if plist.exists() {
+            std::fs::remove_file(&plist).map_err(|e| e.to_string())?;
+        }
+        return Ok(());
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        let _ = enable;
+        return Err("autostart not supported on this platform".into());
+    }
 }
 
 #[tauri::command]
@@ -378,6 +416,7 @@ fn save_png(app: tauri::AppHandle, data: String, name: String) -> Result<String,
     Ok(path.to_string_lossy().into_owned())
 }
 
+#[cfg(windows)]
 unsafe extern "system" fn enum_windows_cb(hwnd: HWND, lparam: LPARAM) -> i32 {
     let rects = &mut *(lparam as *mut Vec<[i32; 4]>);
     if IsWindowVisible(hwnd) == 0 || IsIconic(hwnd) != 0 {
@@ -394,6 +433,144 @@ unsafe extern "system" fn enum_windows_cb(hwnd: HWND, lparam: LPARAM) -> i32 {
     TRUE
 }
 
+// every visible top-level window's screen rect in PHYSICAL px — feeds the
+// slime's "sit on window tops" platform scan. `scale` converts macOS point
+// coordinates (CGWindowList reports points, not pixels) to physical px;
+// Windows rects are already physical.
+#[cfg(windows)]
+fn collect_window_rects(_scale: f64) -> Vec<[i32; 4]> {
+    let mut rects: Vec<[i32; 4]> = Vec::new();
+    unsafe {
+        EnumWindows(
+            Some(enum_windows_cb),
+            &mut rects as *mut Vec<[i32; 4]> as LPARAM,
+        );
+    }
+    rects
+}
+
+#[cfg(target_os = "macos")]
+fn collect_window_rects(scale: f64) -> Vec<[i32; 4]> {
+    // CGWindowListCopyWindowInfo exposes bounds + owner pid for every
+    // on-screen window without needing screen-recording permission.
+    // Bounds come back in POINTS — multiplied by `scale` so the return
+    // value is physical px on every platform (the caller's math assumes
+    // the same space as cursor_position()/monitor position).
+    use core_foundation::array::{CFArrayGetCount, CFArrayGetValueAtIndex};
+    use core_foundation::base::{CFType, TCFType};
+    use core_foundation::dictionary::{CFDictionaryGetValue, CFDictionaryRef};
+    use core_foundation::number::{kCFNumberFloat64Type, CFNumberGetValue, CFNumberRef};
+    use core_foundation::string::CFString;
+    use core_graphics::window::{
+        kCGNullWindowID, kCGWindowListOptionOnScreenOnly, CGWindowListCopyWindowInfo,
+    };
+    use std::ffi::c_void;
+
+    unsafe fn num(dict: CFDictionaryRef, key: &CFString) -> Option<f64> {
+        let v = CFDictionaryGetValue(dict, key.as_concrete_TypeRef() as *const c_void);
+        if v.is_null() {
+            return None;
+        }
+        let mut out = 0f64;
+        if CFNumberGetValue(v as CFNumberRef, kCFNumberFloat64Type, &mut out as *mut _ as *mut c_void)
+            == 0
+        {
+            return None;
+        }
+        Some(out)
+    }
+
+    let mut out = Vec::new();
+    let my_pid = std::process::id();
+    unsafe {
+        let list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID);
+        if list.is_null() {
+            return out;
+        }
+        // RAII guard releases the CFArray on scope exit
+        let _arr: core_foundation::array::CFArray<CFType> =
+            core_foundation::array::CFArray::wrap_under_create_rule(list);
+        let layer_key = CFString::new("kCGWindowLayer");
+        let pid_key = CFString::new("kCGWindowOwnerPID");
+        let bounds_key = CFString::new("kCGWindowBounds");
+        let x_key = CFString::new("X");
+        let y_key = CFString::new("Y");
+        let w_key = CFString::new("Width");
+        let h_key = CFString::new("Height");
+        for i in 0..CFArrayGetCount(list) {
+            let dict = CFArrayGetValueAtIndex(list, i) as CFDictionaryRef;
+            if dict.is_null() {
+                continue;
+            }
+            // layer 0 = regular app windows (skip menubar, dock, overlays)
+            match num(dict, &layer_key) {
+                Some(l) if l as i32 == 0 => {}
+                _ => continue,
+            }
+            // never perch on our own overlay
+            if let Some(pid) = num(dict, &pid_key) {
+                if pid as u32 == my_pid {
+                    continue;
+                }
+            }
+            let bd = CFDictionaryGetValue(dict, bounds_key.as_concrete_TypeRef() as *const c_void)
+                as CFDictionaryRef;
+            if bd.is_null() {
+                continue;
+            }
+            let (Some(x), Some(y), Some(w), Some(h)) = (
+                num(bd, &x_key),
+                num(bd, &y_key),
+                num(bd, &w_key),
+                num(bd, &h_key),
+            ) else {
+                continue;
+            };
+            if w > 80.0 && h > 30.0 {
+                out.push([
+                    (x * scale) as i32,
+                    (y * scale) as i32,
+                    ((x + w) * scale) as i32,
+                    ((y + h) * scale) as i32,
+                ]);
+            }
+        }
+    }
+    out
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+fn collect_window_rects(_scale: f64) -> Vec<[i32; 4]> {
+    Vec::new()
+}
+
+// the copy/paste modifier differs per platform — Cmd on macOS, Ctrl
+// elsewhere (on Windows the Meta key is the Win key, and Win+V opens
+// clipboard history — it must not count as a paste)
+#[cfg(target_os = "macos")]
+fn is_combo_modifier(k: rdev::Key) -> bool {
+    matches!(k, rdev::Key::MetaLeft | rdev::Key::MetaRight)
+}
+#[cfg(not(target_os = "macos"))]
+fn is_combo_modifier(k: rdev::Key) -> bool {
+    matches!(k, rdev::Key::ControlLeft | rdev::Key::ControlRight)
+}
+
+// open a folder or url with the OS default handler
+fn open_with_shell(target: &str) -> Result<(), String> {
+    #[cfg(windows)]
+    let cmd = "explorer";
+    #[cfg(target_os = "macos")]
+    let cmd = "open";
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let cmd = "xdg-open";
+    std::process::Command::new(cmd)
+        .arg(target)
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // seller diagnostic: `jellypal.exe --verify-code JELLYPAL-...` checks a
@@ -403,6 +580,7 @@ pub fn run() {
     if let Some(pos) = args.iter().position(|a| a == "--verify-code") {
         // release builds are windows-subsystem — attach to the parent's
         // console or the answer never reaches the terminal
+        #[cfg(windows)]
         unsafe {
             use windows_sys::Win32::System::Console::{AttachConsole, ATTACH_PARENT_PROCESS};
             AttachConsole(ATTACH_PARENT_PROCESS);
@@ -420,26 +598,21 @@ pub fn run() {
         }
     }
 
-    // single instance: a second launch exits quietly instead of fighting
-    // the first over the WebView2 user-data dir — that contention is what
-    // froze the newcomer and made Windows mark it "not responding"
-    unsafe {
-        use windows_sys::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS};
-        use windows_sys::Win32::System::Threading::CreateMutexW;
-        let name: Vec<u16> = "Local\\JellypalSingleInstance\0".encode_utf16().collect();
-        let h = CreateMutexW(std::ptr::null(), 1, name.as_ptr());
-        if h.is_null() || GetLastError() == ERROR_ALREADY_EXISTS {
-            std::process::exit(0);
-        }
-        // handle intentionally never closed — the kernel holds the mutex
-        // for as long as this process lives, releasing it on exit
-    }
-
     std::panic::set_hook(Box::new(|info| {
-        let _ = std::fs::write("C:/dev/panic.log", format!("{info}"));
+        let p = std::env::temp_dir().join("jellypal-panic.log");
+        let _ = std::fs::write(p, format!("{info}"));
     }));
 
     tauri::Builder::default()
+        // single instance: a second launch exits instead of fighting the
+        // first over the webview user-data dir — that contention froze the
+        // newcomer into "not responding" on Windows. The callback fires in
+        // the *running* instance, so a re-launch summons the pal instead of
+        // doing nothing. (was a hand-rolled Win32 mutex; the plugin covers
+        // macOS/Linux socket-based dedup too)
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            app.emit("summon", ()).ok();
+        }))
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             save_state,
@@ -463,6 +636,35 @@ pub fn run() {
         ])
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();
+
+            // identifier migration: com.jellypal.app -> com.jellypal.desktop
+            // (the .app suffix collides with macOS bundle semantics). If the
+            // new data dir has no save but the old one does, copy everything
+            // over so existing installs keep their slimes/photos/settings.
+            if let Ok(new_dir) = app.path().app_data_dir() {
+                if !new_dir.join("state.json").exists() {
+                    let old_dir = app
+                        .path()
+                        .app_data_dir()
+                        .ok()
+                        .and_then(|d| d.parent().map(|p| p.join("com.jellypal.app")));
+                    if let Some(old_dir) = old_dir {
+                        if old_dir.join("state.json").exists() {
+                            let _ = std::fs::create_dir_all(&new_dir);
+                            if let Ok(rd) = std::fs::read_dir(&old_dir) {
+                                for e in rd.flatten() {
+                                    let dest = new_dir.join(e.file_name());
+                                    if e.path().is_dir() {
+                                        let _ = copy_dir(&e.path(), &dest);
+                                    } else {
+                                        let _ = std::fs::copy(e.path(), dest);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             // Cover the whole (primary) monitor.
             let mut mpos = tauri::PhysicalPosition::new(0, 0);
@@ -514,6 +716,11 @@ pub fn run() {
             window.set_position(tauri::Position::Physical(mpos))?;
             window.set_ignore_cursor_events(true)?;
 
+            // desktop companion shouldn't take a Dock slot on macOS — the
+            // menu-bar tray icon is the only persistent UI affordance
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory)?;
+
             let summon = MenuItem::with_id(app, "summon", "Summon", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&summon, &quit])?;
@@ -531,36 +738,59 @@ pub fn run() {
                 .build(app)?;
 
             // Global keystroke counter; never inspect which key — except
-            // the Ctrl modifier so copy/paste/cut combos can be spotted
+            // the modifier so copy/paste/cut combos can be spotted
             // (combo detection only; typed content is never read).
+            // ctrl on Windows/Linux, meta (Cmd) on macOS — see
+            // is_combo_modifier for why they differ
             let handle = app.handle().clone();
+            let log_dir = app.path().app_data_dir().ok();
             std::thread::spawn(move || {
-                let mut ctrl = false;
+                let mut modifier = false;
                 if let Err(e) = rdev::listen(move |event| {
                     match event.event_type {
                         rdev::EventType::KeyPress(k) => {
                             let _ = handle.emit("keystroke", ());
-                            match k {
-                                rdev::Key::ControlLeft | rdev::Key::ControlRight => ctrl = true,
-                                rdev::Key::KeyC | rdev::Key::KeyX if ctrl => {
-                                    let _ = handle.emit("copy", ());
+                            if is_combo_modifier(k) {
+                                modifier = true;
+                            } else {
+                                match k {
+                                    rdev::Key::KeyC | rdev::Key::KeyX if modifier => {
+                                        let _ = handle.emit("copy", ());
+                                    }
+                                    rdev::Key::KeyV if modifier => {
+                                        let _ = handle.emit("paste", ());
+                                    }
+                                    _ => {}
                                 }
-                                rdev::Key::KeyV if ctrl => {
-                                    let _ = handle.emit("paste", ());
-                                }
-                                _ => {}
                             }
                         }
                         rdev::EventType::KeyRelease(k) => {
-                            if matches!(k, rdev::Key::ControlLeft | rdev::Key::ControlRight) {
-                                ctrl = false;
+                            if is_combo_modifier(k) {
+                                modifier = false;
                             }
+                        }
+                        // tracked globally so the click-through toggle never
+                        // flips mid-gesture (that swap is what wedged input)
+                        rdev::EventType::ButtonPress(_) => {
+                            MOUSE_HELD.fetch_add(1, Ordering::Relaxed);
+                        }
+                        rdev::EventType::ButtonRelease(_) => {
+                            MOUSE_HELD
+                                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
+                                    Some((v - 1).max(0))
+                                })
+                                .ok();
                         }
                         _ => {}
                     }
                 }) {
-                    let _ =
-                        std::fs::write("C:/dev/hook.log", format!("rdev listen failed: {e:?}"));
+                    if let Some(dir) = log_dir {
+                        let _ = std::fs::create_dir_all(&dir);
+                        let _ = std::fs::write(
+                            dir.join("hook.log"),
+                            format!("rdev listen failed: {e:?}"),
+                        );
+                    }
                 }
             });
 
@@ -575,46 +805,33 @@ pub fn run() {
                     std::thread::sleep(Duration::from_millis(30));
                     tick += 1;
                     if tick % 66 == 1 {
-                        unsafe {
-                            let hwnd = GetForegroundWindow();
-                            let mut buf = [0u16; 512];
-                            let n = GetWindowTextW(hwnd, buf.as_mut_ptr(), 512);
-                            // process name too — titles alone can't tell a
-                            // browser from a game
-                            let mut exe = String::new();
-                            let mut pid = 0u32;
-                            GetWindowThreadProcessId(hwnd, &mut pid);
-                            let hproc =
-                                OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
-                            if !hproc.is_null() {
-                                let mut pbuf = [0u16; 512];
-                                let mut len = 512u32;
-                                if QueryFullProcessImageNameW(
-                                    hproc, 0, pbuf.as_mut_ptr(), &mut len,
-                                ) != 0
-                                {
-                                    let full = String::from_utf16_lossy(
-                                        &pbuf[..len as usize],
-                                    );
-                                    exe = full
-                                        .rsplit(['\\', '/'])
-                                        .next()
-                                        .unwrap_or("")
-                                        .to_lowercase();
-                                }
-                                CloseHandle(hproc);
-                            }
-                            if n > 0 {
-                                let title =
-                                    String::from_utf16_lossy(&buf[..n as usize]);
-                                let _ = win_poll.emit("focus", [title, exe]);
-                            }
+                        // foreground app name + window title — cross-platform
+                        // via active-win-pos-rs (title may be empty on macOS
+                        // without screen-recording permission; the app name
+                        // alone still classifies fine)
+                        if let Ok(aw) = active_win_pos_rs::get_active_window() {
+                            // emit both signals: process stem keeps parity
+                            // with the old exe-name feed (msedge, chrome);
+                            // app_name covers macOS bundle names ("Safari")
+                            // and UWP/FileDescription oddballs
+                            let stem = aw
+                                .process_path
+                                .file_stem()
+                                .map(|s| s.to_string_lossy().into_owned())
+                                .unwrap_or_default();
+                            let _ = win_poll.emit(
+                                "focus",
+                                [aw.title, format!("{} {}", stem, aw.app_name).to_lowercase()],
+                            );
                         }
                     }
-                    let mut pt = POINT { x: 0, y: 0 };
-                    unsafe { GetCursorPos(&mut pt) };
-                    let lx = (pt.x - mpos.x) as f64 / scale;
-                    let ly = (pt.y - mpos.y) as f64 / scale;
+                    // global cursor position in physical screen px
+                    let (cx, cy) = win_poll
+                        .cursor_position()
+                        .map(|p| (p.x as i32, p.y as i32))
+                        .unwrap_or_default();
+                    let lx = (cx - mpos.x) as f64 / scale;
+                    let ly = (cy - mpos.y) as f64 / scale;
                     if (lx - last_cur.0).abs() + (ly - last_cur.1).abs() > 3.0 {
                         last_cur = (lx, ly);
                         let _ = win_poll.emit("cursor", [lx, ly]);
@@ -628,13 +845,9 @@ pub fn run() {
                                 lx >= r[0] && lx <= r[0] + r[2] && ly >= r[1] && ly <= r[1] + r[3]
                             });
                     // never flip click-through while a mouse button is held —
-                    // toggling WS_EX_TRANSPARENT mid-gesture can deadlock
-                    // WebView2's input pipeline and hang the window
-                    let btn_held = unsafe {
-                        GetAsyncKeyState(VK_LBUTTON as i32) < 0
-                            || GetAsyncKeyState(VK_RBUTTON as i32) < 0
-                            || GetAsyncKeyState(VK_MBUTTON as i32) < 0
-                    };
+                    // toggling mid-gesture can deadlock the webview's input
+                    // pipeline and hang the window
+                    let btn_held = MOUSE_HELD.load(Ordering::Relaxed) > 0;
                     if now_inside != inside && !btn_held {
                         inside = now_inside;
                         let _ = win_poll.set_ignore_cursor_events(!inside);
@@ -665,13 +878,7 @@ pub fn run() {
             let own_w = msize.width as i32;
             let own_h = msize.height as i32;
             std::thread::spawn(move || loop {
-                let mut rects: Vec<[i32; 4]> = Vec::new();
-                unsafe {
-                    EnumWindows(
-                        Some(enum_windows_cb),
-                        &mut rects as *mut Vec<[i32; 4]> as LPARAM,
-                    );
-                }
+                let rects = collect_window_rects(scale);
                 let plats: Vec<[f64; 3]> = rects
                     .into_iter()
                     .filter(|r| {

@@ -3051,7 +3051,7 @@ function focusKind() {
   if (/vlc|mpv|spotify|musicbee|foobar2000|itunes/.test(focusExe)) return "media";
   if (/code|devenv|vim|nvim|emacs|windowsterminal|powershell|idea64|pycharm64|sublime_text|rider64|zed|notepad|cursor|wezterm|alacritty|vscode/.test(focusExe)) return "editor";
   if (/code|studio|vim|neovim|emacs|terminal|powershell|intellij|pycharm|sublime|rider|zed|notepad|cursor/.test(focusTitle)) return "editor";
-  if (/chrome|msedge|firefox|brave|opera|arc|iexplore/.test(focusExe)) return "browser";
+  if (/chrome|msedge|firefox|brave|opera|arc|iexplore|safari|edge/.test(focusExe)) return "browser";
   if (/youtube|twitch|netflix|video/.test(focusTitle)) return "media";
   if (/steam|game|league|valorant|minecraft|elden|dota|fortnite|overwatch|genshin|hoyo|steamwebhelper/.test(focusExe + " " + focusTitle)) return "game";
   return "other";

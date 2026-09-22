@@ -1,0 +1,1 @@
+Get-CimInstance Win32_Process -Filter "Name='jellypal.exe'" | Select-Object ProcessId, ExecutablePath, CreationDate, @{n='Responding';e={try{(Get-Process -Id $_.ProcessId).Responding}catch{'?'}}} | Format-List
