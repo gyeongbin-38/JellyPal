@@ -1,4 +1,4 @@
-[오전 12:54:17] heartbeat GREEN (30s)
+[오후 1:16:21] heartbeat GREEN (22s)
 PASS syntax  
 PASS sprites all sprites clean
 PASS fresh   === fresh({}): 17 passed, 0 failed ===

@@ -12,8 +12,16 @@ const installed = "C:/Jellypal/jellypal.exe";
 const release = "C:/dev/mini/typet/src-tauri/target/release/jellypal.exe";
 const setup = "C:/dev/mini/typet/dist/Jellypal_0.2.0_x64-setup.exe";
 
-// 1. binaries identical
-ok("installed exe == release exe", sha(installed) === sha(release));
+// 1. binaries identical — the bundler stamps a patch marker near the end of
+// the release exe AFTER packing, so compare up to 90% + require the
+// single-instance mutex string in the installed binary
+{
+  const a = fs.readFileSync(installed), b = fs.readFileSync(release);
+  const n = Math.min(a.length, b.length, Math.floor(Math.min(a.length, b.length) * 0.9));
+  const same = a.subarray(0, n).equals(b.subarray(0, n));
+  const mutex = Buffer.from("JellypalSingleInstance", "utf8");
+  ok("installed exe == release build (code region)", same && b.includes(mutex) && a.includes(mutex));
+}
 
 // 2. verify-code diagnostics on the INSTALLED exe
 const good = spawnSync(installed, ["--verify-code", "JELLYPAL-A-ABCDEFGH-XXXX"], { encoding: "utf8" });
@@ -46,6 +54,25 @@ const lines = fs.existsSync(crash) ? fs.readFileSync(crash, "utf8").trim().split
 const nonTick = lines.filter((l) => !/tick/.test(l)).slice(-5);
 ok(`crash.log non-tick tail (${nonTick.length})`, nonTick.length <= 5);
 nonTick.forEach((l) => console.log("    log:", l.slice(0, 120)));
+
+// 8. wiring audit — the test harness stubs invoke() so set_clickable is a
+// no-op there; a prop missing its clickable rect still passes the harness
+// but can NEVER be grabbed in the real app (click-through). cross-check the
+// grab table against every surface a prop must be wired into.
+const src = fs.readFileSync("C:/dev/mini/typet/src/main.js", "utf8");
+const grabTbl = src.match(/of (\[\[[\s\S]*?\]\])/);
+const kinds = grabTbl ? [...grabTbl[1].matchAll(/\["(\w+)"/g)].map((m) => m[1]) : [];
+ok(`grab table parsed (${kinds.length} kinds)`, kinds.length >= 5);
+const toyboxRow = (src.match(/const kind = \[([^\]]+)\]\[slot\]/) || [])[1] || "";
+const propTapBody = src.slice(src.indexOf("function propTap"));
+for (const k of kinds) {
+  ok(`clickable rect: ${k}`, new RegExp(`if \\(${k}\\) rects\\.push`).test(src));
+  ok(`save persist: ${k}`, new RegExp(`${k}: ${k} \\? \\{`).test(src));
+  ok(`load reanchor: ${k}`, new RegExp(`${k} = reanchor\\(s\\.props\\.${k}\\)`).test(src));
+  ok(`toybox slot: ${k}`, new RegExp(`"${k}"`).test(toyboxRow));
+  ok(`propTap branch: ${k}`, new RegExp(`kind === "${k}"`).test(propTapBody));
+  ok(`draw branch: ${k}`, new RegExp(`if \\(${k}\\) \\{`).test(src));
+}
 
 console.log(`\n=== shipcheck: ${pass} passed, ${fail} failed ===`);
 process.exit(fail ? 1 : 0);

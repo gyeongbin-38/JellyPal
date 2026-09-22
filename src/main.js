@@ -5702,6 +5702,9 @@ setInterval(() => {
   if (box) rects.push([box.x - 32, box.y - 26, 64, 30]);
   if (plant) rects.push([plant.x - 24, plant.y - 34, 48, 40]);
   if (music) rects.push([music.x - 26, music.y - 26, 52, 30]);
+  if (mirror) rects.push([mirror.x - 26, mirror.y - 26, 52, 42]);
+  if (mat) rects.push([mat.x - 32, mat.y - 24, 64, 30]);
+  if (jar) rects.push([jar.x - 23, jar.y - 22, 46, 32]);
   if (egg) rects.push([egg.x - 16, egg.y - 22, 32, 24]);      // egg is a promise, not a wall
   if (fabOpen && toyboxOpen) rects.push(toyboxStripRect()); // chooser strip
   if (awayReport) rects.push([Math.round(winW / 2 - 95), 54, 190, 78]);
