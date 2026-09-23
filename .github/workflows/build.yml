@@ -40,3 +40,21 @@ jobs:
             src-tauri/target/release/bundle/dmg/*.dmg
             src-tauri/target/release/bundle/macos/Jellypal.app.tar.gz
           retention-days: 14
+      - name: Smoke test — launch app, verify it stays alive
+        run: |
+          BIN="src-tauri/target/release/bundle/macos/Jellypal.app/Contents/MacOS/jellypal"
+          "$BIN" &
+          APP_PID=$!
+          sleep 20
+          if kill -0 $APP_PID 2>/dev/null; then
+            echo "PASS: jellypal alive after 20s (pid $APP_PID)"
+            kill $APP_PID || true
+          else
+            echo "FAIL: jellypal exited early"
+            wait $APP_PID || true
+            exit 1
+          fi
+          LOGDIR="$HOME/Library/Application Support/com.jellypal.desktop"
+          ls -la "$LOGDIR" 2>/dev/null || true
+          cat "$LOGDIR/crash.log" 2>/dev/null | tail -20 || true
+          cat "$LOGDIR/hook.log" 2>/dev/null | tail -10 || true

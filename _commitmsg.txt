@@ -1,4 +1,4 @@
-ci: upload macOS bundle artifacts (dmg + app.tar.gz)
+ci: macOS smoke test — launch built .app on runner, verify 20s uptime
 
 Generated with [Devin](https://devin.ai)
 
