@@ -34,3 +34,4 @@ _installtest/
 _macart/  
 _zipstage/  
 server_ed25519.key 
+_secrets.local.txt 

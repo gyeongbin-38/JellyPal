@@ -290,7 +290,7 @@ const TRAIT_INFO = {
   glint: "GLITTERS AT RANDOM",
   bubble: "BLOWS BUBBLES",
   climb: "CLIMBS WINDOW EDGES",
-  chomp: "EATS FILES FOR GEMS",
+  chomp: "EATS FILES FOR JELLY",
   web: "DANGLES FROM YOUR CURSOR",
   gravity: "PULLS SNACKS CLOSER",
   royal: "PALS GATHER ROUND",
@@ -1662,7 +1662,7 @@ async function tryRedeem(raw) {
     redeemed.push(fmt);
     jelly += gems;
     dirty = true;
-    return `+${gems} GEMS!`;
+    return `+${gems} JELLY!`;
   } catch (e) {
     // fall back to the local signature check only when the server never
     // gave a real answer — a real refusal (bad/already-claimed code) is final
@@ -1674,7 +1674,7 @@ async function tryRedeem(raw) {
     redeemed.push(fmt);
     jelly += gems;
     dirty = true;
-    return `+${gems} GEMS!`;
+    return `+${gems} JELLY!`;
   } catch {
     return "BAD CODE";
   }
@@ -1718,7 +1718,7 @@ async function claimGrants() {
     for (const g of fresh) { jelly += g.gems; claimedNonces.push(g.nonce); add += g.gems; }
     claimedNonces = claimedNonces.slice(-300);
     dirty = true;
-    bangs.push({ x: winW / 2, y: 100, life: 2.2, t: `+${add} GEMS!` });
+    bangs.push({ x: winW / 2, y: 100, life: 2.2, t: `+${add} JELLY!` });
     sfx.reveal();
     invoke("ack_grants", { uid, nonces: fresh.map((g) => g.nonce) }).catch(() => {});
   } catch {}
@@ -1759,7 +1759,7 @@ function settingsRows() {
   for (let i = 0; i < 15; i++) rows.push([px + 16, py + 30 + i * 26 - Math.round(setScroll), 158, 20]);
   return rows;
   // 0 VOL 1 SIZE 2 MOTION 3 PHOTO 4 ALBUM 5 POMO 6 FOCUS 7 BREAK
-  // 8 SHARE 9 WEATHER 10 BOOT 11 GEMS 12 REDEEM 13 ID 14 QUIT
+  // 8 SHARE 9 WEATHER 10 BOOT 11 JELLY 12 REDEEM 13 ID 14 QUIT
 }
 
 // gem shop: the paid-gem surface. packs are bought on the itch.io page;
@@ -1847,7 +1847,7 @@ function shareCard() {
   const baseAll = SPECIES.filter((p) => !p.id.startsWith("hyb")).length;
   const baseOwn = owned.filter((id) => !id.startsWith("hyb")).length;
   const shinyN = Object.keys(shinyOwned).filter((k) => shinyOwned[k]).length;
-  const line = `DEX ${baseOwn}/${baseAll}   GEMS ${jelly}   SHINY ${shinyN}`;
+  const line = `DEX ${baseOwn}/${baseAll}   JELLY ${jelly}   SHINY ${shinyN}`;
   drawText(c, line, W / 2 - textW(line, 2) / 2, 330, 2, "#f5ead8");
   const line2 = `PULLS ${stats.pulls}   BREEDS ${stats.breeds}   PLAYS ${stats.plays}`;
   drawText(c, line2, W / 2 - textW(line2, 1) / 2, 352, 1, dim);
@@ -4016,7 +4016,7 @@ const SPR = {
   note: { rows: ["....##.", "...###.", "...##..", "...#...", "...#...", ".##.#..", "####...", ".##...."], pal: { "#": "#8fd4f0" } },
   star: { rows: ["...#...", "...#...", "..###..", "#######", "..###..", "...#...", "...#..."], pal: { "#": "#ffd75e" } },
   star5: { rows: ["...#...", "..###..", "#######", ".#####.", "..###..", ".##.##.", "##...##"], pal: { "#": "#ffd75e" } },
-  gem: { rows: ["..###..", ".#####.", "#######", ".#####.", "..###..", "...#..."], pal: { "#": "#7de8f0" } },
+  gem: { rows: ["..###..", ".#####.", "#o###o#", "#######", ".#####.", "..###.."], pal: { "#": "#8fe8c0", "o": "#2e5a44" } }, // jelly blob: dome + eyes, mini-slime currency icon
   bubble: { rows: ["..###..", ".#...#.", "#..#..#", "#.....#", "#.....#", ".#...#.", "..###.."], pal: { "#": "#a9d8f7" } },
   ring: { rows: [".######.", "#......#", "#......#", "#......#", "#......#", ".######."], pal: { "#": "#e8dcc8" } },
   ringv: { rows: ["..####..", ".#....#.", "#......#", "#......#", "#......#", ".#....#.", "..####.."], pal: { "#": "#8ad4f0" } },
@@ -4481,18 +4481,15 @@ rc.addEventListener("pointermove", (e) => {
 });
 
 function bubbleIcon(c, x, y) {
-  // pixel gem: light-cyan rhombus + white sparkle
-  const rows = [2, 6, 10, 12, 10, 6, 2];
-  c.fillStyle = "#7de8f0";
+  // pixel jelly blob: mint dome with eyes + shine — currency is JELLY now
+  const rows = [6, 10, 12, 12, 12, 10, 6];
+  c.fillStyle = "#8fe8c0";
   for (let i = 0; i < rows.length; i++) c.fillRect(x - rows[i] / 2, y - 7 + i * 2, rows[i], 2);
-  c.fillStyle = "#3fa8b8";
-  c.fillRect(x - 1, y - 8, 2, 1);
-  c.fillRect(x - 1, y + 7, 2, 1);
-  c.fillRect(x - 7, y - 1, 1, 2);
-  c.fillRect(x + 6, y - 1, 1, 2);
+  c.fillStyle = "#2e5a44";
+  c.fillRect(x - 4, y - 2, 2, 3);
+  c.fillRect(x + 3, y - 2, 2, 3);
   c.fillStyle = "#ffffff";
-  c.fillRect(x - 3, y - 4, 2, 2);
-  c.fillRect(x + 1, y - 2, 1, 1);
+  c.fillRect(x - 4, y - 5, 3, 2);
 }
 
 // bestiary panel: full species card — personality, movement, trait, skill
@@ -9178,7 +9175,7 @@ function frameBody(now) {
       "SHARE",
       weatherOn ? "WEATHER ON" : "WEATHER OFF",
       bootOn ? "BOOT ON" : "BOOT OFF",
-      "GEMS",
+      "JELLY",
       "REDEEM",
       `ID ${uid}`,
       "QUIT",
@@ -9247,8 +9244,8 @@ function frameBody(now) {
     ctx.lineWidth = 2;
     ctx.strokeRect(gx + 1, gy + 1, gw - 2, gh - 2);
     ctx.globalAlpha = 1;
-    drawText(ctx, "GEM PACKS", gx + gw / 2 - textW("GEM PACKS", 1) / 2, gy + 12, 1, "#5c4632");
-    const bal = `YOU HAVE ${jelly} GEMS`;
+    drawText(ctx, "JELLY PACKS", gx + gw / 2 - textW("JELLY PACKS", 1) / 2, gy + 12, 1, "#5c4632");
+    const bal = `YOU HAVE ${jelly} JELLY`;
     drawText(ctx, bal, gx + gw / 2 - textW(bal, 1) / 2, gy + 34, 1, "#8a6b4a");
     const packIds = Object.keys(GEM_PACKS);
     for (let i = 0; i < packIds.length; i++) {
@@ -9259,7 +9256,7 @@ function frameBody(now) {
       ctx.lineWidth = 1;
       ctx.strokeRect(R[0] + 0.5, R[1] + 0.5, R[2] - 1, R[3] - 1);
       drawSpr(ctx, "gem", R[0] + 14, R[1] + 10, 2);
-      drawText(ctx, `${GEM_PACKS[packIds[i]]} GEMS`, R[0] + 26, R[1] + 7, 1, "#5c4632");
+      drawText(ctx, `${GEM_PACKS[packIds[i]]} JELLY`, R[0] + 26, R[1] + 7, 1, "#5c4632");
       const price = GEM_PACK_PRICE[packIds[i]];
       const BR = packBuyRect(i);
       drawText(ctx, price, BR[0] - 8 - textW(price, 1), R[1] + 7, 1, "#5c4632", null, true);
@@ -9319,7 +9316,7 @@ function drawRedeem(c, W, H, t) {
   c.strokeStyle = "#8a6b4a";
   c.lineWidth = 2;
   c.strokeRect(bx + 1, by + 1, 278, 78);
-  drawText(c, "ENTER GEM CODE", bx + 140 - textW("ENTER GEM CODE", 1) / 2, by + 10, 1, "#5c4632", null, true);
+  drawText(c, "ENTER JELLY CODE", bx + 140 - textW("ENTER JELLY CODE", 1) / 2, by + 10, 1, "#5c4632", null, true);
   c.fillStyle = "#efe0c2";
   c.fillRect(bx + 16, by + 28, 248, 22);
   c.strokeStyle = "#c9a06c";
