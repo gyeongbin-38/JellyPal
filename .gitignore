@@ -32,3 +32,4 @@ src-tauri/target/
 # local install-test scratch dir
 _installtest/
 _macart/  
+_zipstage/  
