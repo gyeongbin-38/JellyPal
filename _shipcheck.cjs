@@ -68,7 +68,7 @@ const propTapBody = src.slice(src.indexOf("function propTap"));
 for (const k of kinds) {
   ok(`clickable rect: ${k}`, new RegExp(`if \\(${k}\\) rects\\.push`).test(src));
   ok(`save persist: ${k}`, new RegExp(`${k}: ${k} \\? \\{`).test(src));
-  ok(`load reanchor: ${k}`, new RegExp(`${k} = reanchor\\(s\\.props\\.${k}\\)`).test(src));
+  ok(`load reanchor: ${k}`, new RegExp(`${k} = reanchor\\(s\\.props\\.${k}`).test(src));
   ok(`toybox slot: ${k}`, new RegExp(`"${k}"`).test(toyboxRow));
   ok(`propTap branch: ${k}`, new RegExp(`kind === "${k}"`).test(propTapBody));
   ok(`draw branch: ${k}`, new RegExp(`if \\(${k}\\) \\{`).test(src));

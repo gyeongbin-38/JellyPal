@@ -1342,7 +1342,7 @@ const SLEEP_AFTER = 5 * 60_000;
 const RETURN_GRUMPY = 20 * 60_000;
 const KEYS_PER_LEVEL = 300;
 const JELLY_EVERY = 600;      // ~1 pull per 3 days of active typing
-const PULL_COST = 50;         // ~$0.095/pull against the $1.9/1000 gem pack
+const PULL_COST = 50;         // ~$0.15/pull against the $2.99/1000 gem pack
 const DUP_REFUND = 15;        // ~30% of a pull back on duplicates
 // throwable snacks — right-click the snack button to cycle the kind
 const TREATS = [
@@ -1718,7 +1718,7 @@ async function claimGrants() {
     for (const g of fresh) { jelly += g.gems; claimedNonces.push(g.nonce); add += g.gems; }
     claimedNonces = claimedNonces.slice(-300);
     dirty = true;
-    bangs.push({ x: winW / 2, y: 100, life: 2.2, t: `+${add} JELLY!` });
+    bangs.push({ x: winW / 2, y: 100, life: 2.2, t: `+${add} GEMS!` });
     sfx.reveal();
     invoke("ack_grants", { uid, nonces: fresh.map((g) => g.nonce) }).catch(() => {});
   } catch {}
@@ -1798,7 +1798,9 @@ let blanketCd = 0;      // next allowed tuck-in
 let prevSupX = 0, prevSupY = 0;
 let rideWob = 0;
 let lastSelfie = ""; // YYYY-MM-DD of the last auto-saved daily selfie
-const GEM_PACK_PRICE = { A: "$0.50", B: "$0.90", C: "$1.90", D: "$3.90" };
+// itch.io floors paid items at $1 — pack A sits at the floor, D gets the
+// ~20% bulk bonus. pull ≈ $0.11–0.20 against these; wings ≈ $4.20 effective
+const GEM_PACK_PRICE = { A: "$1.00", B: "$1.79", C: "$2.99", D: "$5.99" };
 function gemShopRect() { return [Math.round(winW / 2 - 140), Math.round(winH / 2 - 148), 280, 272]; }
 function gemShopRows() {
   const [gx, gy] = gemShopRect();
