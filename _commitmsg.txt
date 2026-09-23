@@ -1,10 +1,12 @@
-fix: widen redeem fallback + Stripe pack-by-price mapping
+fix: per-shape edge margins — wide pals/props no longer clip off-screen
 
-- redeem falls back to offline verification whenever the server never
-  answered (offline / bad response / server busy) — real refusals still
-  stay final so shared codes die at the boundary
-- stripe webhook resolves the pack from PRICE_<cents> vars since payment
-  links don't propagate their metadata to the checkout session
+Edge clamps assumed a fixed ~26-40px margin, but flat/puddle pal bodies
+run to ~44px half-width at high level — they rendered half off the left
+screen edge (visible as a sliced green blob on the taskbar). Pal walk
+bounds, flight clamp, summon targets, the pet's lo/hi, and prop drop /
+re-anchor clamps now all use the actual body half-width. Bonus fix: the
+old winW-relative pet clamp stranded pets on negative-x secondary
+monitors.
 
 Generated with [Devin](https://devin.ai)
 

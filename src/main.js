@@ -1525,6 +1525,9 @@ let mat = null;            // jelly bounce mat — hop on for a happy boing
 let jar = null;            // cookie jar — nibbles inside, a tap spills a real treat
 let toyboxOpen = false;    // the chooser strip under the toy button
 let propHeld = null;       // furniture kind string — the prop being dragged
+// prop half-widths — also the grab radius; platform clamps use these so a
+// wide prop (box/mat) can't sit with its edge hanging off-screen
+const PROP_HW = { bowl: 30, cushion: 34, box: 36, plant: 28, music: 30, mirror: 26, mat: 32, jar: 24 };
 let propGrabX = 0, propGrabY = 0; // grab origin — a tap (not a drag) refills/fluffs
 let grabT0 = 0;            // when any hold started — watchdog frees a stuck grab
 let cushionPoof = 0;       // fluff-burst timestamp for the tap interaction
@@ -2029,7 +2032,7 @@ invoke("load_state").then((txt) => {
   // placed props come back too — re-anchor them to whatever platform now
   // sits at their saved spot (monitor layouts can shift between runs)
   if (s.props && typeof s.props === "object") {
-    const reanchor = (pp) => {
+    const reanchor = (pp, kind) => {
       if (!pp || typeof pp.x !== "number" || typeof pp.y !== "number") return null;
       const pl = plats.reduce((best, q) => {
         const dx = Math.abs(pp.x - (q.x + q.w / 2)), dy = Math.abs(pp.y - q.y);
@@ -2038,16 +2041,17 @@ invoke("load_state").then((txt) => {
       }, null);
       const plat = pl ? pl.q : plats[0];
       if (!plat) return null;
-      return { x: Math.max(plat.x + 30, Math.min(plat.x + plat.w - 30, pp.x)), y: plat.y, plat };
+      const pw = PROP_HW[kind] || 30;
+      return { x: Math.max(plat.x + pw, Math.min(plat.x + plat.w - pw, pp.x)), y: plat.y, plat };
     };
-    bowl = reanchor(s.props.bowl);
-    cushion = reanchor(s.props.cushion);
-    box = reanchor(s.props.box);
-    plant = reanchor(s.props.plant);
-    music = reanchor(s.props.music);
-    mirror = reanchor(s.props.mirror);
-    mat = reanchor(s.props.mat);
-    jar = reanchor(s.props.jar);
+    bowl = reanchor(s.props.bowl, "bowl");
+    cushion = reanchor(s.props.cushion, "cushion");
+    box = reanchor(s.props.box, "box");
+    plant = reanchor(s.props.plant, "plant");
+    music = reanchor(s.props.music, "music");
+    mirror = reanchor(s.props.mirror, "mirror");
+    mat = reanchor(s.props.mat, "mat");
+    jar = reanchor(s.props.jar, "jar");
     if (bowl && typeof s.props.bowl.fill === "number") bowl.fill = Math.max(0, Math.min(3, s.props.bowl.fill));
     if (jar && typeof s.props.jar.fill === "number") jar.fill = Math.max(0, Math.min(3, s.props.jar.fill));
   }
@@ -2591,6 +2595,12 @@ function legFlair(sp, now) {
 }
 function palScale(p) {
   return (1.3 + level * 0.4) * sizeMul * (isBaby(SPECIES[p.sp]) ? 0.55 : 0.92);
+}
+// a pal's on-screen half-width in px — flat/puddle bodies run wider than
+// the 30px edge margin the clamps used to assume, so wide species slid
+// halfway off the screen edge. per-shape so nothing gets clipped
+function palEdge(p) {
+  return Math.ceil(Math.max(...SHAPES[SPECIES[p.sp].shape]) * palScale(p)) + 4;
 }
 function palRect(p) {
   const sc = palScale(p);
@@ -3752,7 +3762,8 @@ cv.addEventListener("pointerup", (e) => {
       if (best) {
         q.plat = best;
         q.y = best.y;
-        q.x = Math.max(best.x + 26, Math.min(best.x + best.w - 26, mx));
+        const pw = PROP_HW[kind] || 30;
+        q.x = Math.max(best.x + pw, Math.min(best.x + best.w - pw, mx));
       }
       for (let i = 0; i < 5; i++) fx.push({ x: q.x + Math.random() * 20 - 10, y: q.y - Math.random() * 8, vx: Math.random() * 50 - 25, vy: -Math.random() * 40, life: 0.4, c: "#c8b8a0" });
       sfx.pop();
@@ -6096,8 +6107,12 @@ function frameBody(now) {
   // platform bounds live at frame scope — signature acts (rollout,
   // frenzy, umbral) clamp with them too; they used to be declared
   // inside the wander block which crashed those acts outright
-  const lo = Math.max(40, sup.x + 30);
-  const hi = Math.min(winW - 40, sup.x + sup.w - 30);
+  // petEdge = body half-width — a fixed 40/30 margin clipped wide
+  // (flat/puddle) and large-scale pets at the screen edge, and the old
+  // winW-relative clamp stranded pets standing on a negative-x monitor
+  const petEdge = Math.ceil(Math.max(...SHAPES[SPECIES[active].shape]) * scale) + 4;
+  let lo = sup.x + petEdge, hi = sup.x + sup.w - petEdge;
+  if (hi < lo) lo = hi = sup.x + sup.w / 2; // sill too narrow to pace on
 
   const onGround = !held && !flying && !webbing && !petHome;
 
@@ -7431,7 +7446,8 @@ function frameBody(now) {
           for (const p of pals) {
             if (now < (p.restUntil || 0)) continue; // a napping pal ignores the summons
             const pl = p.plat || { x: 0, w: winW };
-            p.walkT = Math.max(pl.x + 26, Math.min(pl.x + pl.w - 26, petX + (Math.random() * 140 - 70)));
+            const pe = palEdge(p);
+            p.walkT = Math.max(pl.x + pe, Math.min(pl.x + pl.w - pe, petX + (Math.random() * 140 - 70)));
           }
           bangs.push({ x: petX, y: petY - bh - 24, life: 1.4, t: "★" });
         }
@@ -7789,8 +7805,9 @@ function frameBody(now) {
       const prevY = p.y;
       p.x += (p.vx || 0) * dt;
       p.y += p.vy * dt;
-      if (p.x < 30) { p.x = 30; p.vx = Math.abs(p.vx || 0) * 0.5; }
-      if (p.x > winW - 30) { p.x = winW - 30; p.vx = -Math.abs(p.vx || 0) * 0.5; }
+      const pEdgeFly = palEdge(p);
+      if (p.x < pEdgeFly) { p.x = pEdgeFly; p.vx = Math.abs(p.vx || 0) * 0.5; }
+      if (p.x > winW - pEdgeFly) { p.x = winW - pEdgeFly; p.vx = -Math.abs(p.vx || 0) * 0.5; }
       if (p.vy > 0) {
         for (const pl of plats) {
           if (pl.y < 60) continue;
@@ -7866,7 +7883,7 @@ function frameBody(now) {
           if (now > (p.faceT || 0)) { p.faceId = "shock"; p.faceT = now + 1000; p.squashV += 1.5; }
         }
       }
-      const plo = pl.x + 26, phi = pl.x + pl.w - 26;
+      const plo = pl.x + palEdge(p), phi = pl.x + pl.w - palEdge(p);
       // a napping pal stays put — anything in flight gets cancelled so the
       // pal actually stays put. before this, restUntil only gated the
       // wander roll and a napping pal could be launched, dragged into tag,
