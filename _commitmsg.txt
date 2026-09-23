@@ -1,10 +1,10 @@
-feat: user identity + server-bound gem grants (Cloudflare worker backend)
+fix: widen redeem fallback + Stripe pack-by-price mapping
 
-Each install generates a random JP<24> uid shown under MY ID in settings;
-the backend stores only sha256(uid). A separate server keypair signs
-purchase grants ("JP2G:pack:nonce:tag") the app verifies and credits —
-codes get bound to one uid server-side so they can't be shared. Seller
-key stays offline; server key lives only in the worker's secrets.
+- redeem falls back to offline verification whenever the server never
+  answered (offline / bad response / server busy) — real refusals still
+  stay final so shared codes die at the boundary
+- stripe webhook resolves the pack from PRICE_<cents> vars since payment
+  links don't propagate their metadata to the checkout session
 
 Generated with [Devin](https://devin.ai)
 

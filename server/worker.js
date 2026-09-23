@@ -158,8 +158,10 @@ async function adminGrant(req, env) {
 }
 
 // Stripe webhook: checkout.session.completed -> pending grant. configure the
-// Payment Link with ?client_reference_id=<uid> (the app's MY ID) and set the
-// pack via the link's metadata {pack: "B"} or by price -> pack mapping.
+// Payment Link with ?client_reference_id=<uid> (the app's MY ID). the pack is
+// read from session metadata, else from PRICE_<cents> vars (payment links
+// don't propagate their own metadata to the session) — e.g. [vars]
+// PRICE_299 = "A", PRICE_499 = "B" in wrangler.toml.
 async function stripe(req, env) {
   if (!env.STRIPE_WHSEC) return J({ error: "not configured" }, 501);
   const body = await req.text();
@@ -176,7 +178,7 @@ async function stripe(req, env) {
   if (ev.type !== "checkout.session.completed") return J({ ok: true });
   const s = ev.data?.object || {};
   const uid = s.client_reference_id || s.metadata?.uid;
-  const pack = s.metadata?.pack;
+  const pack = s.metadata?.pack || env[`PRICE_${s.amount_total}`];
   if (!UID_RE.test(uid || "") || !GEMS[pack]) return J({ error: "no uid/pack on session" }, 422);
   return J({ ok: true, nonce: await putGrant(env, await uidHash(uid), pack) });
 }

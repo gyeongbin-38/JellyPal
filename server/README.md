@@ -26,10 +26,12 @@ JP_API=https://<worker> JP_ADMIN=<key> node grant.cjs JP<uid> B
 ```
 The app polls `/claim` on launch + every 10 min.
 
-**Stripe auto-delivery:** create a Payment Link per pack, point buyers at
-`https://buy.stripe.com/<link>?client_reference_id=` + their MY ID, add a
+**Stripe auto-delivery:** create a Payment Link per pack, give buyers the URL
+as `https://buy.stripe.com/<link>?client_reference_id=` + their MY ID, add a
 webhook to `<worker>/stripe` for `checkout.session.completed`, and set
-`wrangler secret put STRIPE_WHSEC`. Put `pack` in the link's metadata.
+`wrangler secret put STRIPE_WHSEC`. Pack is resolved from session metadata
+or by price: add `[vars]` lines like `PRICE_499 = "B"` (USD cents) in
+wrangler.toml.
 
 ## Endpoints
 

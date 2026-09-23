@@ -1661,9 +1661,10 @@ async function tryRedeem(raw) {
     dirty = true;
     return `+${gems} GEMS!`;
   } catch (e) {
-    // only a dead/unreachable server falls back to the local signature
-    // check — a real refusal (e.g. code already claimed elsewhere) is final
-    if (e !== "offline") return (e || "BAD CODE").toUpperCase();
+    // fall back to the local signature check only when the server never
+    // gave a real answer — a real refusal (bad/already-claimed code) is final
+    if (!["offline", "bad response", "server busy"].includes(e))
+      return (e || "BAD CODE").toUpperCase();
   }
   try {
     const gems = await invoke("verify_gem_code", { code: fmt });
