@@ -19,7 +19,7 @@ const setup = "C:/dev/mini/typet/dist/Jellypal_0.2.0_x64-setup.exe";
   const a = fs.readFileSync(installed), b = fs.readFileSync(release);
   const n = Math.min(a.length, b.length, Math.floor(Math.min(a.length, b.length) * 0.9));
   const same = a.subarray(0, n).equals(b.subarray(0, n));
-  const mutex = Buffer.from("JellypalSingleInstance", "utf8");
+  const mutex = Buffer.from("com.jellypal.desktop", "utf8"); // single-instance plugin derives the mutex from the app identifier
   ok("installed exe == release build (code region)", same && b.includes(mutex) && a.includes(mutex));
 }
 
