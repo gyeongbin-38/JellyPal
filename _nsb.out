@@ -1,4 +1,7 @@
 
+> typet@0.1.0 tauri
+> tauri build --bundles nsis
+
 node.exe :         Info Looking up installed tauri packages to check mismatched versions...
 위치 줄:1 문자:1
 + & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo ...
@@ -6,12 +9,8 @@ node.exe :         Info Looking up installed tauri packages to check mismatched 
     + CategoryInfo          : NotSpecified: (        Info Lo...hed versions...:String) [], RemoteException
     + FullyQualifiedErrorId : NativeCommandError
  
-   Compiling tauri v2.11.5
-   Compiling tauri-macros v2.6.3
-   Compiling tauri-plugin-opener v2.5.5
    Compiling jellypal v0.2.0 (C:\dev\mini\typet\src-tauri)
-   Compiling tauri-plugin-single-instance v2.4.5
-    Finished `release` profile [optimized] target(s) in 13m 03s
+    Finished `release` profile [optimized] target(s) in 4m 31s
        Built application at: C:\dev\mini\typet\src-tauri\target\release\jellypal.exe
         Info Patching C:\dev\mini\typet\src-tauri\target\release\jellypal.exe with bundle type information: nsis
         Info Target: x64

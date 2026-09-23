@@ -3651,6 +3651,19 @@ cv.addEventListener("pointerup", (e) => {
     propHeld = null;
     cv.style.cursor = "default";
     invoke("set_dragging", { on: false });
+    // dropped into the HOME slot: the prop goes back in the toybox.
+    // no velocity guard — props ride the cursor, they can't be flung
+    if (q && my <= 50 && Math.abs(mx - winW / 2) <= 66) {
+      for (let i = 0; i < 8; i++) fx.push({ x: mx + Math.random() * 20 - 10, y: my - Math.random() * 10, vx: Math.random() * 50 - 25, vy: -Math.random() * 40, life: 0.5, c: "#e8dcc8" });
+      if (kind === "bowl") bowl = null; else if (kind === "cushion") cushion = null;
+      else if (kind === "box") box = null; else if (kind === "plant") plant = null;
+      else if (kind === "music") music = null; else if (kind === "mirror") mirror = null;
+      else if (kind === "mat") mat = null; else jar = null;
+      bangs.push({ x: mx, y: 62, life: 1.2, t: "PUT AWAY" });
+      sfx.pop();
+      dirty = true;
+      return;
+    }
     // a tap that didn't go anywhere isn't a move — it's a poke at the
     // furniture: refill the kibble, fluff the pillow
     if (q && Math.hypot(mx - propGrabX, my - propGrabY) < 10) { propTap(kind, q); return; }
@@ -8920,8 +8933,9 @@ function frameBody(now) {
   }
 
   // HOME drop slot — appears top-center while any slime is being dragged;
-  // release over it to send it back to the ranch (the main pet too)
-  if (palHeld || held) {
+  // release over it to send it back to the ranch (the main pet too).
+  // props share the slot — dropping furniture there puts it away
+  if (palHeld || held || propHeld) {
     const hx = Math.round(winW / 2 - 66);
     const over = curX > hx && curX < hx + 132 && curY >= 2 && curY <= 52;
     ctx.globalAlpha = over ? 0.98 : 0.85;
@@ -8932,7 +8946,7 @@ function frameBody(now) {
     ctx.strokeRect(hx + 1, 7, 130, 40);
     // tiny house glyph
     drawSpr(ctx, "house", hx + 24, 28, 3, over ? "#4c9e50" : "#8a6b4a");
-    drawText(ctx, "SEND HOME", hx + 44, 25, 1, over ? "#2f7a36" : "#5c4632", null, true);
+    drawText(ctx, propHeld ? "PUT AWAY" : "SEND HOME", hx + 44, 25, 1, over ? "#2f7a36" : "#5c4632", null, true);
     ctx.globalAlpha = 1;
   }
 

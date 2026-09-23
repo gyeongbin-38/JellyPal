@@ -1,6 +1,8 @@
-   Compiling rdev v0.5.3
-   Compiling active-win-pos-rs v0.9.1
-   Compiling tao v0.35.3
-   Compiling webview2-com v0.38.2
-   Compiling tauri-plugin-single-instance v2.4.5
-    Finished `release` profile [optimized] target(s) in 26m 42s
+cargo :    Compiling jellypal v0.2.0 (C:\dev\mini\typet\src-tauri)
+위치 C:\dev\mini\typet\_relbuild.ps1:5 문자:1
++ cargo build --release 2>&1 | Select-Object -Last 6
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (   Compiling je...ypet\src-tauri):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+    Finished `release` profile [optimized] target(s) in 10m 30s

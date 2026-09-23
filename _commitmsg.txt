@@ -1,9 +1,8 @@
-feat: RegisterApplicationRestart — auto-relaunch after crash/hang-kill
+feat: drag props onto the HOME slot to put them away
 
-A desktop companion that silently vanishes looks broken. WER records
-crashpad + AppHang events for jellypal; ask Windows to restart us after
-abnormal termination. RESTART_NO_REBOOT keeps autostart authoritative
-across reboots; clean Quit exits never trigger it.
+The SEND HOME strip now appears while dragging furniture too — releasing
+a prop over it returns it to the toybox (label reads PUT AWAY). Same
+gentle-drop zone as slimes; a normal drop still just moves the prop.
 
 Generated with [Devin](https://devin.ai)
 
