@@ -1,0 +1,19 @@
+    Checking winapi-util v0.1.11
+    Checking muda v0.19.3
+    Checking dirs-sys v0.5.0
+    Checking softbuffer v0.4.8
+    Checking socket2 v0.6.5
+    Checking mio v1.2.3
+    Checking dirs v6.0.0
+    Checking same-file v1.0.6
+    Checking walkdir v2.5.0
+    Checking tauri-utils v2.9.3
+    Checking tokio v1.53.1
+    Checking tray-icon v0.24.2
+    Checking tauri-runtime v2.11.3
+    Checking tauri-runtime-wry v2.11.4
+    Checking tauri v2.11.5
+    Checking tauri-plugin-single-instance v2.4.5
+    Checking tauri-plugin-opener v2.5.5
+    Checking jellypal v0.2.0 (C:\dev\mini\typet\src-tauri)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2m 47s

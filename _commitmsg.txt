@@ -1,4 +1,9 @@
-ci: macOS smoke test — launch built .app on runner, verify 20s uptime
+feat: RegisterApplicationRestart — auto-relaunch after crash/hang-kill
+
+A desktop companion that silently vanishes looks broken. WER records
+crashpad + AppHang events for jellypal; ask Windows to restart us after
+abnormal termination. RESTART_NO_REBOOT keeps autostart authoritative
+across reboots; clean Quit exits never trigger it.
 
 Generated with [Devin](https://devin.ai)
 

@@ -605,6 +605,16 @@ pub fn run() {
         let _ = std::fs::write(p, format!("{info}"));
     }));
 
+    // a companion that silently vanishes looks broken — ask Windows to
+    // relaunch us after abnormal termination (WER crash, hang-kill).
+    // RESTART_NO_REBOOT keeps the user's autostart choice authoritative
+    // across reboots; clean Quit exits never trigger the restart.
+    #[cfg(windows)]
+    unsafe {
+        use windows_sys::Win32::System::Recovery::{RegisterApplicationRestart, RESTART_NO_REBOOT};
+        RegisterApplicationRestart(std::ptr::null(), RESTART_NO_REBOOT);
+    }
+
     tauri::Builder::default()
         // single instance: a second launch exits instead of fighting the
         // first over the webview user-data dir — that contention froze the

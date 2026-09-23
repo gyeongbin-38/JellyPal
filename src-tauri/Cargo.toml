@@ -29,7 +29,7 @@ rdev = "0.5"
 active-win-pos-rs = "0.9"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_Console", "Win32_Security"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_System_Console", "Win32_Security", "Win32_System_Recovery"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 core-graphics = "0.24"
