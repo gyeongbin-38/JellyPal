@@ -33,3 +33,4 @@ src-tauri/target/
 _installtest/
 _macart/  
 _zipstage/  
+server_ed25519.key 

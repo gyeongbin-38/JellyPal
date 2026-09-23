@@ -1,8 +1,10 @@
-feat: drag props onto the HOME slot to put them away
+feat: user identity + server-bound gem grants (Cloudflare worker backend)
 
-The SEND HOME strip now appears while dragging furniture too — releasing
-a prop over it returns it to the toybox (label reads PUT AWAY). Same
-gentle-drop zone as slimes; a normal drop still just moves the prop.
+Each install generates a random JP<24> uid shown under MY ID in settings;
+the backend stores only sha256(uid). A separate server keypair signs
+purchase grants ("JP2G:pack:nonce:tag") the app verifies and credits —
+codes get bound to one uid server-side so they can't be shared. Seller
+key stays offline; server key lives only in the worker's secrets.
 
 Generated with [Devin](https://devin.ai)
 

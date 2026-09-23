@@ -296,6 +296,115 @@ fn verify_gem_code(code: String) -> Result<u64, String> {
     verify_code_with(&GEM_PUBKEY, &code)
 }
 
+// ---- server-bound grants ----
+// the shop backend is a tiny Cloudflare worker + KV. the app owns a
+// per-install uid (shown under MY ID in settings); the server stores only
+// sha256(uid), and grants are signed by a dedicated SERVER keypair — a
+// compromised worker still can't mint codes (that's the seller key's job,
+// and it never leaves the seller's disk).
+const SERVER_PUBKEY: [u8; 32] = [
+    0xC9, 0xA7, 0xC5, 0x34, 0x05, 0x17, 0x41, 0x78, 0x42, 0x4A, 0x18, 0x66, 0x8C, 0xC0, 0xC1, 0x63,
+    0xDB, 0xA3, 0x8D, 0xE7, 0xA4, 0xB6, 0x93, 0x8B, 0x04, 0xBF, 0x44, 0xBB, 0x05, 0x45, 0xEC, 0x91,
+];
+// the deployed worker's URL — empty until `wrangler deploy` wires it up;
+// every server call degrades gracefully to the offline path while unset
+const SERVER_URL: &str = "";
+
+fn curl_post(url: &str, body: &str) -> Option<String> {
+    let out = std::process::Command::new("curl")
+        .args(["-s", "--max-time", "8", "-X", "POST",
+               "-H", "Content-Type: application/json", "-d", body, url])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&out.stdout).to_string())
+}
+
+// grant wire shape: {pack, nonce, tag, sig} where sig is base32(ed25519
+// signature of "JP2G:{pack}:{nonce}:{tag}") under SERVER_PUBKEY. the tag is
+// uid[2..10] — binds the grant to one install so a leaked grant is junk.
+fn verify_grant(v: &serde_json::Value, uid: &str) -> Result<(String, u64), String> {
+    use ed25519_dalek::Verifier as _;
+    if uid.len() < 10 {
+        return Err("bad uid".into());
+    }
+    let pack = v.get("pack").and_then(|x| x.as_str()).ok_or("bad grant")?;
+    let nonce = v.get("nonce").and_then(|x| x.as_str()).ok_or("bad grant")?;
+    let tag = v.get("tag").and_then(|x| x.as_str()).ok_or("bad grant")?;
+    let sigs = v.get("sig").and_then(|x| x.as_str()).ok_or("bad grant")?;
+    if tag != &uid[2..10] {
+        return Err("grant is bound to a different user".into());
+    }
+    let sig_bytes = b32dec(sigs).ok_or("bad grant")?;
+    if sig_bytes.len() != 64 {
+        return Err("bad grant".into());
+    }
+    let sig = ed25519_dalek::Signature::from_slice(&sig_bytes).map_err(|e| e.to_string())?;
+    let vk = ed25519_dalek::VerifyingKey::from_bytes(&SERVER_PUBKEY).map_err(|e| e.to_string())?;
+    let msg = format!("JP2G:{pack}:{nonce}:{tag}");
+    vk.verify(msg.as_bytes(), &sig).map_err(|_| "bad grant".to_string())?;
+    let gems = GEM_AMOUNTS
+        .iter()
+        .find(|(p, _)| *p == pack)
+        .ok_or("bad grant")?
+        .1;
+    Ok((nonce.to_string(), gems))
+}
+
+// redeem a purchased code: the worker verifies the seller signature, binds
+// the code to this uid so it can't be shared, and returns a signed grant.
+// Err("offline") means the server never answered — the caller may fall back
+// to offline verification; any other Err is a real refusal (e.g. a code
+// already claimed by a different uid) and must NOT fall back.
+#[tauri::command]
+fn redeem_bound(uid: String, code: String) -> Result<u64, String> {
+    if SERVER_URL.is_empty() {
+        return Err("offline".into());
+    }
+    let body = serde_json::json!({ "uid": uid, "code": code }).to_string();
+    let resp = curl_post(&format!("{SERVER_URL}/redeem"), &body).ok_or("offline")?;
+    let v: serde_json::Value = serde_json::from_str(&resp).map_err(|_| "bad response")?;
+    if let Some(e) = v.get("error").and_then(|x| x.as_str()) {
+        return Err(e.to_string());
+    }
+    let g = v.get("grant").cloned().ok_or("bad response")?;
+    verify_grant(&g, &uid).map(|(_, gems)| gems)
+}
+
+// pending shop grants for this uid -> JSON array [{nonce, gems}] for the
+// frontend to credit then ack (ack loss is safe: grants resend, and the
+// client dedupes by nonce)
+#[tauri::command]
+fn claim_grants(uid: String) -> Result<String, String> {
+    if SERVER_URL.is_empty() {
+        return Ok("[]".into());
+    }
+    let body = serde_json::json!({ "uid": uid }).to_string();
+    let resp = curl_post(&format!("{SERVER_URL}/claim"), &body).ok_or("offline")?;
+    let v: serde_json::Value = serde_json::from_str(&resp).map_err(|_| "bad response")?;
+    let mut out = Vec::new();
+    if let Some(gs) = v.get("grants").and_then(|x| x.as_array()) {
+        for g in gs {
+            if let Ok((nonce, gems)) = verify_grant(g, &uid) {
+                out.push(serde_json::json!({ "nonce": nonce, "gems": gems }));
+            }
+        }
+    }
+    serde_json::to_string(&out).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn ack_grants(uid: String, nonces: Vec<String>) -> Result<(), String> {
+    if SERVER_URL.is_empty() {
+        return Ok(());
+    }
+    let body = serde_json::json!({ "uid": uid, "nonces": nonces }).to_string();
+    curl_post(&format!("{SERVER_URL}/ack"), &body);
+    Ok(())
+}
+
 #[tauri::command]
 fn check_update(url: String) -> Result<String, String> {
     // version probe — fetches a tiny text file (e.g. "0.2.1") hosted next to
@@ -641,6 +750,9 @@ pub fn run() {
             open_photos,
             open_url,
             verify_gem_code,
+            redeem_bound,
+            claim_grants,
+            ack_grants,
             check_update,
             get_monitors,
             get_weather,

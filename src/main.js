@@ -1651,6 +1651,20 @@ async function tryRedeem(raw) {
   const fmt = ("JELLYPAL" + raw.toUpperCase().replace(/^JELLYPAL-?/, "").replace(/[^A-Z2-7]/g, ""))
     .replace(/^JELLYPAL([A-D])([A-Z2-7]{8})([A-Z2-7]+)$/, "JELLYPAL-$1-$2-$3");
   if (redeemed.includes(fmt)) return "CODE USED";
+  // preferred path: the shop server verifies the seller signature and binds
+  // the code to this uid — a code already claimed by another install dies
+  // here instead of paying out again on every machine it gets pasted into
+  try {
+    const gems = await invoke("redeem_bound", { uid, code: fmt });
+    redeemed.push(fmt);
+    jelly += gems;
+    dirty = true;
+    return `+${gems} GEMS!`;
+  } catch (e) {
+    // only a dead/unreachable server falls back to the local signature
+    // check — a real refusal (e.g. code already claimed elsewhere) is final
+    if (e !== "offline") return (e || "BAD CODE").toUpperCase();
+  }
   try {
     const gems = await invoke("verify_gem_code", { code: fmt });
     redeemed.push(fmt);
@@ -1664,6 +1678,48 @@ async function tryRedeem(raw) {
 let redeemMode = false;
 let redeemBuf = "";
 let redeemed = [];
+// per-install user id — generated once, kept in the save, shown under
+// MY ID in settings. the shop backend stores only sha256(uid) and binds
+// grants to a tag taken from it, so a leaked grant is useless to strangers
+const B32E = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+function b32enc(buf) {
+  let out = "", acc = 0, bits = 0;
+  for (const x of buf) {
+    acc = (acc << 8) | x; bits += 8;
+    while (bits >= 5) { out += B32E[(acc >> (bits - 5)) & 31]; bits -= 5; }
+  }
+  if (bits) out += B32E[(acc << (5 - bits)) & 31];
+  return out;
+}
+let uid = "";
+let claimedNonces = []; // grant nonces already credited — dedupes re-sends
+function ensureUid() {
+  if (!uid) {
+    const b = new Uint8Array(15); // 15 bytes -> 24 base32 chars
+    crypto.getRandomValues(b);
+    uid = "JP" + b32enc(b);
+    dirty = true;
+  }
+}
+// pull any pending shop grants, credit them, then ack — a lost ack is safe
+// (grants resend; claimedNonces keeps them from crediting twice)
+async function claimGrants() {
+  if (!uid) return;
+  try {
+    const res = await invoke("claim_grants", { uid });
+    const grants = JSON.parse(res);
+    const fresh = grants.filter((g) => !claimedNonces.includes(g.nonce));
+    if (!fresh.length) return;
+    let add = 0;
+    for (const g of fresh) { jelly += g.gems; claimedNonces.push(g.nonce); add += g.gems; }
+    claimedNonces = claimedNonces.slice(-300);
+    dirty = true;
+    bangs.push({ x: winW / 2, y: 100, life: 2.2, t: `+${add} JELLY!` });
+    sfx.reveal();
+    invoke("ack_grants", { uid, nonces: fresh.map((g) => g.nonce) }).catch(() => {});
+  } catch {}
+}
+setInterval(claimGrants, 10 * 60 * 1000);
 // weekly spotlight species — deterministic pick from the ISO week key
 const weekKey = (d = new Date()) => {
   const jan1 = new Date(d.getFullYear(), 0, 1);
@@ -1689,17 +1745,17 @@ function settingsRect() {
   return [Math.round(winW / 2 - 95), Math.round(winH / 2 - ph / 2), 190, ph];
 }
 const SET_VIEW_TOP = 26, SET_VIEW_BOT = 34; // title gap + footer reserve
-// 388 = last row's bottom edge (30 + 13*26 + 20) relative to panel top
-function setMaxScroll() { return Math.max(0, 388 - (settingsRect()[3] - SET_VIEW_BOT)); }
+// 414 = last row's bottom edge (30 + 14*26 + 20) relative to panel top
+function setMaxScroll() { return Math.max(0, 414 - (settingsRect()[3] - SET_VIEW_BOT)); }
 function settingsRows() {
   const [px, py] = settingsRect();
   // self-clamp: a window shrink mid-scroll can't leave the list overscrolled
   setScroll = Math.max(0, Math.min(setMaxScroll(), setScroll));
   const rows = [];
-  for (let i = 0; i < 14; i++) rows.push([px + 16, py + 30 + i * 26 - Math.round(setScroll), 158, 20]);
+  for (let i = 0; i < 15; i++) rows.push([px + 16, py + 30 + i * 26 - Math.round(setScroll), 158, 20]);
   return rows;
   // 0 VOL 1 SIZE 2 MOTION 3 PHOTO 4 ALBUM 5 POMO 6 FOCUS 7 BREAK
-  // 8 SHARE 9 WEATHER 10 BOOT 11 GEMS 12 REDEEM 13 QUIT
+  // 8 SHARE 9 WEATHER 10 BOOT 11 GEMS 12 REDEEM 13 ID 14 QUIT
 }
 
 // gem shop: the paid-gem surface. packs are bought on the itch.io page;
@@ -1943,6 +1999,10 @@ invoke("load_state").then((txt) => {
   seen = !!s.seen;
   hintsSeen = s.hints || {};
   if (Array.isArray(s.redeemed)) redeemed = s.redeemed;
+  if (typeof s.uid === "string" && /^JP[A-Z2-7]{24}$/.test(s.uid)) uid = s.uid;
+  if (Array.isArray(s.claimed)) claimedNonces = s.claimed.slice(-300);
+  ensureUid();
+  claimGrants(); // any shop purchases waiting for this install pay out now
   // dragged panel positions — validated so a bad save can't park a
   // window off-screen; ignored entirely when the viewport changed
   // (a position saved on a different resolution is a wrong position)
@@ -2053,7 +2113,7 @@ function persist() {
       muted, vol, sizeMul, seen, savedAt: Date.now(),
       reduceMotion, treatKind, stats, volStep, pomo, dexMile,
       lastDaily, dailyStreak, lastWeekly, pomoFocusMin, pomoBreakMin,
-      redeemed,
+      redeemed, uid, claimed: claimedNonces,
       panelPos, petHome, weatherOn, bootOn, lastSelfie, hints: hintsSeen,
       props: { bowl: bowl ? { x: bowl.x, y: bowl.y, fill: bowl.fill ?? 2 } : null, cushion: cushion ? { x: cushion.x, y: cushion.y } : null, box: box ? { x: box.x, y: box.y } : null, plant: plant ? { x: plant.x, y: plant.y } : null, music: music ? { x: music.x, y: music.y } : null, mirror: mirror ? { x: mirror.x, y: mirror.y } : null, mat: mat ? { x: mat.x, y: mat.y } : null, jar: jar ? { x: jar.x, y: jar.y, fill: jar.fill ?? 2 } : null },
       bond, lastEgg, fab: [fabX, fabY],
@@ -3282,7 +3342,14 @@ cv.addEventListener("pointerdown", (e) => {
       redeemBuf = "";
       sfx.pop();
     }
-    else if (inRow(rows[13])) { persist(); invoke("quit_app"); }
+    else if (inRow(rows[13])) {
+      // MY ID — the buyer pastes this at checkout so grants find their way
+      // home; clicking copies it to the clipboard
+      try { navigator.clipboard.writeText(uid); } catch {}
+      bangs.push({ x: winW / 2, y: rows[13][1], life: 1.2, t: "ID COPIED" });
+      sfx.pop();
+    }
+    else if (inRow(rows[14])) { persist(); invoke("quit_app"); }
     else if (mx < px || mx > px + pw || my < py || my > py + ph) settingsOpen = false;
     return;
   }
@@ -9093,6 +9160,7 @@ function frameBody(now) {
       bootOn ? "BOOT ON" : "BOOT OFF",
       "GEMS",
       "REDEEM",
+      `ID ${uid}`,
       "QUIT",
     ];
     // rows paint inside a clipped viewport — the title and the footer

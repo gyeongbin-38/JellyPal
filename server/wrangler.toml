@@ -1,0 +1,9 @@
+name = "jellypal-api"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# create once:  wrangler kv namespace create DB
+# then paste the printed id below
+[[kv_namespaces]]
+binding = "DB"
+id = ""

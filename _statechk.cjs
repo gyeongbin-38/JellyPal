@@ -1,17 +1,7 @@
-const s = require(process.env.APPDATA + "/com.jellypal.app/state.json");
-const now = Date.now();
-console.log(JSON.stringify({
-  breedReadyAt: s.breedReadyAt,
-  now,
-  remainingMin: Math.round(((s.breedReadyAt || 0) - now) / 60000),
-  breeds: s.stats && s.stats.breeds,
-  jelly: s.jelly,
-  owned: (s.owned || []).length,
-  petHome: s.petHome,
-  active: s.active,
-  pals: (s.pals || []).map((p) => p.sp),
-  props: ["bowl", "cushion", "box", "plant", "music", "mirror", "mat", "jar"]
-    .filter((k) => s[k])
-    .map((k) => `${k}@${Math.round(s[k].x)},${Math.round(s[k].y)}`),
-  petX: Math.round(s.petX || 0), petY: Math.round(s.petY || 0),
-}, null, 1));
+const fs = require("fs");
+const s = fs.readFileSync(process.env.APPDATA + "/com.jellypal.desktop/state.json", "utf8");
+const j = JSON.parse(s);
+console.log("uid:", JSON.stringify(j.uid));
+console.log("claimed:", JSON.stringify(j.claimed));
+console.log("savedAt:", new Date(j.savedAt).toISOString());
+console.log("jelly:", j.jelly);
