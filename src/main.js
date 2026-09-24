@@ -1145,7 +1145,7 @@ function buildSprite(faceName, pal, top, hw, sil, spIdx, opa) {
       if (c === "b") {
         const gx = (x - CX) / Math.max(5, hw[y] * 0.7), gy = (y - 12) / 7.5;
         const d2 = gx * gx + gy * gy;
-        if (d2 < 1 && (d2 < 0.7 || ((x + y) & 1) === 0)) c = "i";
+        if (d2 < 1 && (d2 < 0.75 || ((x + y) & 1) === 0)) c = "i";
       }
       grid[y][x] = c;
     }
@@ -1197,14 +1197,14 @@ function buildSprite(faceName, pal, top, hw, sil, spIdx, opa) {
   const bl = bR ? bR[0] * 0.299 + bR[1] * 0.587 + bR[2] * 0.114 : 128;
   const lift = bR && bl < 76 ? Math.min(0.3, (76 - bl) / 76 * 0.34) : 0;
   const bIn = sil ? null : mixRgb(mixRgb(bR, lR, 0.24), WHT, 0.14 + lift);       // pastel body
-  const iIn = sil ? null : mixRgb(mixRgb(bR, lR, 0.66), WHT, 0.12 + lift);       // glowing core
+  const iIn = sil ? null : mixRgb(mixRgb(bR, lR, 0.74), WHT, 0.20 + lift);       // glowing core
   const sIn = sil ? null : mixRgb(mixRgb(sR, lR, 0.32), WHT, 0.16 + lift * 0.6); // pastel shade, not darkness
   const oIn = sil ? null : mixRgb(oR, mixRgb(bR, lR, 0.35), 0.45 + lift);        // soft tinted outline
   const lIn = sil ? null : mixRgb(lR, WHT, 0.16);                    // milky highlight
   const uIn = sil ? null : mixRgb(hexRgb(pal.e || "#26262e"), lR, 0.45); // iris depth row
   // jelly translucency, raised overall — the cast was reading washed-out;
   // pals get a second firmer bake so companions stay present (opa variant)
-  const ALPHA = opa ? { i: 226, b: 246, s: 238, l: 252 } : { i: 198, b: 230, s: 220, l: 246 };
+  const ALPHA = opa ? { i: 235, b: 252, s: 244, l: 255 } : { i: 215, b: 242, s: 232, l: 250 };
   const cellAt = (x, y) => (x < 0 || y < 0 || x >= SW || y >= SH) ? "." : grid[y][x];
   for (let y = 0; y < SH; y++) {
     for (let x = 0; x < SW; x++) {
