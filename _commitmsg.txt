@@ -1,9 +1,11 @@
-feat: landing site on Cloudflare Pages + download hosting
+feat: jellypal.fun domain wiring + commercial-grade site redesign
 
-- site/index.html: pixel-styled landing, animated ranch canvas using
-  real species palettes, download links, jelly packs, SmartScreen FAQ
-- site/dl/: setup.exe + portable zip served directly
-- deployed to jellypal.pages.dev
+- api.jellypal.fun route on worker, SERVER_URL points at it
+- site redesign per design skills: single mint accent, Nunito type,
+  left-aligned hero, species strip w/ real palettes, blob CTAs,
+  window-demo economy section, semantic HTML + a11y (skip link,
+  focus rings, reduced motion, og meta)
+- redesign-existing-projects + frontend-design skills installed
 
 Generated with [Devin](https://devin.ai)
 
