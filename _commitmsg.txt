@@ -1,10 +1,9 @@
-feat: deploy backend worker + embed SERVER_URL
+feat: landing site on Cloudflare Pages + download hosting
 
-- worker deployed at jellypal-api.gyeongbin-38.workers.dev
-- fix double-redeem: same-uid re-redeem of a bound code now rejected
-- live E2E 15/15: minted code redeem, sig verify vs app pubkey,
-  admin grant -> claim -> ack lifecycle, forgery/binding rejections
-- rebuild exe + NSIS + portable zip; shipcheck 57/57
+- site/index.html: pixel-styled landing, animated ranch canvas using
+  real species palettes, download links, jelly packs, SmartScreen FAQ
+- site/dl/: setup.exe + portable zip served directly
+- deployed to jellypal.pages.dev
 
 Generated with [Devin](https://devin.ai)
 

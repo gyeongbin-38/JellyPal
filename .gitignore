@@ -37,3 +37,6 @@ server_ed25519.key
 _secrets.local.txt 
 _cf_token.txt
 _livetest_code.txt
+
+# release binaries staged for Pages deploy — rebuilt locally, never committed
+site/dl/
