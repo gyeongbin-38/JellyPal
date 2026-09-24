@@ -5,9 +5,11 @@ const cv = document.getElementById("ranch");
 if (!cv) return;
 const ctx = cv.getContext("2d");
 ctx.imageSmoothingEnabled = false;
-const off = document.createElement("canvas");
-off.width = 48; off.height = 34;
-const octx = off.getContext("2d");
+/* face index -> FACES key (matches p.face usage below) */
+const FACE_N = ["idle","lookL","lookR","blink","happy","love","star","wink",
+                "sleeping","shock","held1","held2","munch","chew","content"];
+const sprOf = (spIdx, faceIdx) => sprite(FACE_N[faceIdx] || "idle", spIdx);
+const idleOf = (spIdx) => sprite("idle", spIdx);
 let W = 0, H = 0;
 const GY = () => H * 0.8;
 function resize() {
@@ -42,7 +44,7 @@ const p = {
   held: false, heldT: 0, ph: rng(7),
 };
 p.spIdx = SPECIES.findIndex(s => s.id === p.id); if (p.spIdx < 0) p.spIdx = 0;
-function land() { p.y = GY() - sprite(p.spIdx).h / 2 + 2; }
+function land() { p.y = GY() - idleOf(p.spIdx).height / 2 + 2; }
 p.x = W * 0.5; land(); p.tx = W * 0.5;
 
 let jelly = 0;
@@ -64,8 +66,8 @@ cv.addEventListener("pointermove", e => { [mx, my] = toCv(e); });
 cv.addEventListener("pointerleave", () => { mx = -999; });
 cv.addEventListener("pointerdown", e => {
   e.preventDefault(); [mx, my] = toCv(e);
-  const spr = sprite(p.spIdx);
-  if (!p.held && Math.abs(mx - p.x) < spr.w / 2 + 10 && Math.abs(my - p.y) < spr.h / 2 + 12) {
+  const spr = idleOf(p.spIdx);
+  if (!p.held && Math.abs(mx - p.x) < spr.width / 2 + 10 && Math.abs(my - p.y) < spr.height / 2 + 12) {
     p.held = true; p.heldT = 0; p.slpT = 0; p.walkT = null; p.scurry = null;
     cv.setPointerCapture(e.pointerId);
   } else boop();
@@ -94,13 +96,13 @@ function tick(ts) {
   if (paused) { last = ts; return; }
   const dt = Math.min(3, (ts - last) / 16.7 || 1); last = ts;
   const t = ts / 16.7;
-  const spr = sprite(p.spIdx), sp = SPECIES[p.spIdx];
+  const spr = idleOf(p.spIdx), sp = SPECIES[p.spIdx];
   const prof = animProf(p.spIdx), leg = LEG[sp.id];
   const T = dt * (RM ? 0.35 : 1);
 
   /* ambient fx — same table as product */
   if (sp && !p.held && p.slpT <= 0 && Math.random() < T * 0.05) {
-    const bx = p.x, by = p.y - spr.h / 2;
+    const bx = p.x, by = p.y - spr.height / 2;
     if (sp.trait === "drip") fxAt(bx, by - 4, "drip", "#7ecbff");
     else if (sp.trait === "spark") fxAt(bx, by, "ember", "#ffb35e");
     else if (sp.trait === "bubble") fxAt(bx, by, "bub", "#bfe8ff");
@@ -115,7 +117,7 @@ function tick(ts) {
       if (leg.notes && Math.random() < 0.35) fxAt(bx, by - 6, "note", "#8ef0ff");
       if (leg.drool && Math.random() < 0.3) fxAt(bx, p.y, "drip", "#9be89b");
       if (leg.orbit && Math.random() < 0.5) fxAt(bx, by, "mote", "#8ef0ff");
-      if (leg.pulse && Math.random() < T * 0.008) ring(p.x, p.y - spr.h / 2, "#8ef0ff", 16);
+      if (leg.pulse && Math.random() < T * 0.008) ring(p.x, p.y - spr.height / 2, "#8ef0ff", 16);
     }
   }
   if (leg && Math.abs(p.vx) > 1) {
@@ -128,13 +130,13 @@ function tick(ts) {
   if (p.held) {
     p.heldT += T;
     p.x += (mx - p.x) * 0.5 * T; p.y += (my - p.y) * 0.5 * T;
-    p.y = Math.min(p.y, GY() - spr.h / 2 + 2);
+    p.y = Math.min(p.y, GY() - spr.height / 2 + 2);
     p.face = ((p.heldT | 0) % 90 < 45) ? 10 : 11;
     if (sp.id === "spidr" && Math.random() < T * 0.08) sparkBurst(p.x, p.y + 10, "#cfc4f5", 2);
   } else {
     /* gravity */
     p.vy -= 0.055 * T; p.y -= p.vy * T;
-    const fl = GY() - spr.h / 2 + 2;
+    const fl = GY() - spr.height / 2 + 2;
     if (p.y > fl) { p.y = fl; if (p.vy < -1.4) { p.squash = Math.max(p.squash, 0.5); p.vy = 0.4; } else p.vy = 0; }
 
     /* movement style */
@@ -143,7 +145,7 @@ function tick(ts) {
       p.blinkCd -= T;
       if (p.blinkCd <= 0 && onG && p.slpT <= 0) {
         sparkBurst(p.x, p.y, "#cdb9ff", 8);
-        p.x = 16 + spr.w / 2 + Math.random() * (W - 32 - spr.w);
+        p.x = 16 + spr.width / 2 + Math.random() * (W - 32 - spr.width);
         sparkBurst(p.x, p.y, "#cdb9ff", 8);
         p.blinkCd = 200 + rng(260); p.blinkFx = 14;
       }
@@ -157,7 +159,7 @@ function tick(ts) {
       if (Math.abs(p.tx - p.x) < 4) { p.walkT = null; p.vx *= 0.3; }
     }
     p.vx *= Math.pow(0.9, T); p.x += p.vx * T;
-    p.x = Math.max(14 + spr.w / 2, Math.min(W - 14 - spr.w / 2, p.x));
+    p.x = Math.max(14 + spr.width / 2, Math.min(W - 14 - spr.width / 2, p.x));
 
     /* hop */
     if (sp.mv === "hop" && onG && p.walkT != null && p.vy === 0 && Math.random() < T * 0.06) p.vy = 1.1;
@@ -168,7 +170,7 @@ function tick(ts) {
     if (p.slpT > 0) { p.slpT -= T; if (p.slpT <= 0) { p.face = 0; p.faceT = 0; } }
     else if (p.walkT == null && p.scurry == null && Math.random() < T * 0.004) {
       if (Math.random() < 0.12) { p.slpT = 240 + rng(160); p.face = 8; p.faceT = 9999; }
-      else { p.tx = 16 + spr.w / 2 + Math.random() * (W - 32 - spr.w); p.walkT = 1; }
+      else { p.tx = 16 + spr.width / 2 + Math.random() * (W - 32 - spr.width); p.walkT = 1; }
     }
     if (p.blinkFx > 0) p.blinkFx -= T;
   }
@@ -190,50 +192,51 @@ function tick(ts) {
   ctx.fillStyle = "rgba(255,255,255,.03)"; ctx.fillRect(0, (GY() | 0) + 4, W, 1);
 
   /* shadow */
-  const airH = Math.max(0, (GY() - spr.h / 2 + 2) - p.y);
-  const shw = spr.w * 0.34 * Math.max(0.4, 1 - airH / 120);
+  const airH = Math.max(0, (GY() - spr.height / 2 + 2) - p.y);
+  const shw = spr.width * 0.34 * Math.max(0.4, 1 - airH / 120);
   ctx.fillStyle = `rgba(0,0,0,${(0.28 * Math.max(0.3, 1 - airH / 140)).toFixed(2)})`;
   ctx.beginPath(); ctx.ellipse(p.x, GY() + 2, shw, 3, 0, 0, 7); ctx.fill();
 
   /* pal */
   const hov = ((sp.mv === "hover" || (leg && leg.floaty)) && !p.held) ? Math.sin(t * 0.045 + p.ph) * 2.2 - 3 : 0;
+  const face = (p.blink && (p.face === 0 || p.face === 1 || p.face === 2)) ? 3 : p.face;
   ctx.save(); ctx.translate(p.x, p.y + hov);
   const sq = p.squash, stretch = p.vy > 0.8 ? Math.min(0.22, p.vy * 0.06) : 0;
   ctx.scale(1 + sq * 0.3 - stretch * 0.5, 1 - sq * 0.24 + stretch);
   if (p.blinkFx > 0) ctx.globalAlpha = Math.max(0.25, p.blinkFx / 14);
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(off, -spr.w / 2 | 0, -spr.h / 2 | 0);
+  ctx.drawImage(sprOf(p.spIdx, face), -spr.width / 2 | 0, -spr.height / 2 | 0);
   ctx.restore();
 
   /* legendary extras: halo, wings, orbit ring, spidr legs */
   if (leg && leg.halo && !p.held && p.slpT <= 0) {
     ctx.strokeStyle = leg.halo; ctx.globalAlpha = 0.55 + 0.2 * Math.sin(t * 0.06); ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.ellipse(p.x, p.y + hov - spr.h / 2 - 6, 8, 2.5, 0, 0, 7); ctx.stroke(); ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.ellipse(p.x, p.y + hov - spr.height / 2 - 6, 8, 2.5, 0, 0, 7); ctx.stroke(); ctx.globalAlpha = 1;
   }
   if (leg && leg.wings && !p.held && p.slpT <= 0) {
     const wimg = wingImg((t * 0.12 | 0) % 3, leg.wings);
-    const sc = 0.8, wy = p.y + hov - spr.h / 2 + 4;
-    ctx.drawImage(wimg, p.x - spr.w / 2 - wimg.width * sc + 4, wy, wimg.width * sc, wimg.height * sc);
-    ctx.save(); ctx.scale(-1, 1); ctx.drawImage(wimg, -(p.x + spr.w / 2 - 4), wy, wimg.width * sc, wimg.height * sc); ctx.restore();
+    const sc = 0.8, wy = p.y + hov - spr.height / 2 + 4;
+    ctx.drawImage(wimg, p.x - spr.width / 2 - wimg.width * sc + 4, wy, wimg.width * sc, wimg.height * sc);
+    ctx.save(); ctx.scale(-1, 1); ctx.drawImage(wimg, -(p.x + spr.width / 2 - 4), wy, wimg.width * sc, wimg.height * sc); ctx.restore();
   }
   if (leg && leg.orbit) {
     const oa = t * 0.05 + p.ph;
     ctx.fillStyle = "#8ef0ff"; ctx.globalAlpha = 0.7;
-    ctx.fillRect(p.x + Math.cos(oa) * (spr.w / 2 + 8) - 1, p.y + hov - 6 + Math.sin(oa) * 5, 2, 2);
+    ctx.fillRect(p.x + Math.cos(oa) * (spr.width / 2 + 8) - 1, p.y + hov - 6 + Math.sin(oa) * 5, 2, 2);
     ctx.globalAlpha = 1;
   }
   if (sp.id === "spidr" && p.held) {
     ctx.strokeStyle = "#3d3655"; ctx.lineWidth = 2;
     for (let s2 = -1; s2 <= 1; s2 += 2) for (let l = 0; l < 4; l++) {
       const wig = Math.sin(t * 0.35 + l) * 4;
-      ctx.beginPath(); ctx.moveTo(p.x + s2 * spr.w * 0.3, p.y + 4 + l * 3);
-      ctx.quadraticCurveTo(p.x + s2 * (spr.w * 0.3 + 8), p.y + 8 + l * 3 + wig, p.x + s2 * (spr.w * 0.3 + 12), p.y + 14 + l * 3 + wig); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(p.x + s2 * spr.width * 0.3, p.y + 4 + l * 3);
+      ctx.quadraticCurveTo(p.x + s2 * (spr.width * 0.3 + 8), p.y + 8 + l * 3 + wig, p.x + s2 * (spr.width * 0.3 + 12), p.y + 14 + l * 3 + wig); ctx.stroke();
     }
   }
 
   /* hearts / zzz */
   for (let i = hearts.length - 1; i >= 0; i--) { const h = hearts[i]; h.t += T; h.y -= h.vy * T; if (h.t > h.life) { hearts.splice(i, 1); continue; } ctx.globalAlpha = 1 - h.t / h.life; ctx.fillStyle = "#ff8fb3"; ctx.font = "10px monospace"; ctx.fillText("♥", h.x, h.y); }
-  if (p.slpT > 0 && Math.floor(t / 30) % 2 === 0) { ctx.globalAlpha = 0.7; ctx.fillStyle = "#aab3ff"; ctx.font = "10px monospace"; ctx.fillText("z", p.x + 12, p.y - spr.h / 2 - 8 - (t % 30) * 0.3); }
+  if (p.slpT > 0 && Math.floor(t / 30) % 2 === 0) { ctx.globalAlpha = 0.7; ctx.fillStyle = "#aab3ff"; ctx.font = "10px monospace"; ctx.fillText("z", p.x + 12, p.y - spr.height / 2 - 8 - (t % 30) * 0.3); }
   ctx.globalAlpha = 1;
 
   /* fx particles */
@@ -271,11 +274,6 @@ function tick(ts) {
   if (!RM && Math.random() < 0.03 && specks.length < 10) specks.push({ x: Math.random() * W, y: GY() - rng(40), t: 0 });
   for (let i = specks.length - 1; i >= 0; i--) { const s = specks[i]; s.t += T; if (s.t > 140) { specks.splice(i, 1); continue; } ctx.fillStyle = `rgba(200,190,255,${(0.1 * (1 - s.t / 140)).toFixed(2)})`; ctx.fillRect(s.x + Math.sin(s.t * 0.02) * 6, s.y - s.t * 0.15, 1, 1); }
 
-  /* ---------- paint pal sprite into offscreen ---------- */
-  let face = p.face;
-  if (p.blink && (face === 0 || face === 1 || face === 2)) face = 3;
-  octx.clearRect(0, 0, 48, 34);
-  drawPal(octx, p.spIdx, 0, 0, face, true);
 }
 
 /* ---------- helpers ---------- */
@@ -294,12 +292,12 @@ document.querySelectorAll(".hico").forEach(c => {
   const k = c.dataset.ico;
   if (k === "jelly") g.drawImage(jellyImg(), ...fit(jellyImg(), 20, 20));
   else if (k === "jar" || k === "mirror" || k === "cushion") { const im = sprImg(k); g.drawImage(im, ...fit(im, 22, 18)); }
-  else { const i = SPECIES.findIndex(s => s.id === (ICO_PAL[k] || k)); if (i >= 0) { const im = sprite(i); g.drawImage(im, ...fit(im, 24, 18)); } }
+  else { const i = SPECIES.findIndex(s => s.id === (ICO_PAL[k] || k)); if (i >= 0) { const im = idleOf(i); g.drawImage(im, ...fit(im, 24, 18)); } }
 });
 document.querySelectorAll("[data-lico]").forEach(c => {
   const g = c.getContext("2d"); g.imageSmoothingEnabled = false;
   const k = c.dataset.lico;
-  const im = k === "jelly" ? jellyImg() : sprite(SPECIES.findIndex(s => s.id === (ICO_PAL[k] || k)));
+  const im = k === "jelly" ? jellyImg() : idleOf(SPECIES.findIndex(s => s.id === (ICO_PAL[k] || k)));
   g.drawImage(im, ...fit(im, 26, 22));
 });
 document.querySelectorAll(".jellypic").forEach(c => {
@@ -320,7 +318,7 @@ if (dexgrid) {
     d.setAttribute("aria-label", sp.name + " — " + RARITY_COLOR[sp.r][1] + " pal" + (sp.sig ? ", signature move" : "") + (sp.season ? ", " + sp.season + " seasonal" : ""));
     const c = document.createElement("canvas"); c.width = 40; c.height = 30;
     const g = c.getContext("2d"); g.imageSmoothingEnabled = false;
-    const im = sprite(i); const f = fit(im, c.width - 4, c.height - 4);
+    const im = idleOf(i); const f = fit(im, c.width - 4, c.height - 4);
     g.drawImage(im, f[0], f[1], f[2], f[3]);
     d.appendChild(c);
     const nm = document.createElement("div"); nm.className = "nm"; nm.textContent = sp.name; d.appendChild(nm);
@@ -335,7 +333,7 @@ if (dexgrid) {
   function dexreact(i) {
     const dc = dexcells[i]; if (!dc || dc.t > 0) return;
     dc.t = 18;
-    const c = dc.el.querySelector("canvas"), g = c.getContext("2d"), im = sprite(i);
+    const c = dc.el.querySelector("canvas"), g = c.getContext("2d"), im = idleOf(i);
     const face = [4, 5, 9][i % 3];
     const f = fit(im, c.width - 4, c.height - 4);
     const anim = () => {
@@ -345,7 +343,7 @@ if (dexgrid) {
       const hop = dc.t > 0 ? Math.sin(dc.t / 18 * Math.PI) * 4 : 0;
       g.save(); g.translate(c.width / 2, c.height - 2 - hop);
       g.scale(1 + sq, 1 - sq * 0.7);
-      drawPal(g, i, 0, 0, dc.t > 0 ? face : 0, true);
+      const fi = sprOf(i, dc.t > 0 ? face : 0); g.drawImage(fi, -f[2] / 2 | 0, -f[3] | 0, f[2], f[3]);
       g.restore();
       if (dc.t > 0) requestAnimationFrame(anim);
       else { g.clearRect(0, 0, c.width, c.height); g.drawImage(im, f[0], f[1], f[2], f[3]); }

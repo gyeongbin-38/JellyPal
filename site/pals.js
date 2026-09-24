@@ -655,6 +655,10 @@ const SPR = {
     ],
     pal: { c: "#b0895a", k: "#d8ecf4", G: "#aee0f0", b: "#d9a05b" },
   },
+  gem: {
+    rows: ["..###..", ".#####.", "#o###o#", "#######", ".#####.", "..###.."],
+    pal: { "#": "#8fe8c0", "o": "#2e5a44" },
+  },
 };
 const _sprCache = {};
 function sprImg(id) {
@@ -675,6 +679,22 @@ function sprImg(id) {
   _sprCache[id] = oc;
   return oc;
 }
+
+/* jelly drop = the gem doodad at 2x — the site's currency icon */
+let _jelly = null;
+function jellyImg() {
+  if (_jelly) return _jelly;
+  const g0 = sprImg("gem");
+  const oc = document.createElement("canvas");
+  oc.width = g0.width * 2; oc.height = g0.height * 2;
+  const g = oc.getContext("2d");
+  g.imageSmoothingEnabled = false;
+  g.drawImage(g0, 0, 0, oc.width, oc.height);
+  return (_jelly = oc);
+}
+
+/* small rng helper — returns [0,n) float; matches site usage rng(n) */
+function rng(n = 1) { return Math.random() * n; }
 
 // ---------- accessories (drawAccRaw port — real store items) ----------
 const ACCS = [
