@@ -28,12 +28,14 @@
       sq: 0, hopT: 2 + Math.random() * 7,
       sleepT: 14 + Math.random() * 20, sleeping: 0,
       held: false, heldF: 0, eatT: 0, eatPhase: 0, scurry: null,
+      ph: Math.random() * 6.28, burstT: 4 + Math.random() * 10, tpT: 6 + Math.random() * 12,
+      ambT: Math.random() * 3, ringT: 4 + Math.random() * 6,
     });
   }
   STARTERS.forEach((id, i) => addPal(id, 55 + i * 78));
 
   // ---- particles: pixel hearts, zzz, text bangs, jelly drops, crumbs ----
-  const hearts = [], zzzs = [], bangs = [], drops = [], crumbs = [], treats = [], specks = [];
+  const hearts = [], zzzs = [], bangs = [], drops = [], crumbs = [], treats = [], specks = [], fxs = [], rings = [];
   const HEART = ["0110110","1111111","1111111","0111110","0011100","0001000"];
   const JDROP = ["..b..", ".bbb.", "bbbbb", "bbbbb", ".bbb.", "..b.."];
   const TREAT = ["..w...", ".kkk..", "kkkkk.", "kkkkk.", "wwwww."];
@@ -246,11 +248,51 @@
           }
         }
 
-        // wander + hops
+        // ambient trait motes — the same fx language the desktop pet uses
+        const sp = SPECIES[p.spIdx], tr = sp.trait, lg = LEG[sp.id];
+        p.ambT -= dt;
+        if (!reduce && !p.sleeping && p.ambT <= 0) {
+          p.ambT = 1.2 + Math.random() * 3;
+          if (tr === "spark") fxs.push({ x: p.x + Math.random() * 16 - 8, y: GY - 12 - p.y, vx: 0, vy: -30, life: 0.9, c: "#f0a05c" });
+          else if (tr === "drip") fxs.push({ x: p.x + Math.random() * 14 - 7, y: GY - 10 - p.y, vx: 0, vy: 50, life: 0.5, c: "#69b7ec" });
+          else if (tr === "wisp") fxs.push({ x: p.x + Math.random() * 30 - 15, y: GY - 26 - p.y - Math.random() * 14, vx: Math.random() * 8 - 4, vy: -10, life: 1.2, c: "#c4b2f0" });
+          else if (tr === "glint") bangs.push({ x: p.x + Math.random() * 30 - 15, y: GY - 20 - p.y - Math.random() * 30, life: 0.7, t: "✦", c: "#e8f0ff" });
+          else if (tr === "bubble") fxs.push({ x: p.x + Math.random() * 16 - 8, y: GY - 18 - p.y, vx: Math.random() * 6 - 3, vy: -28, life: 1, c: "#b8e8f5" });
+          else if (tr === "gravity") fxs.push({ x: p.x + Math.random() * 26 - 13, y: GY - 20 - p.y, vx: (Math.random() - .5) * 20, vy: 12, life: 0.8, c: "#b8a8ff" });
+          else if (tr === "royal") bangs.push({ x: p.x + Math.random() * 30 - 15, y: GY - 30 - p.y - Math.random() * 20, life: 0.7, t: "✦", c: "#ffd75e" });
+        }
+        // legendary ambient quirks — every legendary sheds its own signature
+        if (!reduce && !p.sleeping && lg) {
+          const moving = Math.abs(p.vx) > 6 || p.y > 0;
+          if (lg.starburst && Math.random() < dt * 1.8) fxs.push({ x: p.x + (Math.random() - .5) * 34, y: GY - 10 - p.y - Math.random() * 38, vx: 0, vy: -14, life: 0.8, c: "#e8f0ff" });
+          if (lg.embers && Math.random() < dt * 1.4) fxs.push({ x: p.x + (Math.random() - .5) * 12, y: GY - 30 - p.y, vx: (Math.random() - .5) * 12, vy: -36, life: 0.7, c: "#e05a3a" });
+          if (lg.halo && Math.random() < dt * 1.2) fxs.push({ x: p.x + Math.random() * 30 - 15, y: GY - 8 - p.y - Math.random() * 36, vx: 0, vy: -18, life: 0.8, c: lg.halo });
+          if (lg.goldtrail && moving && Math.random() < dt * 10) fxs.push({ x: p.x + (Math.random() - .5) * 26, y: GY - 10 - p.y - Math.random() * 18, vx: (Math.random() - .5) * 10, vy: -8, life: 0.6, c: "#ffe98f" });
+          if (lg.glow && Math.random() < dt * 1.6) fxs.push({ x: p.x + Math.random() * 18 - 9, y: GY - 6 - p.y, vx: Math.random() * 6 - 3, vy: -30, life: 0.8, c: lg.glow });
+          if (lg.trail && moving && Math.random() < dt * 14) fxs.push({ x: p.x, y: GY - 12 - p.y, vx: (Math.random() - .5) * 16, vy: 36, life: 0.4, c: lg.trail });
+          if (lg.drool && Math.random() < dt * 0.6) fxs.push({ x: p.x + 8, y: GY - 20 - p.y, vx: 0, vy: 26, life: 0.7, c: "#8ad4f0" });
+          if (lg.chips && moving && Math.random() < dt * 3) fxs.push({ x: p.x + (Math.random() - .5) * 20, y: GY - 6 - p.y, vx: (Math.random() - .5) * 40, vy: -30, life: 0.5, c: "#c8b8a0" });
+          if (lg.notes && Math.random() < dt * 0.35) bangs.push({ x: p.x + (Math.random() - .5) * 30, y: GY - 54 - p.y, life: 1.1, t: "♪", c: "#ffd9ea" });
+          if (lg.pulse) { p.ringT -= dt; if (p.ringT <= 0) { p.ringT = 5 + Math.random() * 4; rings.push({ x: p.x, y: GY - 24 - p.y, r: 44, life: 1 }); } }
+        }
+
+        // movement styles: hover pals float, scurry pals burst, blink pals teleport
         if (!p.sleeping && !p.eatT && p.scurry == null) {
+          if (sp.mv === "scurry") {
+            p.burstT -= dt;
+            if (p.burstT <= 0) { p.burstT = 5 + Math.random() * 8; p.vx = (Math.random() < .5 ? -1 : 1) * (110 + Math.random() * 60); }
+          } else if (sp.mv === "blink") {
+            p.tpT -= dt;
+            if (!reduce && p.tpT <= 0) {
+              p.tpT = 7 + Math.random() * 10;
+              for (let i = 0; i < 5; i++) fxs.push({ x: p.x + (Math.random() - .5) * 20, y: GY - 14 - Math.random() * 24, vx: 0, vy: -10, life: 0.5, c: "#e8f0ff" });
+              p.x = 40 + Math.random() * (W - 80);
+              for (let i = 0; i < 5; i++) fxs.push({ x: p.x + (Math.random() - .5) * 20, y: GY - 14 - Math.random() * 24, vx: 0, vy: -10, life: 0.5, c: "#e8f0ff" });
+            }
+          }
           p.hopT -= dt * (reduce ? 0 : 1);
           if (p.hopT <= 0 && p.y === 0) {
-            p.vy = 120 + 110 * prof.hop; p.hopT = 3 + Math.random() * 8;
+            p.vy = (sp.mv === "hop" ? 200 : 120) + 110 * prof.hop; p.hopT = 3 + Math.random() * 8;
           }
         }
         p.x += p.vx * dt;
@@ -282,7 +324,50 @@
       const sx = 1 + p.sq - br * 0.4, sy = 1 - p.sq * 0.8 + br;
       const spr = sprite(p.face, p.spIdx);
       const pw = SW * SC * sx, ph = SH * SC * sy;
-      cx.drawImage(spr, 0, 0, SW * 2, SH * 2, p.x - pw / 2, GY - ph - p.y, pw, ph);
+      // hover species drift above the ground like they do on the desktop
+      const phov = SPECIES[p.spIdx].mv === "hover" && !p.held ? 10 + Math.sin(now / 450 + p.ph) * 6 : 0;
+      const feetY = GY - p.y - phov;
+      // legendary wings flap behind the body
+      const lgq = LEG[SPECIES[p.spIdx].id];
+      if (lgq && lgq.wings) {
+        const wph = now / 1000 * (p.y > 0 ? 14 : 5);
+        const wf = Math.min(2, Math.floor(((Math.sin(wph) + 1) / 2) * 3));
+        const img = wingImg(wf, lgq.wings);
+        const ww = img.width * SC * sx, wh = img.height * SC * sy;
+        const wbob = Math.sin(wph - 0.6) * (p.y > 0 ? 1.6 : 0.8);
+        for (const m of [-1, 1]) {
+          cx.save();
+          cx.translate(p.x + m * SW * SC * sx * 0.3, feetY - SH * SC * sy * 0.56 + wbob);
+          cx.scale(m, 1);
+          cx.rotate(-0.12 + Math.sin(wph - 0.9) * (p.y > 0 ? 0.16 : 0.07));
+          cx.drawImage(img, 0, -wh, ww, wh);
+          cx.restore();
+        }
+      }
+      cx.globalAlpha = SPECIES[p.spIdx].trait === "wisp" ? 0.85 : 1;
+      cx.drawImage(spr, 0, 0, SW * 2, SH * 2, p.x - pw / 2, feetY - ph, pw, ph);
+      cx.globalAlpha = 1;
+      // webby kicks her little legs while you carry her
+      if (p.held && lgq && lgq.legs) {
+        const t9 = now / 1000 * 9;
+        for (const m of [-1, 1]) for (let l = 0; l < 2; l++) {
+          const k = Math.sin(t9 + l * 2.1 + (m < 0 ? 1.4 : 0));
+          cx.save();
+          cx.translate(p.x + m * (SW * SC * sx * 0.3 + l * 4), feetY - SH * SC * sy * (0.32 - l * 0.14));
+          cx.scale(m, 1);
+          cx.rotate(0.5 + k * 0.45);
+          drawMap(cx, LEG_SPR, 0, 0, 2.2, "#3a3048");
+          cx.restore();
+        }
+      }
+      // pulsar's orbiting motes
+      if (lgq && lgq.orbit && !reduce) {
+        for (let o = 0; o < 2; o++) {
+          const a = now / 900 + p.ph + o * 3.14;
+          cx.fillStyle = "#b8a8ff";
+          cx.fillRect(p.x + Math.cos(a) * 30 - 1.5, feetY - 20 + Math.sin(a) * 10 - 1.5, 3, 3);
+        }
+      }
     }
 
     // particles
@@ -306,6 +391,23 @@
       cx.fillStyle = "#ffd9ea";
       cx.fillRect(c.x, c.y, 2, 2);
     }
+    for (let i = fxs.length - 1; i >= 0; i--) {
+      const f = fxs[i]; f.x += f.vx * dt; f.y += f.vy * dt; f.life -= dt;
+      if (f.life <= 0 || f.y > GY) { fxs.splice(i, 1); continue; }
+      cx.globalAlpha = Math.min(1, f.life * 2);
+      cx.fillStyle = f.c;
+      cx.fillRect(f.x, f.y, 2.5, 2.5);
+    }
+    cx.globalAlpha = 1;
+    for (let i = rings.length - 1; i >= 0; i--) {
+      const r = rings[i]; r.life -= dt * 1.2; r.r -= 38 * dt;
+      if (r.life <= 0 || r.r < 4) { rings.splice(i, 1); continue; }
+      cx.globalAlpha = r.life * 0.6;
+      cx.strokeStyle = "#b8a8ff";
+      cx.lineWidth = 2;
+      cx.strokeRect(r.x - r.r, r.y - r.r * 0.5, r.r * 2, r.r);
+    }
+    cx.globalAlpha = 1;
     for (let i = drops.length - 1; i >= 0; i--) {
       const d = drops[i]; d.t += dt * 1.4;
       if (d.t >= 1) { jelly += d.amt; jellyPulse = 1; drops.splice(i, 1); continue; }
@@ -332,6 +434,11 @@
       } else {
         if (pull.t - dt < 1) {
           bangs.push({ x: cxp, y: 70, life: 1.6, t: `+ ${sp.name.toUpperCase()}!`, c: RARITY_COLOR[sp.r] });
+          // higher rarity, bigger fanfare — epic+ sheds a ring, legendary bursts
+          if (sp.r >= 2) rings.push({ x: cxp, y: GY - 50, r: 60, life: 1 });
+          if (sp.r >= 3)
+            for (let i = 0; i < 12; i++)
+              fxs.push({ x: cxp + (Math.random() - .5) * 80, y: GY - 20 - Math.random() * 70, vx: (Math.random() - .5) * 40, vy: -20 - Math.random() * 40, life: 0.9, c: i % 2 ? "#ffd75e" : "#e8f0ff" });
           if (pals.length < 10 && !pals.some((p) => p.spIdx === pull.spIdx)) {
             addPal(sp.id, cxp);
             const np = pals[pals.length - 1];
@@ -380,7 +487,7 @@
     const cells = [];
     SPECIES.forEach((sp, i) => {
       const cell = document.createElement("div");
-      cell.className = "cell pxframe";
+      cell.className = "cell pxframe r" + sp.r;
       const cnv = document.createElement("canvas");
       cnv.width = 66; cnv.height = 44;
       fit(cnv.getContext("2d"), sprite("idle", i), 66, 44);
@@ -390,6 +497,12 @@
       rr.className = "rr"; rr.textContent = RARITY_NAME[sp.r];
       rr.style.color = RARITY_COLOR[sp.r];
       cell.append(cnv, nm, rr);
+      if (sp.sig) {
+        const sg = document.createElement("div");
+        sg.className = "sg"; sg.textContent = "◆ " + sp.sig.toUpperCase();
+        sg.title = "signature move";
+        cell.appendChild(sg);
+      }
       if (sp.season) {
         const sn = document.createElement("div");
         sn.className = "sn"; sn.textContent = "★";

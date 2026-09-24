@@ -8589,6 +8589,30 @@ function frameBody(now) {
       }
     }
 
+    // ambient identity: pals shed the same motes the pet does, just gentler —
+    // common stays clean, traited species glimmer, legendaries show off
+    if (!reduceMotion && !(now < (p.hideUntil || 0)) && now >= (p.restUntil || 0) && p !== palHeld && Math.random() < dt * 0.55) {
+      const tr = psp.trait;
+      if (tr === "spark") fx.push({ x: p.x + Math.random() * 16 - 8, y: p.y - 8, vx: 0, vy: -30, life: 0.9, c: "#f0a05c" });
+      else if (tr === "drip") fx.push({ x: p.x + Math.random() * 14 - 7, y: p.y - 4, vx: 0, vy: 50, life: 0.5, c: "#69b7ec" });
+      else if (tr === "wisp") fx.push({ x: p.x + Math.random() * 30 - 15, y: p.y - 22 - Math.random() * 14, vx: Math.random() * 8 - 4, vy: -10, life: 1.2, c: "#c4b2f0" });
+      else if (tr === "glint" || tr === "royal") bangs.push({ x: p.x + Math.random() * 30 - 15, y: p.y - Math.random() * 44 - 10, life: 0.7, t: "✦" });
+      else if (tr === "bubble") fx.push({ x: p.x + Math.random() * 16 - 8, y: p.y - 14, vx: Math.random() * 6 - 3, vy: -28, life: 1, c: "#b8e8f5" });
+      const plga = LEG[psp.id];
+      if (plga) {
+        const pmoving = p.walkT !== null || p.fly;
+        if (plga.starburst && Math.random() < 0.4) fx.push({ x: p.x + (Math.random() - 0.5) * 34, y: p.y - 10 - Math.random() * 38, vx: 0, vy: -14, life: 0.8, c: "#e8f0ff" });
+        if (plga.embers && Math.random() < 0.3) fx.push({ x: p.x + (Math.random() - 0.5) * 12, y: p.y - 30, vx: (Math.random() - 0.5) * 12, vy: -34, life: 0.7, c: "#e05a3a" });
+        if (plga.halo && Math.random() < 0.3) fx.push({ x: p.x + Math.random() * 30 - 15, y: p.y - 8 - Math.random() * 34, vx: 0, vy: -18, life: 0.8, c: plga.halo });
+        if (plga.goldtrail && pmoving && Math.random() < 0.5) fx.push({ x: p.x + (Math.random() - 0.5) * 26, y: p.y - 8 - Math.random() * 18, vx: (Math.random() - 0.5) * 10, vy: -8, life: 0.6, c: "#ffe98f" });
+        if (plga.glow && Math.random() < 0.3) fx.push({ x: p.x + Math.random() * 18 - 9, y: p.y - 4, vx: Math.random() * 6 - 3, vy: -30, life: 0.8, c: plga.glow });
+        if (plga.trail && pmoving && Math.random() < 0.5) fx.push({ x: p.x, y: p.y - 8, vx: (Math.random() - 0.5) * 16, vy: 36, life: 0.4, c: plga.trail });
+        if (plga.drool && Math.random() < 0.15) fx.push({ x: p.x + 8, y: p.y - 16, vx: 0, vy: 26, life: 0.7, c: "#8ad4f0" });
+        if (plga.chips && pmoving && Math.random() < 0.3) fx.push({ x: p.x + (Math.random() - 0.5) * 20, y: p.y - 4, vx: (Math.random() - 0.5) * 40, vy: -30, life: 0.5, c: "#c8b8a0" });
+        if (plga.notes && Math.random() < 0.1) bangs.push({ x: p.x + (Math.random() - 0.5) * 30, y: p.y - 50, life: 1.1, t: "♪" });
+      }
+    }
+
     // draw — base scale NOT blobSize().scale: that one already carries the
     // active pet's baby factor and would shrink every pal. skipped while
     // the pal is hiding inside the box (the box rustles instead)

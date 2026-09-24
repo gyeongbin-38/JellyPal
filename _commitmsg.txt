@@ -1,16 +1,18 @@
-feat: pixel-world pass — dex grid, stepped corners, sprite-fit fix
+feat: rarity reads — ambient trait/legendary fx on site AND product pals
 
-- species strip (colored border-left chips) replaced by a real
-  dex grid: 48 cells with real sprites, pixel-font rarity tags,
-  seasonal markers, hop-on-hover
-- pxframe stepped-corner clip on frames/packs/cells — the site's
-  panels now speak the game's own pixel language
-- jelly-dither surface texture on packs, pixel divider row,
-  themed scrollbars, stepped link underlines
-- fixed sprite drawImage math in dex + pack icons (were clipped
-  by the 2x supersampled coordinate space)
-- impeccable skill installed for the design passes
+Why: common vs rare vs epic vs legendary pals looked near-identical;
+the product only shed trait motes from the main pet, so companion pals
+(what you actually see) had no rarity signature.
 
-Generated with [Devin](https://devin.ai)
-
-Co-Authored-By: Devin <158243242+devin-ai-integration[bot]@users.noreply.github.com>
+- product main.js: pals now emit gentler ambient trait motes (spark/
+  drip/wisp/glint/royal/bubble) + legendary quirk fx (starburst, embers,
+  halo, goldtrail, glow, trail, drool, chips, notes) — gated on awake,
+  visible, not-held, reduced-motion off
+- site pals.js: port LEG quirk table, WING_F frames + wingImg tinting,
+  spider-leg doodad
+- site ranch.js: per-pal ambient motes + legendary quirks, movement
+  styles (hover float, scurry bursts, blink teleport, bigger hop),
+  wings on stella/drago, webby kicks legs while carried, pulsar orbit
+  motes + collapse rings, epic+/legendary pull fanfare
+- dex: rarity-tinted cell frames (r1/r2/r3) + ◆ signature-move tag
+- rebuilt binaries, 57/57 shipcheck, zip==exe hash match

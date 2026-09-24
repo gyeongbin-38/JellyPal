@@ -309,6 +309,47 @@ const FACES = {
   },
 };
 
+// legendary quirks + wing/leg doodads — ported 1:1 from src/main.js
+const LEG = {
+  stella: { floaty: true, wings: "#f2f6ff", starburst: true },
+  drago:  { wings: "#7a3a4a", heavy: true, embers: true },
+  gold:   { halo: "#ffd75e", luck: true, goldtrail: true },
+  rex:    { halo: "#ffd75e", strut: true },
+  comet:  { trail: "#ff8a3f" },
+  molten: { glow: "#e85a2a", heart: true },
+  siren:  { notes: true, captivate: true },
+  cliff:  { chips: true, tremor: true, summit: true },
+  bites:  { drool: true, lunge: true, snap: true },
+  pulsar: { orbit: true, pulse: true },
+  spidr:  { legs: true },
+};
+const WING_F = [
+  ["......m......", "....mmm.....", "...mmmmm....", "..mmmmmmm...", ".mmmmmmmmm..", "mmmmmmmmmmm.", "mmmddmmmddmm", "mmmdmmmmdmmm"],
+  ["............", "..m.........", ".mmm........", "mmmmmm......", "mmmmmmmm....", "mmmmmmmmmm..", "mmmddmmmddm.", "mmdmmmmmdmm."],
+  ["............", "............", "............", "m...........", "mm..........", "mmm.........", "mmmmm.......", "mmmmmmmm...."],
+];
+const LEG_SPR = ["#......", "##.....", ".##....", "..##...", "...##..", "...###.", ".....##"];
+const _wingCache = {};
+function wingImg(frame, base) {
+  const key = frame + ":" + base;
+  if (_wingCache[key]) return _wingCache[key];
+  const rows = WING_F[frame];
+  const w = Math.max(...rows.map((r) => r.length)), h = rows.length;
+  const oc = document.createElement("canvas");
+  oc.width = w; oc.height = h;
+  const g = oc.getContext("2d");
+  const bR = hexRgb(base), dR = mixRgb(bR, hexRgb("#241b2e"), 0.4), lR = mixRgb(bR, hexRgb("#ffffff"), 0.45);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < rows[y].length; x++) {
+      const rgb = rows[y][x] === "m" ? bR : rows[y][x] === "d" ? dR : rows[y][x] === "l" ? lR : null;
+      if (!rgb) continue;
+      g.fillStyle = `rgb(${rgb.join(",")})`;
+      g.fillRect(x, y, 1, 1);
+    }
+  _wingCache[key] = oc;
+  return oc;
+}
+
 const EYE_TPL = [
   [".ee.", "wwee", "weee", "eeew", ".uu."],
   ["wee.", "wwee", "weee", "eewe", ".uu."],
