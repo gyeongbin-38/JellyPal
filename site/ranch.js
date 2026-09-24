@@ -18,8 +18,7 @@
   // ---- pals on the ranch: a spread across rarities ----
   const STARTERS = ["sprout", "berry", "mochi", "kitty", "aurora", "gold", "stella"];
   const pals = [];
-  function addPal(id, x) {
-    const spIdx = spIndex(id);
+  function addPalIdx(spIdx, x) {
     pals.push({
       spIdx, x: x ?? 40 + Math.random() * (W - 80), y: 0, vy: 0,
       vx: (Math.random() - .5) * 14,
@@ -30,9 +29,49 @@
       held: false, heldF: 0, eatT: 0, eatPhase: 0, scurry: null,
       ph: Math.random() * 6.28, burstT: 4 + Math.random() * 10, tpT: 6 + Math.random() * 12,
       ambT: Math.random() * 3, ringT: 4 + Math.random() * 6,
+      acc: null, goal: null, napOn: null, picked: false,
     });
+    return pals[pals.length - 1];
   }
+  const addPal = (id, x) => addPalIdx(spIndex(id), x);
   STARTERS.forEach((id, i) => addPal(id, 55 + i * 78));
+
+  // ---- placed props: {kind -> {x}} on the ground line ----
+  const props = {};
+  const PROP_X = { cushion: 100, mat: 290, jar: 470, plant: 560 };
+  const GOALABLE = { cushion: 1, plant: 1, jar: 1 }; // mat is a trampoline, not a destination
+  const propBtn = {};
+  document.querySelectorAll("[data-prop]").forEach((b) => {
+    propBtn[b.dataset.prop] = b;
+    b.addEventListener("click", () => {
+      const k = b.dataset.prop;
+      if (props[k]) { delete props[k]; b.classList.remove("on"); return; }
+      props[k] = { x: PROP_X[k], t: 0 };
+      b.classList.add("on");
+      // someone notices the new furniture and wanders over
+      if (GOALABLE[k]) {
+        const awake = pals.filter((p) => !p.sleeping && !p.held && !p.goal && !p.napOn);
+        if (awake.length) {
+          const p = awake[Math.floor(Math.random() * awake.length)];
+          setTimeout(() => { if (!p.napOn && props[k]) { p.goal = { kind: k, x: props[k].x }; p.scurry = p.goal.x; } }, 700 + Math.random() * 1400);
+        }
+      }
+    });
+  });
+
+  // ---- accessory bar: click to dress the pal nearest the cursor ----
+  let targetPal = pals[0];
+  const accBtns = {};
+  document.querySelectorAll("[data-acc]").forEach((b) => {
+    accBtns[b.dataset.acc] = b;
+    b.addEventListener("click", () => {
+      const id = b.dataset.acc, p = targetPal || pals[0];
+      if (!p) return;
+      p.acc = p.acc === id ? null : id;
+      p.face = "happy"; p.faceT = 0.9; p.sq = 0.25;
+      hearts.push({ x: p.x - 4, y: GY - 26 * SC - 16 - p.y, vy: -36, life: 1 });
+    });
+  });
 
   // ---- particles: pixel hearts, zzz, text bangs, jelly drops, crumbs ----
   const hearts = [], zzzs = [], bangs = [], drops = [], crumbs = [], treats = [], specks = [], fxs = [], rings = [];
@@ -80,6 +119,13 @@
   cv.addEventListener("pointermove", (e) => {
     [mx, my] = toCv(e);
     if (heldPal) heldPal.x = Math.max(30, Math.min(W - 30, mx));
+    // dress-up targets the pal under the cursor
+    let best = null, bd = 70;
+    for (const p of pals) {
+      const d = Math.hypot(p.x - mx, (GY - 24 - p.y) - my);
+      if (d < bd) { bd = d; best = p; }
+    }
+    if (best) targetPal = best;
   });
   const release = () => {
     if (!heldPal) return;
@@ -100,6 +146,15 @@
     if (downXY && Math.hypot(bx - downXY[0], by - downXY[1]) > 8) return; // was a drag
     const p = palAt(bx, by);
     if (!p) return;
+    // breed pick mode: tag parents instead of booping
+    if (breedPicking) {
+      if (!p.picked && breedSel.length < 2) {
+        p.picked = true; breedSel.push(p);
+        hearts.push({ x: p.x - 4, y: GY - 26 * SC - 18 - p.y, vy: -36, life: 1.2 });
+        if (breedSel.length === 2) startBreed();
+      }
+      return;
+    }
     const prof = animProf(p.spIdx);
     p.face = prof.glee > 0.5 ? "love" : "happy";
     p.faceT = 1.3; p.sq = 0.34;
@@ -148,6 +203,25 @@
     if (keys % 12 === 0) jellyDrop(p.x, 1);   // demo rate: every 12 keys (game: 600)
   });
 
+  // ---- breed: pick two pals, they meet, an egg hatches a hybrid ----
+  const breedBtn = document.getElementById("breed");
+  let breedPicking = false, breedSel = [], breeding = null;
+  if (breedBtn) breedBtn.addEventListener("click", () => {
+    if (breedPicking || breeding) return;
+    if (jelly < 20) {
+      breedBtn.textContent = "need 20 jelly — type!";
+      setTimeout(() => { breedBtn.textContent = "breed ♥ 20"; }, 1600);
+      return;
+    }
+    breedPicking = true; breedSel = [];
+    breedBtn.classList.add("on"); breedBtn.textContent = "pick 2 pals…";
+  });
+  function startBreed() {
+    breedPicking = false;
+    breeding = { t: 0, phase: 0, a: breedSel[0], b: breedSel[1], child: null };
+    breedBtn.classList.remove("on"); breedBtn.textContent = "breed ♥ 20";
+  }
+
   // ---- the pull: real gacha weights, silhouette reveal ----
   const pullBtn = document.getElementById("pull");
   let pull = null;
@@ -190,6 +264,32 @@
     cx.fillText("JELLY " + jelly, 14, 24);
     drawMap(cx, JDROP, 74, 15, 1.4 + jellyPulse * 0.6, "#8fe8c0");
 
+    // night sky: moon + twinkling stars (specks already drift below)
+    cx.fillStyle = "#f0ead0";
+    cx.beginPath(); cx.arc(W - 60, 42, 16, 0, 7); cx.fill();
+    cx.fillStyle = "#0f0b26";
+    cx.beginPath(); cx.arc(W - 54, 38, 14, 0, 7); cx.fill();
+    for (let i = 0; i < 10; i++) {
+      const tw = reduce ? 0.6 : 0.35 + 0.3 * Math.sin(now / 400 + i * 2.1);
+      cx.globalAlpha = tw;
+      cx.fillStyle = "#e8f0ff";
+      cx.fillRect(30 + ((i * 137) % (W - 120)), 16 + ((i * 61) % 90), 2, 2);
+    }
+    cx.globalAlpha = 1;
+
+    // placed props sit on the ground line, popping in
+    for (const k in props) {
+      const pr = props[k]; pr.t += dt;
+      const img = sprImg(k);
+      if (!img) continue;
+      const pop = Math.min(1, pr.t * 3.5);
+      const syq = (k === "cushion" && pr.occupied) ? 0.75 : 1;
+      const s = 2.6 * (0.6 + 0.4 * pop);
+      cx.drawImage(img, 0, 0, img.width, img.height,
+        Math.round(pr.x - img.width * s / 2), Math.round(GY + 6 - img.height * s * syq),
+        img.width * s, img.height * s * syq);
+    }
+
     // treats falling / on the ground
     for (let i = treats.length - 1; i >= 0; i--) {
       const tr = treats[i];
@@ -219,20 +319,65 @@
             zzzs.push({ x: p.x + 18, y: GY - 26 * SC - 8, vy: -16, life: 1.6 });
         }
 
-        // scurry toward a treat
+        // scurry toward a treat or a furniture goal
         if (p.scurry != null) {
           const dx = p.scurry - p.x;
           if (Math.abs(dx) < 16) {
             p.scurry = null; p.vx = 0;
-            p.eatT = 1.8; p.eatPhase = 0;
-            p.face = "munch"; p.faceT = 0.4;
+            if (p.goal && p.goal.kind === "cushion" && props.cushion) {
+              p.napOn = { t: 6 + Math.random() * 3 };
+              props.cushion.occupied = true;
+              for (let i = 0; i < 5; i++) fxs.push({ x: p.x + (i - 2) * 8, y: GY - 6, vx: (i - 2) * 16, vy: -12, life: 0.4, c: "#f0d0e0" });
+            } else if (p.goal && p.goal.kind === "plant" && props.plant) {
+              p.sniffT = 1.6;
+              p.face = p.x < p.goal.x ? "lookR" : "lookL"; p.faceT = 1.5;
+              for (let i = 0; i < 4; i++) fxs.push({ x: p.goal.x + (Math.random() - .5) * 12, y: GY - 24, vx: (Math.random() - .5) * 30, vy: -30 - Math.random() * 20, life: 0.5, c: "#9adf8a" });
+            } else {
+              p.eatT = 1.8; p.eatPhase = 0;
+              p.face = "munch"; p.faceT = 0.4;
+            }
+            p.goal = null;
           } else {
             p.vx = Math.sign(dx) * 90;
             p.face = dx < 0 ? "lookL" : "lookR"; p.faceT = 0.2;
           }
-        } else if (!p.sleeping && !p.eatT) {
+        } else if (!p.sleeping && !p.eatT && !p.napOn && !p.sniffT) {
           if (!reduce && Math.random() < dt * 0.25) p.vx = (Math.random() - .5) * 20;
+          // idle pals wander over to check out furniture sometimes
+          if (!reduce && !p.goal && Math.random() < dt * 0.04) {
+            const ks = Object.keys(props).filter((k) => GOALABLE[k] && !(k === "cushion" && props[k].occupied));
+            if (ks.length) {
+              const k = ks[(Math.random() * ks.length) | 0];
+              p.goal = { kind: k, x: props[k].x };
+              p.scurry = p.goal.x;
+            }
+          }
         }
+
+        // napping on the cushion
+        if (p.napOn) {
+          p.napOn.t -= dt; p.vx = 0;
+          p.face = "sleeping"; p.faceT = 99;
+          if (Math.random() < dt * 1.4) zzzs.push({ x: p.x + 18, y: GY - 26 * SC - 8, vy: -16, life: 1.6 });
+          if (p.napOn.t <= 0) {
+            if (props.cushion) props.cushion.occupied = false;
+            p.napOn = null; p.face = "happy"; p.faceT = 0.8; p.vy = 140;
+          }
+        }
+        // sniffing the plant
+        if (p.sniffT) {
+          p.sniffT -= dt; p.vx = 0;
+          if (Math.random() < dt * 3) fxs.push({ x: p.x + (Math.random() - .5) * 10, y: GY - 26, vx: 0, vy: -14, life: 0.5, c: "#9adf8a" });
+          if (p.sniffT <= 0) { p.sniffT = null; p.face = "happy"; p.faceT = 0.7; }
+        }
+
+        // jelly bounce mat — anything grounded on it gets launched
+        if (props.mat && p.y === 0 && !p.sleeping && !p.held && !p.napOn && (p.matCd || 0) <= 0 && Math.abs(p.x - props.mat.x) < 38) {
+          p.vy = 240 + Math.random() * 80; p.sq = 0.42; p.matCd = 0.7;
+          p.face = "happy"; p.faceT = 0.8;
+          for (let i = 0; i < 4; i++) fxs.push({ x: p.x + (i - 1.5) * 10, y: GY - 4, vx: (i - 1.5) * 20, vy: -20, life: 0.4, c: "#a8e8c0" });
+        }
+        p.matCd = Math.max(0, (p.matCd || 0) - dt);
 
         // eating animation
         if (p.eatT > 0) {
@@ -347,6 +492,14 @@
       cx.globalAlpha = SPECIES[p.spIdx].trait === "wisp" ? 0.85 : 1;
       cx.drawImage(spr, 0, 0, SW * 2, SH * 2, p.x - pw / 2, feetY - ph, pw, ph);
       cx.globalAlpha = 1;
+      // equipped accessory rides the head — same anchor math as the game
+      if (p.acc) drawAccRaw(cx, p.acc, p.x, feetY - ph + 4, Math.max(1.2, SC * sy * 0.82));
+      // breed pick marker
+      if (p.picked) {
+        cx.font = `10px ${PX}`; cx.fillStyle = "#ff8fb0"; cx.textAlign = "center";
+        cx.fillText("♥", p.x, feetY - ph - 8);
+        cx.textAlign = "left";
+      }
       // webby kicks her little legs while you carry her
       if (p.held && lgq && lgq.legs) {
         const t9 = now / 1000 * 9;
@@ -414,6 +567,39 @@
       const t2 = d.t * d.t * (3 - 2 * d.t);
       const dx = 60 + (d.x - 60) * (1 - t2), dy = 20 + (d.y - 20) * (1 - t2) - Math.sin(t2 * Math.PI) * 60;
       drawMap(cx, JDROP, dx, dy, 1.6, "#8fe8c0");
+    }
+
+    // ---- breed sequence: parents meet at midfield, egg, hybrid hatches ----
+    if (breeding) {
+      breeding.t += dt;
+      const { a, b } = breeding, mid = (a.x + b.x) / 2;
+      if (breeding.phase === 0) {
+        a.scurry = mid - 16; b.scurry = mid + 16;
+        breeding.phase = 1;
+      } else if (breeding.phase === 1 && a.scurry == null && b.scurry == null) {
+        breeding.phase = 2; breeding.t = 0;
+        a.face = b.face = "love"; a.faceT = b.faceT = 1.4;
+        for (let i = 0; i < 6; i++)
+          hearts.push({ x: mid - 10 + i * 4, y: GY - 30 * SC - i * 6, vy: -30 - i * 6, life: 1.2 });
+      } else if (breeding.phase === 2 && breeding.t > 1.1) {
+        breeding.phase = 3; breeding.t = 0;
+        breeding.child = makeHybrid(SPECIES[a.spIdx], SPECIES[b.spIdx]);
+      } else if (breeding.phase === 3) {
+        // the egg sits mid-ranch and wobbles before it pops
+        const wob = reduce ? 0 : Math.sin(breeding.t * 14) * Math.min(4, breeding.t * 3);
+        drawMap(cx, ["..ww..", ".wkkk.", "wkkwwk", "wkkwkk", ".wkkk.", "..ww.."], mid - 9 + wob, GY - 24, 3, "#f4ead8");
+        if (breeding.t > 1.7) {
+          jelly -= 20;
+          SPECIES.push(breeding.child);
+          const np = addPalIdx(SPECIES.length - 1, mid);
+          np.face = "star"; np.faceT = 1.6; np.vy = 190;
+          bangs.push({ x: mid, y: 80, life: 1.8, t: "+ " + breeding.child.name.toUpperCase() + "!", c: RARITY_COLOR[breeding.child.r] });
+          for (let i = 0; i < 8; i++)
+            fxs.push({ x: mid + (Math.random() - .5) * 30, y: GY - 20 - Math.random() * 30, vx: (Math.random() - .5) * 40, vy: -20 - Math.random() * 30, life: 0.7, c: "#f4ead8" });
+          a.picked = b.picked = false;
+          breedSel = []; breeding = null;
+        }
+      }
     }
 
     // ---- pull sequence ----
@@ -565,6 +751,41 @@
     } else {
       cc.imageSmoothingEnabled = false;
       drawMap(cc, JDROP, el.width / 2 - 9, 4, 3.4, "#8fe8c0");
+    }
+  });
+
+  // ---- toybox icons: real prop sprites + real accessory art ----
+  document.querySelectorAll(".pico").forEach((el) => {
+    const img = sprImg(el.dataset.pico);
+    if (!img) return;
+    const cc = el.getContext("2d");
+    cc.imageSmoothingEnabled = false;
+    const s = Math.min((el.width - 4) / img.width, (el.height - 4) / img.height);
+    cc.drawImage(img, 0, 0, img.width, img.height,
+      (el.width - img.width * s) / 2, el.height - img.height * s - 1,
+      img.width * s, img.height * s);
+  });
+  document.querySelectorAll(".aico").forEach((el) => {
+    const cc = el.getContext("2d");
+    cc.imageSmoothingEnabled = false;
+    drawAccRaw(cc, el.dataset.aico, el.width / 2, el.height * 0.68, 1.15);
+  });
+
+  // ---- section icons: real sprites marking each chapter ----
+  document.querySelectorAll(".hico").forEach((el) => {
+    const cc = el.getContext("2d");
+    cc.imageSmoothingEnabled = false;
+    const k = el.dataset.ico;
+    if (k === "jelly") drawMap(cc, JDROP, 2, 2, 3, "#8fe8c0");
+    else if (k === "pal") fit(cc, sprite("happy", spIndex("frog")), el.width, el.height, 1);
+    else if (k === "hybrid") fit(cc, sprite("love", spIndex("mochi")), el.width, el.height, 1);
+    else {
+      const img = sprImg(k);
+      if (img) {
+        const s = Math.min((el.width - 2) / img.width, (el.height - 2) / img.height);
+        cc.drawImage(img, 0, 0, img.width, img.height,
+          (el.width - img.width * s) / 2, el.height - img.height * s - 1, img.width * s, img.height * s);
+      }
     }
   });
 })();

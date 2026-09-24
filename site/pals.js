@@ -550,3 +550,223 @@ function sprite(face, spIdx, sil) {
   return spriteCache[key];
 }
 const spIndex = (id) => SPECIES.findIndex((s) => s.id === id);
+
+// ---------- props (SPR doodads — ported 1:1 from src/main.js) ----------
+const SPR = {
+  bowl: {
+    rows: [
+      "....kkkkkkkkk....",
+      "..kWWWWWWWWWWWk..",
+      ".okWfffffffffWko.",
+      ".okffffffffffko..",
+      "..okkkkkkkkkko....",
+      "...oKKKKKKKKKo...",
+      "...oKKhKKKhKo....",
+      "....oKKhKhKo.....",
+      ".....ooooooo.....",
+    ],
+    pal: { o: "#8a6b4a", k: "#d9a05e", W: "#5c4632", f: "#eec23f", K: "#b97f45", h: "#f0d0d8" },
+  },
+  cushion: {
+    rows: [
+      ".....ooooooooo.....",
+      "..oPPPPPPPPPPPPPo..",
+      ".oPpPPPPPPPPPPpPo.",
+      "oPPPPPPPPPPPPPPPPPo",
+      "oPPPPPPPPbPPPPPPPPo",
+      ".oPpPPPPPPPPPPpPo.",
+      "..oPPPPPPPPPPPPPo..",
+      "....oPPPPPPPPPo....",
+      "t....ooooooooo....t",
+    ],
+    pal: { o: "#a8506e", P: "#f0a0c0", p: "#ffcee0", b: "#d06088", t: "#ffd75e" },
+  },
+  plant: {
+    rows: [
+      "....gg..gg....",
+      "...ggg..ggg...",
+      "....ggg.ggg...",
+      ".....ggggg....",
+      ".g....ggg....g",
+      "..g...ggg...g.",
+      ".......s......",
+      "....pppppp....",
+      "...pppppppp...",
+      "...pppppppp...",
+      "....pppppp....",
+    ],
+    pal: { g: "#4f9e4f", s: "#3a7a3f", p: "#b06a4a" },
+  },
+  music: {
+    rows: [
+      "...wwwwwwwwww...",
+      "..wkkskkskkskw..",
+      "..wwwwwwwwwwww..",
+      ".wwwwwwwwwwwwww.",
+      ".wkkkkkkkkkkkkw.",
+      ".wwwwwwwwwwwwww.",
+      ".wwwwwwwwwwwwww.",
+      "..oooooooooooo..",
+    ],
+    pal: { w: "#c9a06c", k: "#5c4632", s: "#ffd75e", o: "#8a6b4a" },
+  },
+  mirror: {
+    rows: [
+      "....oooooooo....",
+      "...oMMMMMMMMMo...",
+      "..oMwwswwwwwwMo..",
+      "..oMwwswwwwwMo..",
+      "..oMwwwswwwwMo..",
+      "..oMwwwwswwwMo..",
+      "..oMwwwwwswwMo..",
+      "..oMMMMMMMMMMMo..",
+      "...oMMMMMMMMMo...",
+      "......oooo......",
+      "....oooooooo....",
+      "...oooooooooo...",
+    ],
+    pal: { o: "#8a6b4a", M: "#5c4632", w: "#bfe8f4", s: "#ffffff" },
+  },
+  mat: {
+    rows: [
+      ".....oooooooooo.....",
+      "..oPPPPPPPPPPPPPPo..",
+      ".oPpPpPpPpPpPpPpPo.",
+      "oPPPPPPPPPPPPPPPPPPo",
+      "oPpPPPPbbPPbbPPpPo",
+      "oPPPPPPPPPPPPPPPPPPo",
+      ".oPpPpPpPpPpPpPpPo.",
+      "..oPPPPPPPPPPPPPPo..",
+      ".....oooooooooo.....",
+    ],
+    pal: { o: "#4a7a5a", P: "#7ac89a", p: "#a8e8c0", b: "#3a6a4a" },
+  },
+  jar: {
+    rows: [
+      ".....cccccc.....",
+      "....kkkkkkkk....",
+      "...kGGGGGGGGk...",
+      "..kGbGGbbGGbGk..",
+      "..kGGbbGGbbGGk..",
+      "..kGbGGbbGGbGk..",
+      "..kGGbbGGbbGGk..",
+      "...kGGGGGGGGk...",
+      "....kkkkkkkk....",
+    ],
+    pal: { c: "#b0895a", k: "#d8ecf4", G: "#aee0f0", b: "#d9a05b" },
+  },
+};
+const _sprCache = {};
+function sprImg(id) {
+  if (_sprCache[id]) return _sprCache[id];
+  const def = SPR[id];
+  if (!def) return null;
+  const w = Math.max(...def.rows.map((r) => r.length)), h = def.rows.length;
+  const oc = document.createElement("canvas");
+  oc.width = w; oc.height = h;
+  const g = oc.getContext("2d");
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < def.rows[y].length; x++) {
+      const col = def.pal[def.rows[y][x]];
+      if (!col) continue;
+      g.fillStyle = col;
+      g.fillRect(x, y, 1, 1);
+    }
+  _sprCache[id] = oc;
+  return oc;
+}
+
+// ---------- accessories (drawAccRaw port — real store items) ----------
+const ACCS = [
+  { id: "cap", name: "CAP", dy: 0 }, { id: "bow", name: "BOW", dy: 0 },
+  { id: "crown", name: "CROWN", dy: -1 }, { id: "tophat", name: "TOPHAT", dy: -1 },
+  { id: "specs", name: "SPECS", dy: 3 }, { id: "party", name: "PARTY", dy: 0 },
+  { id: "flower", name: "FLOWER", dy: 0 }, { id: "phones", name: "PHONES", dy: 1 },
+];
+function drawAccRaw(c, id, x, y, u) {
+  const acc = ACCS.find((a) => a.id === id);
+  if (!acc) return;
+  const ay = y + acc.dy * u;
+  if (id === "cap") {
+    c.fillStyle = "#e05a6e"; c.fillRect(x - 5 * u, ay, 10 * u, 3 * u);
+    c.fillStyle = "#b8405a"; c.fillRect(x - 5 * u, ay + 2 * u, 10 * u, u);
+    c.fillStyle = "#e05a6e"; c.fillRect(x - 9 * u, ay + 2 * u, 5 * u, u);
+    c.fillStyle = "#ffffff"; c.fillRect(x - u, ay - u, 2 * u, u);
+    c.fillStyle = "#f08a9a"; c.fillRect(x - u * 0.5, ay, u * 0.5, 2 * u);
+    c.fillStyle = "#ffd0d8"; c.fillRect(x - u * 0.5, ay - 2 * u, u, u);
+  } else if (id === "specs") {
+    c.strokeStyle = "#2f2f3a"; c.lineWidth = u;
+    c.strokeRect(x - 8 * u, ay, 6 * u, 5 * u); c.strokeRect(x + 2 * u, ay, 6 * u, 5 * u);
+    c.fillStyle = "#2f2f3a"; c.fillRect(x - 2 * u, ay + 2 * u, 4 * u, u);
+    c.fillStyle = "rgba(255,255,255,0.75)";
+    c.fillRect(x - 7 * u, ay + u, 2 * u, u); c.fillRect(x + 3 * u, ay + u, 2 * u, u);
+  } else if (id === "bow") {
+    c.fillStyle = "#ff5f8a";
+    c.fillRect(x - 8 * u, ay, 5 * u, 4 * u); c.fillRect(x + 3 * u, ay, 5 * u, 4 * u);
+    c.fillStyle = "#d1386b"; c.fillRect(x - 2 * u, ay + u, 4 * u, 3 * u);
+    c.fillStyle = "#ff5f8a";
+    c.fillRect(x - 4 * u, ay + 4 * u, 2 * u, 3 * u); c.fillRect(x + 2 * u, ay + 4 * u, 2 * u, 3 * u);
+    c.fillStyle = "#d1386b";
+    c.fillRect(x - 4 * u, ay + 6 * u, 2 * u, u); c.fillRect(x + 2 * u, ay + 6 * u, 2 * u, u);
+    c.fillStyle = "#ffb0cc"; c.fillRect(x - u, ay + u, u, u);
+  } else if (id === "crown") {
+    c.fillStyle = "#b8860b"; c.fillRect(x - 7 * u, ay + 4 * u, 14 * u, u);
+    c.fillStyle = "#eec23f"; c.fillRect(x - 7 * u, ay + 2 * u, 14 * u, 3 * u);
+    c.fillRect(x - 6 * u, ay, 3 * u, 2 * u); c.fillRect(x - 1.5 * u, ay - u, 3 * u, 3 * u);
+    c.fillRect(x + 3 * u, ay, 3 * u, 2 * u);
+    c.fillStyle = "#e05a6e"; c.fillRect(x - u, ay + 2 * u, 2 * u, u);
+    c.fillStyle = "#4a90e8"; c.fillRect(x - 5 * u, ay + 3 * u, u, u); c.fillRect(x + 4 * u, ay + 3 * u, u, u);
+    c.fillStyle = "#fff2b0"; c.fillRect(x - u, ay - u, u, u);
+  } else if (id === "tophat") {
+    c.fillStyle = "#2f2f3a"; c.fillRect(x - 8 * u, ay + 4 * u, 16 * u, 2 * u);
+    c.fillRect(x - 5 * u, ay - 3 * u, 10 * u, 7 * u);
+    c.fillStyle = "#e05a6e"; c.fillRect(x - 5 * u, ay + 2 * u, 10 * u, 2 * u);
+    c.fillStyle = "#4a4a5a"; c.fillRect(x - 4 * u, ay - 2 * u, 2 * u, 3 * u);
+    c.fillStyle = "#eec23f"; c.fillRect(x - u, ay + 2 * u, 2 * u, 2 * u);
+  } else if (id === "party") {
+    c.fillStyle = "#5ac8f0"; c.fillRect(x - 5 * u, ay, 10 * u, 2 * u);
+    c.fillRect(x - 3 * u, ay - 2 * u, 6 * u, 2 * u); c.fillRect(x - 2 * u, ay - 4 * u, 4 * u, 2 * u);
+    c.fillStyle = "#ffd75e"; c.fillRect(x - 3 * u, ay - 2 * u, 2 * u, 2 * u);
+    c.fillStyle = "#ffffff"; c.fillRect(x - u, ay - 6 * u, 2 * u, 2 * u);
+  } else if (id === "flower") {
+    c.fillStyle = "#4a9e4f"; c.fillRect(x + 4 * u, ay, u, 3 * u); c.fillRect(x + 2 * u, ay + u, 2 * u, u);
+    c.fillStyle = "#ff9ad4";
+    c.fillRect(x + 2 * u, ay - 3 * u, 2 * u, 2 * u); c.fillRect(x + 6 * u, ay - 3 * u, 2 * u, 2 * u);
+    c.fillRect(x + 4 * u, ay - 5 * u, 2 * u, 2 * u); c.fillRect(x + 4 * u, ay - u, 2 * u, 2 * u);
+    c.fillRect(x + 3 * u, ay - 4 * u, u, u); c.fillRect(x + 6 * u, ay - 4 * u, u, u);
+    c.fillStyle = "#ffd75e"; c.fillRect(x + 4 * u, ay - 3 * u, 2 * u, 2 * u);
+  } else if (id === "phones") {
+    c.fillStyle = "#3a4048"; c.fillRect(x - 9 * u, ay - 2 * u, 18 * u, 2 * u);
+    c.fillRect(x - 10 * u, ay, 4 * u, 6 * u); c.fillRect(x + 6 * u, ay, 4 * u, 6 * u);
+    c.fillStyle = "#e05a6e"; c.fillRect(x - 9 * u, ay + u, 2 * u, 4 * u); c.fillRect(x + 7 * u, ay + u, 2 * u, 4 * u);
+    c.fillStyle = "#5a6470"; c.fillRect(x - 7 * u, ay - 2 * u, 14 * u, u);
+    c.fillStyle = "#2a3038"; c.fillRect(x + 9 * u, ay + 6 * u, u, 3 * u);
+  }
+}
+
+// ---------- breeding (makeHybrid port — palette/name/trait mixing) ----------
+let hybSeq = 1;
+function mixHex(h1, h2) {
+  const a = hexRgb(h1), b = hexRgb(h2);
+  return "#" + a.map((v, i) => Math.round((v + b[i]) / 2).toString(16).padStart(2, "0")).join("");
+}
+function makeHybrid(A, B) {
+  const pal = {
+    o: mixHex(A.pal.o, B.pal.o), b: mixHex(A.pal.b, B.pal.b),
+    l: mixHex(A.pal.l, B.pal.l), s: mixHex(A.pal.s, B.pal.s),
+    e: "#23332c", w: "#ffffff", m: "#23332c", k: mixHex(A.pal.k, B.pal.k),
+  };
+  const raw = A.name.slice(0, Math.ceil(A.name.length / 2)) + B.name.slice(Math.floor(B.name.length / 2));
+  const bump = A.r === B.r && Math.random() < 0.1 ? 1 : 0;
+  return {
+    id: `hyb${hybSeq++}`,
+    name: raw[0].toUpperCase() + raw.slice(1).toLowerCase(),
+    r: Math.min(2, Math.max(A.r, B.r) + bump),
+    shape: Math.random() < 0.5 ? A.shape : B.shape,
+    trait: Math.random() < 0.5 ? A.trait : B.trait,
+    mv: Math.random() < 0.5 ? A.mv : B.mv,
+    sig: Math.random() < 0.5 ? A.sig : B.sig,
+    pal,
+    top: Math.random() < 0.5 ? A.top : B.top,
+  };
+}

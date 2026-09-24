@@ -155,6 +155,27 @@
   #feed { border-color: var(--dim); color: var(--dim); }
   #feed:hover { background: var(--dim); color: var(--night); }
   #ranch:focus-visible { outline: 3px solid var(--jelly); outline-offset: 4px; }
+  #breed {
+    font-family: "Nunito", sans-serif; font-weight: 900; font-size: 14px;
+    color: #ff9ec6; background: transparent; border: 2px solid #ff9ec6;
+    padding: 11px 20px; cursor: pointer;
+    border-radius: 52% 48% 55% 45% / 58% 62% 38% 42%;
+    transition: transform .18s cubic-bezier(.34,1.56,.64,1), background .2s, color .2s;
+  }
+  #breed:hover { background: #ff9ec6; color: var(--night); transform: scale(1.06) rotate(1deg); }
+  #breed.on { background: #ff9ec6; color: var(--night); }
+  .toybox { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 12px; }
+  .toygrp { display: flex; align-items: center; gap: 6px; }
+  .toylbl { font-family: "Press Start 2P", monospace; font-size: 6.5px; color: var(--dim); margin-right: 3px; }
+  .toygrp button {
+    background: var(--panel); border: none; padding: 4px 6px; cursor: pointer;
+    transition: transform .15s, box-shadow .15s;
+    clip-path: polygon(0 5px, 2px 5px, 2px 2px, 5px 2px, 5px 0, calc(100% - 5px) 0, calc(100% - 5px) 2px, calc(100% - 2px) 2px, calc(100% - 2px) 5px, 100% 5px, 100% calc(100% - 5px), calc(100% - 2px) calc(100% - 5px), calc(100% - 2px) calc(100% - 2px), calc(100% - 5px) calc(100% - 2px), calc(100% - 5px) 100%, 5px 100%, 5px calc(100% - 2px), 2px calc(100% - 2px), 2px calc(100% - 5px), 0 calc(100% - 5px));
+  }
+  .toygrp button:hover { transform: translateY(-2px); }
+  .toygrp button.on { box-shadow: inset 0 0 0 2px var(--jelly); }
+  .toygrp canvas { display: block; image-rendering: pixelated; }
+  .hico { vertical-align: -4px; margin-right: 10px; image-rendering: pixelated; }
 
   /* ---------- keystroke economy ---------- */
   .eco { padding: 88px 0; }
@@ -306,14 +327,31 @@
         <div style="display:flex;gap:10px;flex-wrap:wrap">
           <button id="pull" type="button">✦ pull a pal</button>
           <button id="feed" type="button">drop a treat</button>
+          <button id="breed" type="button">breed ♥ 20</button>
         </div>
-        <div class="cap">boop · drag · feed · pull — or just type: they snack on keystrokes</div>
+        <div class="toybox">
+          <div class="toygrp"><span class="toylbl">props</span>
+            <button data-prop="cushion" type="button" title="nap cushion"><canvas class="pico" data-pico="cushion" width="34" height="22"></canvas></button>
+            <button data-prop="mat" type="button" title="bounce mat"><canvas class="pico" data-pico="mat" width="34" height="22"></canvas></button>
+            <button data-prop="plant" type="button" title="potted plant"><canvas class="pico" data-pico="plant" width="34" height="22"></canvas></button>
+            <button data-prop="jar" type="button" title="cookie jar"><canvas class="pico" data-pico="jar" width="34" height="22"></canvas></button>
+          </div>
+          <div class="toygrp"><span class="toylbl">dress</span>
+            <button data-acc="cap" type="button" title="cap"><canvas class="aico" data-aico="cap" width="30" height="18"></canvas></button>
+            <button data-acc="bow" type="button" title="bow"><canvas class="aico" data-aico="bow" width="30" height="18"></canvas></button>
+            <button data-acc="crown" type="button" title="crown"><canvas class="aico" data-aico="crown" width="30" height="18"></canvas></button>
+            <button data-acc="specs" type="button" title="specs"><canvas class="aico" data-aico="specs" width="30" height="18"></canvas></button>
+            <button data-acc="party" type="button" title="party hat"><canvas class="aico" data-aico="party" width="30" height="18"></canvas></button>
+            <button data-acc="flower" type="button" title="flower"><canvas class="aico" data-aico="flower" width="30" height="18"></canvas></button>
+          </div>
+        </div>
+        <div class="cap">boop · drag · feed · breed · props · dress — or just type: they snack on keystrokes</div>
       </div>
     </div>
   </section>
 
   <section class="eco">
-    <h2 class="big">You type. It eats.<br>Out pops jelly.</h2>
+    <h2 class="big"><canvas class="hico" data-ico="jelly" width="24" height="24"></canvas>You type. It eats.<br>Out pops jelly.</h2>
     <p style="margin-top:14px;color:var(--dim);max-width:56ch;line-height:1.65">
       The thing you were doing anyway is the gameplay loop — no grind, no ads.
       Try it above: type anywhere on this page and watch the counter.
@@ -329,7 +367,7 @@
 
   <section class="species" id="species">
     <div class="head">
-      <h2 class="big">48+ species, four rarities, one hybrid engine.</h2>
+      <h2 class="big"><canvas class="hico" data-ico="pal" width="34" height="24"></canvas>48+ species, four rarities, one hybrid engine.</h2>
       <p>each one moves, eats and acts differently</p>
     </div>
     <div class="dexfilter" role="group" aria-label="Filter by rarity">
@@ -346,7 +384,7 @@
   <div class="pxsep" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
 
   <section class="packs" id="jelly">
-    <h2 class="big" style="text-align:left">Jelly, for the impatient collector.</h2>
+    <h2 class="big" style="text-align:left"><canvas class="hico" data-ico="jar" width="26" height="24"></canvas>Jelly, for the impatient collector.</h2>
     <p style="margin-top:14px;color:var(--dim);max-width:56ch;line-height:1.65">
       Everything is earnable free by typing — packs just skip the wait.
       Buy a code on itch.io, redeem it in-game against your MY&nbsp;ID.
@@ -361,7 +399,7 @@
   </section>
 
   <section class="qa" id="qa">
-    <h2 class="big">Quick questions</h2>
+    <h2 class="big"><canvas class="hico" data-ico="mirror" width="22" height="26"></canvas>Quick questions</h2>
     <div class="qa-grid" style="margin-top:26px">
       <div><div class="q">Windows says "unrecognized app"?</div>
         <div class="a">Normal for a small unsigned app — choose <b>More info → Run anyway</b>.
@@ -377,7 +415,7 @@
   </section>
 
   <section class="recta">
-    <h2 class="big">Ready for a ranch of your own?</h2>
+    <h2 class="big"><canvas class="hico" data-ico="cushion" width="34" height="24"></canvas>Ready for a ranch of your own?</h2>
     <div class="cta" style="justify-content:center">
       <a class="btn" href="dl/Jellypal_0.2.0_x64-setup.exe">Download for Windows</a>
       <a class="link" href="dl/jellypal-0.2.0-win.zip">portable zip</a>
