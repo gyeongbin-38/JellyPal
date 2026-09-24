@@ -2,7 +2,7 @@
 const crypto = require("crypto");
 const fs = require("fs");
 
-const BASE = "https://jellypal-api.gyeongbin-38.workers.dev";
+const BASE = "https://api.jellypal.fun";
 const code = fs.readFileSync("_livetest_code.txt", "utf8").trim();
 const uid = "JPLIVEE2ETESTABCDEFGHIJ2XYZ".slice(0, 26);
 const uidB = "JP" + "Q".repeat(24);

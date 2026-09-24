@@ -308,7 +308,7 @@ const SERVER_PUBKEY: [u8; 32] = [
 ];
 // the deployed worker's URL — every server call degrades gracefully to the
 // offline path if this is unreachable
-const SERVER_URL: &str = "https://jellypal-api.gyeongbin-38.workers.dev";
+const SERVER_URL: &str = "https://api.jellypal.fun";
 
 fn curl_post(url: &str, body: &str) -> Option<String> {
     let out = std::process::Command::new("curl")

@@ -1,6 +1,7 @@
 name = "jellypal-api"
 main = "worker.js"
 compatibility_date = "2025-01-01"
+routes = ["api.jellypal.fun/*"]
 
 [[kv_namespaces]]
 binding = "DB"
