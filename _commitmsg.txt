@@ -1,18 +1,18 @@
-fix first-run polish: always breed a baby, 100 jelly start, owned filter default
+harden save/gacha edges from bug audit
 
-- doBreed: drop the 25% "surprise adult species" roll — breeding now
-  always produces a hybrid with bornAt, so the nursery always opens.
-  The adult roll read as 'breeding didn't work' on itch test runs.
-- starting jelly 10 -> 100 to match the stated onboarding grant
-- collection filter defaults to OWNED instead of ALL
-- RANCH header: clamp the dex counter (+hyb suffix / EVENT tag) so it
-  can't collide with the BREED button when numbers grow
-- version 0.2.0 -> 0.2.1; rebuild binaries (windres can't handle the
-  Korean home path — build staged under C:\build, ASCII-only)
+- hybSeq now clamps past every loaded hybrid id — a pre-hybSeq or
+  hand-edited save could mint a duplicate "hybN" on the next breed
+- owned list is deduped on load for the same reason
+- rollSpecies falls back to wider pools instead of returning undefined
+  into doPull if a rarity tier ever ends up empty
+- stale comment: breeding no longer mentions the removed 25% adult roll
 
-Note: 3 pals / placed props on the itch test were save carryover from
-%APPDATA%\com.jellypal.desktop\state.json, not the clean-start path —
-a fresh save still starts with only sprout and no props.
+Audit results (verified clean): all sfx.* -> SFX_DEFS, all drawSpr ids
+-> SPR, all TREATS ids -> SPR, every random-index site length-guarded,
+drag states covered by pointercancel + a 20s watchdog, _sim.cjs
+600 frames clean.
+
+Binaries rebuilt (0.2.1) with the audit guards + site hashes updated.
 
 Generated with [Devin](https://devin.ai)
 

@@ -1,12 +1,18 @@
+const urls = [
+  "https://jellypal.fun/",
+  "https://jellypal.fun/dl/Jellypal_0.2.1_x64-setup.exe",
+  "https://jellypal.fun/dl/jellypal-0.2.1-win.zip",
+];
 (async () => {
-  for (const [url, keys] of [
-    ['https://jellypal.fun', ['shot-desktop.png', 'og:image', 'favicon.png', 'deskshot']],
-    ['https://jellypal.fun/shot-desktop.png', []],
-    ['https://jellypal.fun/favicon.png', []],
-    ['https://jellypal.fun/nonexistent-page', ['404', 'wandered off']],
-  ]) {
-    const r = await fetch(url, { cache: 'no-store' });
-    const t = keys.length ? await r.text() : '';
-    console.log(url.padEnd(50), r.status, keys.map(k => t.includes(k) ? 'Y' : 'N').join(''));
+  for (const u of urls) {
+    const r = await fetch(u, { method: u.endsWith("/") || u.endsWith("fun/") ? "GET" : "HEAD" });
+    let extra = "";
+    if (u.endsWith("/")) {
+      const t = await r.text();
+      extra = `links0.2.1=${(t.match(/0\.2\.1/g) || []).length} hash=${/40b61b60/.test(t)}`;
+    } else {
+      extra = `size=${r.headers.get("content-length")}`;
+    }
+    console.log(r.status, u, extra);
   }
 })();

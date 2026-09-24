@@ -1967,7 +1967,14 @@ invoke("load_state").then((txt) => {
       slotPh.push(Math.random() * 5);
     }
   }
+  // hybSeq must stay ahead of every saved hybrid id — a pre-hybSeq save
+  // (or a hand-edited one) would otherwise mint a duplicate "hybN"
+  for (const p of SPECIES) {
+    const m = /^hyb(\d+)$/.exec(p.id);
+    if (m) hybSeq = Math.max(hybSeq, +m[1] + 1);
+  }
   if (Array.isArray(s.owned) && s.owned.length) owned = s.owned;
+  owned = [...new Set(owned)];
   owned = owned.filter((id) => SPECIES.some((p) => p.id === id));
   if (!owned.length) owned = ["sprout"];
   if (Array.isArray(s.accOwned)) accOwned = s.accOwned.filter((id) => ACCS.some((a) => a.id === id));
@@ -5699,7 +5706,11 @@ function rollSpecies() {
   }
   if (r >= 1) pityRare = 0;
   if (r >= 3) pityLeg = 0;
-  const pool = SPECIES.filter((s) => s.r === r && !s.id.startsWith("hyb") && seasonOpen(s));
+  let pool = SPECIES.filter((s) => s.r === r && !s.id.startsWith("hyb") && seasonOpen(s));
+  // safety net: an empty tier (e.g. a future all-seasonal rarity, or a
+  // corrupted species list) must never return undefined into doPull
+  if (!pool.length) pool = SPECIES.filter((s) => !s.id.startsWith("hyb") && seasonOpen(s));
+  if (!pool.length) pool = SPECIES.filter((s) => !s.id.startsWith("hyb"));
   // weekly spotlight: this week's featured species gets a 15% boost
   const spot = spotIdx();
   if (spot && pool.includes(spot) && Math.random() < 0.15) return spot;
@@ -5738,8 +5749,8 @@ function doPull() {
   setTimeout(() => sfx.reveal(), 700);
 }
 
-// breeding: two parents -> hybrid mixing their colors, or (25%) an
-// unowned base species. legendary never comes from breeding.
+// breeding: two parents -> a hybrid baby mixing their colors.
+// legendary never comes from breeding.
 function mixHex(h1, h2) {
   const a = hexRgb(h1);
   const b = hexRgb(h2);
