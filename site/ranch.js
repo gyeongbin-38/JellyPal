@@ -41,7 +41,7 @@ const p = {
   id: "sprout", spIdx: 0, x: 0, y: 0, vx: 0, vy: 0, face: 0, faceT: 0,
   tx: 0, walkT: null, jumpT: 0, scurry: null, blinkCd: 0, blinkFx: 0,
   blink: false, bt: 0, squash: 0, hapT: 0, lvT: 0, stT: 0, slpT: 0,
-  held: false, heldT: 0, ph: rng(7),
+  held: false, heldT: 0, flying: false, landPeak: 0, ph: rng(7),
 };
 p.spIdx = SPECIES.findIndex(s => s.id === p.id); if (p.spIdx < 0) p.spIdx = 0;
 function land() { p.y = GY() - idleOf(p.spIdx).height / 2 + 2; }
@@ -61,18 +61,48 @@ function boop() {
 
 /* ---------- pointer: look + boop + drag ---------- */
 let mx = -999, my = 0;
+let dragVX = 0, dragVY = 0, dragLastX = 0, dragLastY = 0, dragLastT = 0;
 function toCv(e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
-cv.addEventListener("pointermove", e => { [mx, my] = toCv(e); });
+cv.addEventListener("pointermove", e => {
+  const [nx, ny] = toCv(e);
+  if (p.held) {
+    const now = performance.now();
+    const dt = Math.max(1, now - dragLastT);
+    const ivx = (nx - dragLastX) / dt * 1000, ivy = (ny - dragLastY) / dt * 1000;
+    /* Same 70/30 pointer-velocity filter as the production app. */
+    dragVX = dragVX * 0.7 + ivx * 0.3;
+    dragVY = dragVY * 0.7 + ivy * 0.3;
+    dragLastX = nx; dragLastY = ny; dragLastT = now;
+  }
+  mx = nx; my = ny;
+});
 cv.addEventListener("pointerleave", () => { mx = -999; });
 cv.addEventListener("pointerdown", e => {
   e.preventDefault(); [mx, my] = toCv(e);
   const spr = idleOf(p.spIdx);
   if (!p.held && Math.abs(mx - p.x) < spr.width / 2 + 10 && Math.abs(my - p.y) < spr.height / 2 + 12) {
-    p.held = true; p.heldT = 0; p.slpT = 0; p.walkT = null; p.scurry = null;
+    p.held = true; p.flying = false; p.heldT = 0; p.slpT = 0; p.walkT = null; p.scurry = null;
+    dragVX = 0; dragVY = 0; dragLastX = mx; dragLastY = my; dragLastT = performance.now();
     cv.setPointerCapture(e.pointerId);
   } else boop();
 });
-cv.addEventListener("pointerup", () => { if (p.held) { p.held = false; p.vy = 1.2; p.face = 4; p.faceT = 70; } });
+cv.addEventListener("pointerup", () => {
+  if (!p.held) return;
+  p.held = false; p.flying = true; p.landPeak = 0; p.face = 4; p.faceT = 70;
+  const speed = Math.hypot(dragVX, dragVY);
+  if (speed > 400) {
+    p.vx = dragVX * 0.6 / 60;
+    const appVY = Math.min(dragVY * 0.6, 0) - 120;
+    p.vy = -appVY / 60;
+  } else {
+    p.vx = 0; p.vy = 0;
+    p.squash = Math.max(p.squash, 0.28);
+  }
+});
+cv.addEventListener("pointercancel", () => {
+  if (!p.held) return;
+  p.held = false; p.flying = true; p.vx = 0; p.vy = 0;
+});
 cv.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); boop(); } });
 
 /* typing anywhere → jelly drop flies to counter (game loop, demo speed) */
@@ -87,7 +117,9 @@ let paused = false;
 const mot = document.getElementById("mot");
 if (mot) mot.addEventListener("click", () => {
   paused = !paused;
-  mot.textContent = paused ? "resume motion" : "pause motion";
+  const label = paused ? "resume motion" : "pause motion";
+  if (window.setSpriteText && mot.querySelector(".sprite-text-wrap")) window.setSpriteText(mot, label);
+  else mot.textContent = label;
   mot.setAttribute("aria-pressed", String(paused));
 });
 let last = 0;
@@ -134,13 +166,56 @@ function tick(ts) {
     p.face = ((p.heldT | 0) % 90 < 45) ? 10 : 11;
     if (sp.id === "spidr" && Math.random() < T * 0.08) sparkBurst(p.x, p.y + 10, "#cfc4f5", 2);
   } else {
-    /* gravity */
-    p.vy -= 0.055 * T; p.y -= p.vy * T;
     const fl = GY() - spr.height / 2 + 2;
-    if (p.y > fl) { p.y = fl; if (p.vy < -1.4) { p.squash = Math.max(p.squash, 0.5); p.vy = 0.4; } else p.vy = 0; }
+    if (p.flying) {
+      /* Production throw physics: 1600px/s² gravity, velocity-preserving
+         throws, wall rebound, and impact-dependent floor bounce. */
+      p.vy -= (1600 / 3600) * T;
+      p.landPeak = Math.max(p.landPeak, Math.abs(p.vy * 60));
+      p.x += p.vx * T; p.y -= p.vy * T;
+      if (p.y < 14) {
+        p.y = 14;
+        p.vy = -(Math.abs(p.vy) * 0.45 + 1);
+        p.squash = Math.max(p.squash, 0.35);
+        ring(p.x, p.y, "#a99be8", 13);
+      }
+      const lo = 14 + spr.width / 2, hi = W - 14 - spr.width / 2;
+      if (p.x < lo || p.x > hi) {
+        p.x = Math.max(lo, Math.min(hi, p.x));
+        p.vx = -p.vx * 0.5;
+        p.squash = Math.max(p.squash, 0.35);
+        ring(p.x, p.y, "#a99be8", 13);
+      }
+      if (p.y > fl) {
+        p.y = fl;
+        const downSpeed = Math.max(0, -p.vy * 60);
+        if (downSpeed > 800) {
+          p.vy = downSpeed * 0.3 / 60;
+          p.vx *= 0.72;
+          p.squash = 1;
+          p.face = 9; p.faceT = 75;
+          ring(p.x, fl + spr.height / 2, "#eec23f", 28);
+          sparkBurst(p.x, fl + 5, "#c8b8a0", 12);
+        } else if (downSpeed > 120) {
+          p.vy = downSpeed * 0.42 / 60;
+          p.vx *= 0.78;
+          p.squash = Math.max(p.squash, Math.min(0.78, 0.38 + downSpeed / 1000));
+          ring(p.x, fl + spr.height / 2, "#8fe8c0", 18);
+          for (let i = 0; i < 5; i++) fxAt(p.x + rng(24) - 12, fl + 8, "mote", "#a99a82");
+        } else {
+          p.flying = false; p.vy = 0; p.vx = 0;
+          p.squash = Math.max(p.squash, 0.3 + Math.min(0.45, p.landPeak * 0.0006));
+          p.landPeak = 0;
+          ring(p.x, fl + spr.height / 2, "#8fe8c0", 12);
+        }
+      }
+    } else {
+      /* lightweight idle-hop physics used only after the throw settles */
+      p.vy -= 0.055 * T; p.y -= p.vy * T;
+      if (p.y > fl) { p.y = fl; if (p.vy < -1.4) { p.squash = Math.max(p.squash, 0.5); p.vy = 0.4; } else p.vy = 0; }
 
-    /* movement style */
-    const onG = p.y >= fl - 1;
+      /* movement style */
+      const onG = p.y >= fl - 1;
     if (sp.mv === "blink") {
       p.blinkCd -= T;
       if (p.blinkCd <= 0 && onG && p.slpT <= 0) {
@@ -172,7 +247,8 @@ function tick(ts) {
       if (Math.random() < 0.12) { p.slpT = 240 + rng(160); p.face = 8; p.faceT = 9999; }
       else { p.tx = 16 + spr.width / 2 + Math.random() * (W - 32 - spr.width); p.walkT = 1; }
     }
-    if (p.blinkFx > 0) p.blinkFx -= T;
+      if (p.blinkFx > 0) p.blinkFx -= T;
+    }
   }
 
   /* face: cursor look + blink */

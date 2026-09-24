@@ -6,3 +6,12 @@ routes = ["api.jellypal.fun/*"]
 [[kv_namespaces]]
 binding = "DB"
 id = "1163fcfd92264e52889c0306ae51d529"
+
+# Stripe checkout.session.amount_total (cents) -> pack letter.
+# Payment links don't carry their own metadata onto the session, so the
+# webhook maps the paid amount instead. $1.00/$1.79/$2.99/$5.99 -> A/B/C/D.
+[vars]
+PRICE_100 = "A"
+PRICE_179 = "B"
+PRICE_299 = "C"
+PRICE_599 = "D"

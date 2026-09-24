@@ -14,20 +14,8 @@
 <link rel="icon" type="image/png" href="favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800;900&family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="components.css">
 <style>
-  :root {
-    --night: #0e0b1e;
-    --deep:  #17122e;
-    --panel: #1e1840;
-    --edge:  #2d2454;
-    --ink:   #ece8fb;
-    --dim:   #9c92d0;
-    --jelly: #8fe8c0;
-    --jelly-shadow: #2e5a44;
-    --gold:  #eec23f;
-    --r-lg: 22px;
-    --r-md: 14px;
-  }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html { scroll-behavior: smooth; }
   body {
@@ -42,12 +30,6 @@
     background: var(--jelly); color: var(--night); padding: 10px 16px; font-weight: 800;
   }
   .skip:focus { left: 12px; top: 12px; }
-  ::selection { background: var(--jelly); color: var(--night); }
-  a:focus-visible, button:focus-visible, summary:focus-visible {
-    outline: 3px solid var(--jelly); outline-offset: 3px; border-radius: 6px;
-  }
-
-  .px { font-family: "Press Start 2P", monospace; }
   .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
 
   /* ---------- top bar ---------- */
@@ -66,24 +48,6 @@
   .bar nav a:hover { text-decoration: none; box-shadow: 0 2px 0 var(--jelly), 0 4px 0 var(--jelly-shadow); }
 
   /* ---------- pixel world ---------- */
-  /* stepped corner: 2px pixel notch on every panel corner */
-  .pxframe {
-    clip-path: polygon(
-      0 10px, 4px 10px, 4px 4px, 10px 4px, 10px 0,
-      calc(100% - 10px) 0, calc(100% - 10px) 4px, calc(100% - 4px) 4px, calc(100% - 4px) 10px, 100% 10px,
-      100% calc(100% - 10px), calc(100% - 4px) calc(100% - 10px), calc(100% - 4px) calc(100% - 4px),
-      calc(100% - 10px) calc(100% - 4px), calc(100% - 10px) 100%,
-      10px 100%, 10px calc(100% - 4px), 4px calc(100% - 4px), 4px calc(100% - 10px), 0 calc(100% - 10px)
-    );
-  }
-  /* jelly dither — the game's own translucent checker, as surface grain */
-  .dither {
-    background-image:
-      linear-gradient(45deg, rgba(143,232,192,.035) 25%, transparent 25%, transparent 75%, rgba(143,232,192,.035) 75%),
-      linear-gradient(45deg, rgba(143,232,192,.035) 25%, transparent 25%, transparent 75%, rgba(143,232,192,.035) 75%);
-    background-size: 4px 4px;
-    background-position: 0 0, 2px 2px;
-  }
   /* pixel divider — stepped pixel row between sections */
   .pxsep { display: flex; gap: 6px; align-items: center; padding: 10px 0 0; }
   .pxsep i { width: 8px; height: 8px; background: var(--edge); }
@@ -106,35 +70,11 @@
   }
   .hero h1 .squish { color: var(--jelly); }
   .hero .sub { margin-top: 20px; font-size: 17px; line-height: 1.6; color: var(--dim); max-width: 42ch; }
-  .cta { margin-top: 32px; display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
-  .btn {
-    display: inline-block; padding: 16px 26px; font-weight: 900; font-size: 15px;
-    color: var(--night); background: var(--jelly); text-decoration: none;
-    border-radius: 46% 54% 52% 48% / 62% 56% 44% 38%;
-    transition: transform .18s cubic-bezier(.34,1.56,.64,1), border-radius .25s;
-  }
-  .btn:hover { transform: scale(1.05) rotate(-1deg); border-radius: 50% 50% 48% 52% / 44% 60% 40% 56%; }
-  .btn:active { transform: scale(.96); }
-  .link { color: var(--dim); font-weight: 700; font-size: 14px; text-decoration: none; border-bottom: 2px solid var(--edge); transition: color .2s, border-color .2s; }
-  .link:hover { color: var(--ink); border-color: var(--jelly); }
+  .cta { margin-top: 32px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
   .sys { margin-top: 18px; font-size: 12.5px; color: var(--dim); }
 
   /* the ranch frame */
   .stage { position: relative; }
-  .stage .frame {
-    background: var(--deep); border: 2px solid var(--edge);
-    overflow: hidden;
-  }
-  .frame .titlebar {
-    display: flex; align-items: center; gap: 8px; padding: 10px 14px;
-    background: var(--panel); border-bottom: 2px solid var(--edge);
-    font-size: 12px; color: var(--dim); font-weight: 700;
-  }
-  .titlebar .dot { width: 10px; height: 10px; border-radius: 50%; }
-  .titlebar .dot:nth-child(1) { background: #4a3f8a; }
-  .titlebar .dot:nth-child(2) { background: #3a2f6b; }
-  .titlebar .dot:nth-child(3) { background: #2d2454; }
-  .titlebar span { margin-left: 6px; }
   #ranch { display: block; width: 100%; height: 300px; }
   .stage .cap { margin-top: 14px; font-size: 12.5px; color: var(--dim); text-align: center; }
   #ranch { cursor: grab; }
@@ -189,7 +129,7 @@
 
   /* ---------- the loop: type -> jelly -> collect ---------- */
   .loop { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 14px; align-items: center; margin-top: 34px; }
-  .lstep { background: var(--panel); padding: 22px 14px 18px; text-align: center; }
+  .lstep { padding: 22px 14px 18px; text-align: center; }
   .lstep .lt { font-weight: 900; font-size: 14.5px; margin-top: 12px; }
   .lstep .ld { color: var(--dim); font-size: 12px; margin-top: 4px; line-height: 1.45; }
   .larrow { font-family: "Press Start 2P", monospace; color: var(--jelly); font-size: 14px; }
@@ -221,16 +161,31 @@
   .pack .usd { color: var(--dim); font-size: 14px; margin-top: 2px; font-variant-numeric: tabular-nums; }
   .pack.best { background: #241d4e; border: 2px solid var(--gold); transform: translateY(-10px); }
   .pack.best:hover { transform: translateY(-14px); }
-  .pack .flag { font-size: 11px; font-weight: 900; color: var(--gold); letter-spacing: .06em; }
+  .pack .flag { font-size: 11px; font-weight: 900; letter-spacing: .06em; }
   .pack .amt small { font-size: 10px; color: var(--dim); font-weight: 900; letter-spacing: .08em; }
-  .packbuy {
-    margin-top: 12px; font-family: "Press Start 2P", monospace; font-size: 7px;
-    background: transparent; color: var(--dim); border: none; padding: 8px 10px;
-    letter-spacing: .04em;
-  }
-  .packbuy:not([disabled]) { color: var(--jelly); cursor: pointer; }
-  .packbuy:not([disabled]):hover { color: #fff; box-shadow: 0 2px 0 var(--jelly); }
+  .packbuy { margin-top: 12px; }
   .packs .note { text-align: center; margin-top: 26px; color: var(--dim); font-size: 13.5px; line-height: 1.7; }
+  .note.bad { color: var(--danger); }
+
+  /* ---------- my id + checkout ---------- */
+  .myid {
+    margin-top: 26px; padding: 18px 20px;
+    display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+  }
+  .myidt { display: block; font-weight: 900; font-size: 14px; }
+  .myidh { margin-top: 3px; color: var(--dim); font-size: 12px; }
+  #myid {
+    flex: 1 1 300px; min-height: 48px; padding: 10px 16px;
+    font-family: "Press Start 2P", monospace; font-size: 10.5px; letter-spacing: .05em;
+    color: var(--jelly); background: var(--night);
+    border: 2px solid var(--edge); border-radius: 10px;
+    outline: none; transition: border-color .18s, box-shadow .18s;
+  }
+  #myid::placeholder { color: #4d4378; }
+  #myid:focus { border-color: var(--jelly); }
+  #myid.ok { border-color: var(--jelly); box-shadow: 0 0 0 3px var(--jelly-glow); }
+  #myid.bad { border-color: var(--danger); animation: myidno .3s; }
+  @keyframes myidno { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
   .hash { font-family: monospace; font-size: 10.5px; color: var(--jelly); word-break: break-all; display: inline-block; margin-top: 4px; }
   .safe { padding: 88px 0 30px; }
   #mot {
@@ -244,7 +199,7 @@
 
   /* ---------- qa ---------- */
   .qa { padding: 88px 0 40px; }
-  .qa-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 48px; }
+  .qa-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .qa .q { font-weight: 800; font-size: 15.5px; }
   .qa .a { margin-top: 6px; color: var(--dim); font-size: 14px; line-height: 1.65; }
 
@@ -295,7 +250,7 @@
       <a href="#jelly">Jelly</a>
       <a href="#qa">Questions</a>
       <a href="https://github.com/gyeongbin-38/JellyPal">GitHub</a>
-      <a class="navdl" href="dl/Jellypal_0.2.0_x64-setup.exe">Download</a>
+      <a class="navdl jp-button jp-button--small jp-button--secondary" href="dl/Jellypal_0.2.0_x64-setup.exe">Download</a>
     </nav>
   </div>
 
@@ -307,15 +262,19 @@
       then spend it on new species, hybrids and accessories.
       That one on the right is the real sprite — go on, boop it.</p>
       <div class="cta">
-        <a class="btn" href="dl/Jellypal_0.2.0_x64-setup.exe">Download for Windows</a>
-        <a class="link" href="dl/jellypal-0.2.0-win.zip">or grab the portable zip</a>
+        <a class="jp-button jp-button--primary" href="dl/Jellypal_0.2.0_x64-setup.exe">Download for Windows</a>
+        <a class="jp-button jp-button--quiet" href="dl/jellypal-0.2.0-win.zip">or grab the portable zip</a>
       </div>
-      <div class="sys">Windows 10/11 64-bit · 1.7 MB download · free to start · no account</div>
-      <div class="sys" style="margin-top:8px">First run? Windows may warn — <b style="color:var(--ink)">More info → Run anyway</b>. It's a plain local app.</div>
+      <div class="jp-meta" role="list" aria-label="Download details">
+        <span class="jp-chip" role="listitem">Windows 10/11</span>
+        <span class="jp-chip" role="listitem">Only 1.7 MB</span>
+        <span class="jp-chip" role="listitem">No account</span>
+      </div>
+      <div class="sys">First run? Windows may warn — <b style="color:var(--ink)">More info → Run anyway</b>. It's a plain local app.</div>
     </div>
     <div class="stage">
-      <div class="frame pxframe">
-        <div class="titlebar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span>ranch — live</span></div>
+      <div class="frame jp-window pxframe">
+        <div class="titlebar jp-window__bar"><i class="dot jp-window__dot"></i><i class="dot jp-window__dot"></i><i class="dot jp-window__dot"></i><span class="jp-window__title">ranch</span><span class="jp-window__status">live</span></div>
         <canvas id="ranch" width="640" height="300" role="button" aria-label="A live jelly slime on a night ranch. It watches your cursor — press Enter or click to boop it, drag to pick it up, or just type anywhere."></canvas>
       </div>
       <div class="cap">browser preview — same sprite and behavior as the app.<br>
@@ -325,31 +284,34 @@
   </section>
 
   <section class="eco">
-    <h2 class="big"><canvas class="hico" data-ico="jelly" width="24" height="24"></canvas>You type. It eats.<br>Out pops jelly.</h2>
-    <p style="margin-top:14px;color:var(--dim);max-width:56ch;line-height:1.65">
+    <div class="jp-section-head">
+      <div class="jp-eyebrow">the tiny loop</div>
+      <h2 class="jp-heading"><canvas class="hico" data-ico="jelly" width="24" height="24"></canvas>You type. It eats.<br>Out pops jelly.</h2>
+    </div>
+    <p class="jp-lede">
       The thing you were doing anyway is the gameplay loop — no grind, no ads.
       Try it above: type anywhere on this page and watch the counter.
     </p>
     <div class="loop">
-      <div class="lstep pxframe"><div class="keycap">A</div><div class="lt">you type</div><div class="ld">work, chat, game — every key counts</div></div>
+      <div class="lstep jp-card jp-card--lift"><div class="keycap">A</div><div class="lt">you type</div><div class="ld">work, chat, game — every key counts</div></div>
       <div class="larrow">▶</div>
-      <div class="lstep pxframe"><canvas class="lico" width="52" height="40" data-lico="jelly"></canvas><div class="lt">600 keys = 1 jelly</div><div class="ld">a few minutes of normal typing</div></div>
+      <div class="lstep jp-card jp-card--lift"><canvas class="lico" width="52" height="40" data-lico="jelly"></canvas><div class="lt">600 keys = 1 jelly</div><div class="ld">a few minutes of normal typing</div></div>
       <div class="larrow">▶</div>
-      <div class="lstep pxframe"><canvas class="lico" width="52" height="40" data-lico="pal"></canvas><div class="lt">jelly = new friends</div><div class="ld">pull species, breed hybrids, dress them up</div></div>
+      <div class="lstep jp-card jp-card--lift"><canvas class="lico" width="52" height="40" data-lico="pal"></canvas><div class="lt">jelly = new friends</div><div class="ld">pull species, breed hybrids, dress them up</div></div>
     </div>
   </section>
 
   <section class="deskshot">
-    <div class="frame pxframe">
-      <div class="titlebar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span>your desktop, with pals</span></div>
+    <div class="frame jp-window pxframe">
+      <div class="titlebar jp-window__bar"><i class="dot jp-window__dot"></i><i class="dot jp-window__dot"></i><i class="dot jp-window__dot"></i><span class="jp-window__title">your desktop, with pals</span></div>
       <img src="shot-desktop.png" alt="Three jelly slimes on a dark desktop — one naps on a notes window title bar, one floats beside the cursor, one munches a snack near the taskbar" width="960" height="540">
     </div>
     <div class="cap">that's the whole app — transparent overlay, always on top, never in the way</div>
   </section>
 
   <section class="species" id="species">
-    <div class="head">
-      <h2 class="big"><canvas class="hico" data-ico="pal" width="34" height="24"></canvas>48+ species, four rarities, one hybrid engine.</h2>
+    <div class="head jp-section-head jp-section-head--row">
+      <div><div class="jp-eyebrow">meet the pals</div><h2 class="jp-heading"><canvas class="hico" data-ico="pal" width="34" height="24"></canvas>48+ species, four rarities, one hybrid engine.</h2></div>
       <p>each one moves, eats and acts differently</p>
     </div>
     <div class="dexfilter" role="group" aria-label="Filter by rarity">
@@ -359,77 +321,85 @@
       <button data-r="2" type="button">EPIC</button>
       <button data-r="3" type="button">LEGEND</button>
     </div>
-    <div class="dex" id="dex" aria-label="Species catalog"></div>
+    <div class="dex" id="dex" role="region" aria-label="Species catalog"></div>
     <button id="dexmore" type="button">show all 48 species ▾</button>
   </section>
 
   <div class="pxsep" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
 
   <section class="packs" id="jelly">
-    <h2 class="big" style="text-align:left"><canvas class="hico" data-ico="jar" width="26" height="24"></canvas>Jelly, for the impatient collector.</h2>
-    <p style="margin-top:14px;color:var(--dim);max-width:56ch;line-height:1.65">
-      Everything is earnable free by typing — packs just skip the wait.
-      Buy a code on itch.io, redeem it in-game against your MY&nbsp;ID.
-    </p>
-    <div class="pack-row" style="margin-top:30px">
-      <div class="pack pxframe dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">250 <small>JELLY</small></div><div class="usd">$1.00 · ≈5 pulls</div><button class="packbuy" type="button" disabled>itch.io — soon</button></div>
-      <div class="pack pxframe dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">500 <small>JELLY</small></div><div class="usd">$1.79 · ≈10 pulls</div><button class="packbuy" type="button" disabled>itch.io — soon</button></div>
-      <div class="pack best pxframe dither"><div class="flag">BEST VALUE</div><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">1000 <small>JELLY</small></div><div class="usd">$2.99 · ≈20 pulls</div><button class="packbuy" type="button" disabled>itch.io — soon</button></div>
-      <div class="pack pxframe dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">2500 <small>JELLY</small></div><div class="usd">$5.99 · ≈50 pulls</div><button class="packbuy" type="button" disabled>itch.io — soon</button></div>
+    <div class="jp-section-head">
+      <div class="jp-eyebrow">optional shortcut</div>
+      <h2 class="jp-heading"><canvas class="hico" data-ico="jar" width="26" height="24"></canvas>Jelly, for the impatient collector.</h2>
     </div>
-    <div class="note">One-time purchase, not a subscription. How it works: find your <b>MY&nbsp;ID</b> in the app's
-    settings → buy a code on itch.io → redeem it in-game. Pulls cost 50 jelly · breeds cost 20 ·
-    premium accessories 800–1400 — and every drop is earnable free by typing.</div>
+    <p class="jp-lede">
+      Everything is earnable free by typing — packs just skip the wait.
+      Pay once on Stripe and the jelly lands in your app automatically.
+      No codes to type, no account to make.
+    </p>
+    <div class="myid jp-card">
+      <div class="myidl">
+        <label class="myidt" for="myid">your MY&nbsp;ID</label>
+        <div class="myidh">in the app: settings → MY&nbsp;ID → tap to copy</div>
+      </div>
+      <input id="myid" name="myid" type="text" inputmode="latin" autocomplete="off" spellcheck="false"
+        maxlength="26" placeholder="JPXXXXXXXXXXXXXXXXXXXXXXXX" aria-describedby="myidhint">
+    </div>
+    <div class="pack-row" style="margin-top:22px">
+      <div class="pack jp-card jp-card--lift dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">250 <small>JELLY</small></div><div class="usd">$1.00 · ≈5 pulls</div><a class="packbuy jp-button jp-button--small jp-button--secondary" data-pack="A" role="button">buy · $1.00</a></div>
+      <div class="pack jp-card jp-card--lift dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">500 <small>JELLY</small></div><div class="usd">$1.79 · ≈10 pulls</div><a class="packbuy jp-button jp-button--small jp-button--secondary" data-pack="B" role="button">buy · $1.79</a></div>
+      <div class="pack best jp-card jp-card--lift dither"><div class="jp-badge jp-badge--gold flag">best value</div><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">1000 <small>JELLY</small></div><div class="usd">$2.99 · ≈20 pulls</div><a class="packbuy jp-button jp-button--small jp-button--primary" data-pack="C" role="button">buy · $2.99</a></div>
+      <div class="pack jp-card jp-card--lift dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">2500 <small>JELLY</small></div><div class="usd">$5.99 · ≈50 pulls</div><a class="packbuy jp-button jp-button--small jp-button--secondary" data-pack="D" role="button">buy · $5.99</a></div>
+    </div>
+    <div class="note" id="myidhint">One-time purchase, not a subscription. Paste your <b>MY&nbsp;ID</b> above,
+    then check out — Stripe sends the jelly to that install (usually within a minute; open the app and it arrives).
+    Pulls cost 50 jelly · breeds cost 20 · premium accessories 800–1400 — and every drop is earnable free by typing.</div>
   </section>
 
   <section class="safe" id="safe">
-    <h2 class="big"><canvas class="hico" data-ico="jar" width="26" height="24"></canvas>Small, local, verifiable.</h2>
+    <div class="jp-section-head">
+      <div class="jp-eyebrow">quiet by design</div>
+      <h2 class="jp-heading"><canvas class="hico" data-ico="jar" width="26" height="24"></canvas>Small, local, verifiable.</h2>
+    </div>
     <div class="qa-grid" style="margin-top:26px">
-      <div><div class="q">Tiny by design</div>
-        <div class="a">1.7 MB installer · 2.1 MB zip. It sips CPU and sleeps when you do —
+      <div class="jp-info-card"><div class="jp-info-card__title">Tiny by design</div>
+        <div class="jp-info-card__body">1.7 MB installer · 2.1 MB zip. It sips CPU and sleeps when you do —
         built for small laptops.</div></div>
-      <div><div class="q">Your typing stays yours</div>
-        <div class="a">Keystrokes are <b>counted, never read</b> — the app can't see what you type.
+      <div class="jp-info-card"><div class="jp-info-card__title">Your typing stays yours</div>
+        <div class="jp-info-card__body">Keystrokes are <b>counted, never read</b> — the app can't see what you type.
         The only network call is redeeming a jelly code. No account, no ads, no tracking.</div></div>
-      <div><div class="q">Why does Windows warn?</div>
-        <div class="a">Jellypal isn't code-signed (a certificate costs ~$300/yr — hard to justify
+      <div class="jp-info-card"><div class="jp-info-card__title">Why does Windows warn?</div>
+        <div class="jp-info-card__body">Jellypal isn't code-signed (a certificate costs ~$300/yr — hard to justify
         for a $3 slime). Choose <b>More info → Run anyway</b>, and only download from
         <b>jellypal.fun</b>.</div></div>
-      <div><div class="q">Verify your download</div>
-        <div class="a">SHA-256, checkable with <code>certutil -hashfile</code>:<br>
+      <div class="jp-info-card"><div class="jp-info-card__title">Verify your download</div>
+        <div class="jp-info-card__body">SHA-256, checkable with <code>certutil -hashfile</code>:<br>
         <code class="hash">setup.exe&nbsp; e09642049719d9eb36fd3212efae73a012e5198b4781f922b5e60b1c9baf45de</code><br>
         <code class="hash">win.zip&nbsp;&nbsp;&nbsp; 55709b604dd254e75e079bcadaa366e21a4904ae72b6a3a0aa013853ca283c36</code></div></div>
     </div>
   </section>
 
   <section class="qa" id="qa">
-    <h2 class="big"><canvas class="hico" data-ico="mirror" width="22" height="26"></canvas>Quick questions</h2>
+    <div class="jp-section-head">
+      <div class="jp-eyebrow">before you ask</div>
+      <h2 class="jp-heading"><canvas class="hico" data-ico="mirror" width="22" height="26"></canvas>Quick questions</h2>
+    </div>
     <div class="qa-grid" style="margin-top:26px">
-      <div><div class="q">Windows says "unrecognized app"?</div>
-        <div class="a">Normal for a small unsigned app — choose <b>More info → Run anyway</b>.
-        Jellypal is a plain local app. No ads, no tracking, no account.</div></div>
-      <div><div class="q">Installer or zip?</div>
-        <div class="a">The installer puts it in C:\Jellypal and bundles WebView2. The zip runs
-        from anywhere but needs Edge WebView2 already installed (most Windows 11 PCs have it).</div></div>
-      <div><div class="q">Will it slow my laptop?</div>
-        <div class="a">It's a ~2 MB app built for small machines — it sips CPU and sleeps when you do.</div></div>
-      <div><div class="q">Does it record what I type?</div>
-        <div class="a">No — it counts keystrokes, it can't read them. What you type never leaves your PC.</div></div>
-      <div><div class="q">Does it need internet?</div>
-        <div class="a">Only when you redeem a jelly code. Everything else runs fully offline.</div></div>
-      <div><div class="q">How do I uninstall?</div>
-        <div class="a">Installer: remove it from Windows Settings → Apps. Zip: delete the folder.
-        Your save lives in the app's data folder and goes with it.</div></div>
-      <div><div class="q">Mac version?</div>
-        <div class="a">In the works. Windows first.</div></div>
+      <details class="jp-disclosure" open><summary>Windows says "unrecognized app"?</summary><div class="jp-disclosure__body">Normal for a small unsigned app — choose <b>More info → Run anyway</b>. Jellypal is a plain local app. No ads, no tracking, no account.</div></details>
+      <details class="jp-disclosure"><summary>Installer or zip?</summary><div class="jp-disclosure__body">The installer puts it in C:\Jellypal and bundles WebView2. The zip runs from anywhere but needs Edge WebView2 already installed (most Windows 11 PCs have it).</div></details>
+      <details class="jp-disclosure"><summary>Will it slow my laptop?</summary><div class="jp-disclosure__body">It's a ~2 MB app built for small machines — it sips CPU and sleeps when you do.</div></details>
+      <details class="jp-disclosure"><summary>Does it record what I type?</summary><div class="jp-disclosure__body">No — it counts keystrokes, it can't read them. What you type never leaves your PC.</div></details>
+      <details class="jp-disclosure"><summary>Does it need internet?</summary><div class="jp-disclosure__body">Only when you redeem a jelly code. Everything else runs fully offline.</div></details>
+      <details class="jp-disclosure"><summary>How do I uninstall?</summary><div class="jp-disclosure__body">Installer: remove it from Windows Settings → Apps. Zip: delete the folder. Your save lives in the app's data folder and goes with it.</div></details>
+      <details class="jp-disclosure"><summary>Mac version?</summary><div class="jp-disclosure__body">In the works. Windows first.</div></details>
     </div>
   </section>
 
   <section class="recta">
     <h2 class="big"><canvas class="hico" data-ico="cushion" width="34" height="24"></canvas>Ready for a ranch of your own?</h2>
     <div class="cta" style="justify-content:center">
-      <a class="btn" href="dl/Jellypal_0.2.0_x64-setup.exe">Download for Windows</a>
-      <a class="link" href="dl/jellypal-0.2.0-win.zip">portable zip</a>
+      <a class="jp-button jp-button--primary" href="dl/Jellypal_0.2.0_x64-setup.exe">Download for Windows</a>
+      <a class="jp-button jp-button--quiet" href="dl/jellypal-0.2.0-win.zip">portable zip</a>
     </div>
     <div class="trust">Free to start · 1.7 MB · no account, no ads, no tracking.<br>
     If Windows says <b>"unrecognized app"</b>, choose <b>More info → Run anyway</b> — that's normal for a small unsigned app.</div>
@@ -448,5 +418,51 @@
 
 <script src="pals.js"></script>
 <script src="ranch.js"></script>
+<script>
+/* ---------- Stripe checkout wiring ----------
+   One Stripe Payment Link per pack. The buyer's MY ID rides along as
+   ?client_reference_id= so the /stripe webhook on api.jellypal.fun can
+   grant jelly to that install automatically. Create the 4 links in the
+   Stripe dashboard and paste them here. */
+const PAY_LINKS = { A: "", B: "", C: "", D: "" };
+(function () {
+  const input = document.getElementById("myid");
+  const note = document.getElementById("myidhint");
+  const btns = document.querySelectorAll(".packbuy");
+  const okId = (v) => /^JP[A-Z2-7]{24}$/.test(v.trim().toUpperCase());
+  const myId = () => input.value.trim().toUpperCase();
+  const defaultNote = note.innerHTML;
+  btns.forEach((b) => (b.dataset.lbl = b.textContent));
+
+  function refresh() {
+    const v = myId();
+    input.classList.toggle("ok", okId(v));
+    input.classList.remove("bad");
+    btns.forEach((b) => {
+      const live = /^https:\/\/buy\.stripe\.com\//.test(PAY_LINKS[b.dataset.pack] || "");
+      b.textContent = live ? b.dataset.lbl : "checkout — soon";
+      live ? b.removeAttribute("aria-disabled") : b.setAttribute("aria-disabled", "true");
+    });
+  }
+  input.addEventListener("input", () => { input.value = input.value.toUpperCase().replace(/[^A-Z2-7]/g, ""); refresh(); });
+  input.addEventListener("paste", () => setTimeout(refresh));
+
+  btns.forEach((b) => b.addEventListener("click", (e) => {
+    const link = PAY_LINKS[b.dataset.pack];
+    if (!/^https:\/\/buy\.stripe\.com\//.test(link || "")) { e.preventDefault(); return; }
+    if (!okId(input.value)) {
+      e.preventDefault();
+      input.classList.add("bad"); input.focus();
+      note.classList.add("bad");
+      note.innerHTML = "paste your <b>MY&nbsp;ID</b> first — it's how the jelly finds your app. (in the app: settings → MY&nbsp;ID → tap to copy)";
+      setTimeout(() => { note.classList.remove("bad"); note.innerHTML = defaultNote; }, 6000);
+      return;
+    }
+    b.href = `${link}${link.includes("?") ? "&" : "?"}client_reference_id=${encodeURIComponent(myId())}`;
+    b.target = "_blank"; b.rel = "noopener";
+  }));
+  refresh();
+})();
+</script>
 </body>
 </html>

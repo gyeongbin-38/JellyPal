@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jellypal UI kit</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800;900&family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="components.css">
+  <style>
+    * { margin: 0; padding: 0; }
+    body {
+      min-height: 100vh; color: var(--ink); font-family: var(--font-body);
+      background: radial-gradient(circle at 14% 6%, rgba(143,232,192,.08), transparent 26%), radial-gradient(circle at 88% 18%, rgba(183,165,244,.1), transparent 28%), var(--night);
+    }
+    body::before {
+      content: ""; position: fixed; inset: 0; z-index: -1; opacity: .42;
+      background-image: radial-gradient(rgba(236,232,251,.42) .7px, transparent .7px);
+      background-size: 44px 44px; mask-image: linear-gradient(to bottom, #000, transparent 68%);
+    }
+    .kit { width: min(1040px, calc(100% - 40px)); margin: 0 auto; padding: 42px 0 110px; }
+    .kit-hero {
+      position: relative; display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 32px;
+      min-height: 280px; padding: clamp(32px, 6vw, 68px); overflow: hidden;
+      background: radial-gradient(circle at 80% 70%, rgba(143,232,192,.13), transparent 27%), linear-gradient(145deg, rgba(40,31,82,.96), rgba(19,15,42,.98));
+      border: 1px solid #4e3e80; border-radius: 0;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.09);
+      filter: drop-shadow(10px 10px 0 rgba(7,5,16,.72));
+      clip-path: polygon(0 16px, 6px 16px, 6px 6px, 16px 6px, 16px 0, calc(100% - 16px) 0, calc(100% - 16px) 6px, calc(100% - 6px) 6px, calc(100% - 6px) 16px, 100% 16px, 100% calc(100% - 16px), calc(100% - 6px) calc(100% - 16px), calc(100% - 6px) calc(100% - 6px), calc(100% - 16px) calc(100% - 6px), calc(100% - 16px) 100%, 16px 100%, 16px calc(100% - 6px), 6px calc(100% - 6px), 6px calc(100% - 16px), 0 calc(100% - 16px));
+    }
+    .kit-hero::before { content: ""; position: absolute; inset: 12px; border: 1px solid rgba(143,232,192,.07); border-radius: 0; pointer-events: none; }
+    .kit-hero h1 { font-size: clamp(40px, 7vw, 72px); line-height: .96; letter-spacing: -.045em; }
+    .kit-hero h1 span { color: var(--jelly); text-shadow: 0 0 32px rgba(143,232,192,.16); }
+    .kit-hero p { max-width: 50ch; margin-top: 20px; color: var(--dim); font-size: 16px; line-height: 1.65; }
+    .kit-hero .jp-pal-stack { transform: scale(1.38); transform-origin: right bottom; margin: 0 18px 12px 0; }
+    .kit-section { padding: 76px 0; border-top: 1px solid rgba(74,59,126,.62); }
+    .kit-hero + .kit-section { margin-top: 78px; }
+    .kit-row { display: flex; align-items: center; flex-wrap: wrap; gap: 18px; margin-top: 30px; }
+    .kit-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; margin-top: 30px; }
+    .kit-grid--pals { grid-template-columns: 1.15fr .85fr; }
+    .kit-stack { display: grid; gap: 14px; }
+    .sample-card { padding: 26px; min-height: 156px; }
+    .sample-card__top { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+    .sample-card h3 { margin-top: 18px; font-size: 18px; }
+    .sample-card p { max-width: 36ch; color: var(--dim); margin-top: 8px; line-height: 1.6; }
+    .sample-window { margin-top: 30px; box-shadow: 0 30px 80px -42px #000; }
+    .sample-window__body {
+      position: relative; min-height: 300px; display: flex; align-items: end; justify-content: space-around; padding: 30px 9% 48px; overflow: hidden;
+      background: linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px), radial-gradient(circle at 50% 100%, #30275d, var(--deep) 58%); background-size: 100% 52px, auto;
+    }
+    .sample-window__body::after { content: ""; position: absolute; inset: auto 0 38px; height: 2px; background: #332a5e; }
+    .sample-window__body .jp-pal-sprite:nth-child(2) { margin-bottom: 46px; }
+    .sample-window__body .jp-pal-sprite:nth-child(3) { margin-bottom: 12px; }
+    #ranch { width: 100%; height: 380px; display: block; cursor: grab; image-rendering: pixelated; touch-action: none; }
+    #ranch:active { cursor: grabbing; }
+    #ranch:focus-visible { outline: 3px solid var(--jelly); outline-offset: -5px; }
+    .ranch-help { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 12px 14px; color: var(--dim); background: #14102c; border-top: 2px solid var(--edge); font-size: 11px; }
+    .ranch-help__keys { display: flex; align-items: center; gap: 8px; }
+    .ranch-key { padding: 7px 9px; color: var(--jelly); background: #211943; border: 1px solid #493a7b; box-shadow: inset 0 -3px 0 #120d28; }
+    #mot { flex: 0 0 auto; padding: 8px 10px; color: var(--jelly); background: #211943; border: 1px solid #493a7b; cursor: pointer; }
+    .kit-note { margin-top: 20px; color: #7f76ad; font-size: 9px; line-height: 1.8; }
+    .jp-pal-card, .jp-pal-picker__preview, .jp-pal-roster, .jp-toast {
+      border-radius: 0;
+      clip-path: polygon(0 10px, 4px 10px, 4px 4px, 10px 4px, 10px 0, calc(100% - 10px) 0, calc(100% - 10px) 4px, calc(100% - 4px) 4px, calc(100% - 4px) 10px, 100% 10px, 100% calc(100% - 10px), calc(100% - 4px) calc(100% - 10px), calc(100% - 4px) calc(100% - 4px), calc(100% - 10px) calc(100% - 4px), calc(100% - 10px) 100%, 10px 100%, 10px calc(100% - 4px), 4px calc(100% - 4px), 4px calc(100% - 10px), 0 calc(100% - 10px));
+    }
+    .jp-pal-card, .jp-pal-picker__preview { filter: drop-shadow(6px 6px 0 rgba(7,5,16,.55)); }
+    .jp-pal-tile { border-radius: 3px; box-shadow: inset 0 -3px 0 rgba(7,5,16,.22); }
+    @media (max-width: 700px) {
+      .kit { width: min(100% - 32px, 1040px); padding-top: 16px; }
+      .kit-hero { grid-template-columns: 1fr; min-height: 420px; align-items: start; }
+      .kit-hero .jp-pal-stack { justify-self: center; transform-origin: center; margin: 30px 0 0; }
+      .kit-grid, .kit-grid--pals { grid-template-columns: 1fr; }
+      .kit-section { padding: 58px 0; }
+      .sample-window__body { min-height: 240px; padding-inline: 4%; }
+      #ranch { height: 300px; }
+      .ranch-help { align-items: flex-start; flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <main class="kit">
+    <header class="kit-hero">
+      <div>
+        <div class="jp-eyebrow">jellypal component garden</div>
+        <h1>Soft UI for<br><span>tiny pals.</span></h1>
+        <p>Real game sprites, jelly-like surfaces and a quieter premium finish — made from the same small set of reusable parts.</p>
+      </div>
+      <div class="jp-pal-stack" role="img" aria-label="Sprout, Mochi and Astro">
+        <canvas class="jp-pal-sprite" data-pal="0" aria-hidden="true"></canvas>
+        <canvas class="jp-pal-sprite" data-pal="1" data-face="happy" aria-hidden="true"></canvas>
+        <canvas class="jp-pal-sprite" data-pal="7" aria-hidden="true"></canvas>
+      </div>
+    </header>
+
+    <section class="kit-section">
+      <div class="jp-section-head"><div class="jp-eyebrow">01 · jelly actions</div><h2 class="jp-heading">Buttons with a soft center.</h2><p class="jp-lede">The main action catches light like jelly. Secondary actions stay dark so the pal remains the loudest thing on screen.</p></div>
+      <div class="kit-row">
+        <a class="jp-button jp-button--primary" href="#"><canvas class="jp-button__pal" data-pal="0" data-face="happy" aria-hidden="true"></canvas>Download for Windows</a>
+        <button class="jp-button jp-button--secondary" type="button"><canvas class="jp-button__pal" data-pal="7" aria-hidden="true"></canvas>Meet the pals</button>
+        <button class="jp-button jp-button--quiet" type="button">portable zip</button>
+        <button class="jp-button jp-button--small" type="button" disabled>coming soon</button>
+      </div>
+    </section>
+
+    <section class="kit-section">
+      <div class="jp-section-head"><div class="jp-eyebrow">02 · pal identity</div><h2 class="jp-heading">The pal is part of the component.</h2><p class="jp-lede">Portraits use the real renderer rather than decorative look-alikes. Hover a card and the pal reacts.</p></div>
+      <div class="kit-grid kit-grid--pals">
+        <article class="jp-pal-card" data-pal-card>
+          <div class="jp-pal-card__sprite-wrap"><canvas class="jp-pal-sprite" data-pal="0" aria-hidden="true"></canvas></div>
+          <div>
+            <span class="jp-badge jp-badge--jelly">common pal</span>
+            <h3 class="jp-pal-card__name">Sprout</h3>
+            <p class="jp-pal-card__copy">A bright little desk companion. Curious, round, and always ready for another keystroke.</p>
+            <div class="jp-pal-card__stats"><span class="jp-pal-stat"><b>Round</b>shape</span><span class="jp-pal-stat"><b>Cozy</b>mood</span><span class="jp-pal-stat"><b>Lv. 03</b>bond</span></div>
+          </div>
+        </article>
+        <div class="kit-stack">
+          <div class="jp-toast"><canvas class="jp-toast__sprite" data-pal="1" data-face="happy" aria-hidden="true"></canvas><div><div class="jp-toast__title">Mochi found a snack</div><div class="jp-toast__copy">Your pal looks delighted.</div></div><div class="jp-toast__reward">+1 jelly</div></div>
+          <div class="jp-toast"><canvas class="jp-toast__sprite" data-pal="7" aria-hidden="true"></canvas><div><div class="jp-toast__title">Astro is visiting</div><div class="jp-toast__copy">A rare friend drifted by.</div></div><div class="jp-toast__reward">rare</div></div>
+          <article class="jp-card jp-card--lift jp-panel--dither sample-card">
+            <div class="sample-card__top"><span class="jp-badge jp-badge--gold">new discovery</span><div class="jp-pal-stack"><canvas class="jp-pal-sprite" data-pal="2" aria-hidden="true"></canvas><canvas class="jp-pal-sprite" data-pal="3" aria-hidden="true"></canvas></div></div>
+            <h3>Two new silhouettes</h3><p>Collection moments pair rarity with a glimpse of personality.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="kit-section">
+      <div class="jp-section-head"><div class="jp-eyebrow">03 · choose a pal</div><h2 class="jp-heading">A roster you want to poke.</h2><p class="jp-lede">Every option is a live game sprite. Pick a pal to bring it forward and wake up its expression.</p></div>
+      <div class="jp-pal-picker">
+        <div class="jp-pal-picker__preview" aria-live="polite">
+          <canvas id="pickerSprite" class="jp-pal-sprite" data-pal="0" data-face="happy" aria-hidden="true"></canvas>
+          <div id="pickerName" class="jp-pal-picker__name">Sprout</div>
+          <div id="pickerMeta" class="jp-pal-picker__meta">Common · round</div>
+          <div class="jp-pal-picker__hint">your active pal</div>
+        </div>
+        <div id="palRoster" class="jp-pal-roster" role="group" aria-label="Choose your active pal"></div>
+      </div>
+    </section>
+
+    <section class="kit-section">
+      <div class="jp-section-head"><div class="jp-eyebrow">04 · small signals</div><h2 class="jp-heading">Tiny details, never noise.</h2></div>
+      <div class="kit-row">
+        <span class="jp-chip">Windows 10/11</span><span class="jp-chip">Only 1.7 MB</span><span class="jp-chip">Pal is awake</span>
+        <span class="jp-badge jp-badge--jelly">common</span><span class="jp-badge jp-badge--gold">legendary</span>
+      </div>
+    </section>
+
+    <section class="kit-section">
+      <div class="jp-section-head"><div class="jp-eyebrow">05 · the ranch</div><h2 class="jp-heading">A window should feel inhabited.</h2><p class="jp-lede">The frame stays precise and quiet. Inside, real pals provide all the character.</p></div>
+      <div class="jp-window pxframe sample-window">
+        <div class="jp-window__bar"><i class="jp-window__dot"></i><i class="jp-window__dot"></i><i class="jp-window__dot"></i><span class="jp-window__title">live pal sandbox</span><span class="jp-window__status">interactive</span></div>
+        <canvas id="ranch" width="960" height="380" tabindex="0" role="button" aria-label="Interactive Sprout. Move the pointer to make it look around, click or press Enter to boop it, drag to pick it up, and type to feed it."></canvas>
+        <div class="ranch-help">
+          <div class="ranch-help__keys"><span class="ranch-key">click</span><span>boop</span><span class="ranch-key">drag</span><span>pick up</span><span class="ranch-key">type</span><span>feed jelly</span></div>
+          <button id="mot" type="button" aria-pressed="false">pause motion</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="kit-section">
+      <div class="jp-section-head"><div class="jp-eyebrow">06 · quiet answers</div><h2 class="jp-heading">Helpful without breaking the mood.</h2></div>
+      <div class="kit-grid">
+        <details class="jp-disclosure" open><summary>Does it read what I type?</summary><div class="jp-disclosure__body">No. Jellypal receives a count, not the characters you press.</div></details>
+        <details class="jp-disclosure"><summary>Does it need internet?</summary><div class="jp-disclosure__body">Only when redeeming an optional jelly code.</div></details>
+      </div>
+      <p class="kit-note px">real sprites · no framework · keyboard friendly · reduced motion ready</p>
+    </section>
+  </main>
+
+  <script src="pals.js"></script>
+  <script src="sprite-text.js"></script>
+  <script>
+    function paintPal(canvas, face) {
+      const palIndex = Number(canvas.dataset.pal || 0);
+      const source = sprite(face || canvas.dataset.face || "idle", palIndex, false);
+      canvas.width = source.width;
+      canvas.height = source.height;
+      const context = canvas.getContext("2d");
+      context.imageSmoothingEnabled = false;
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(source, 0, 0);
+    }
+    document.querySelectorAll("[data-pal]").forEach((canvas) => paintPal(canvas));
+    document.querySelectorAll("[data-pal-card]").forEach((card) => {
+      const pal = card.querySelector("[data-pal]");
+      card.addEventListener("mouseenter", () => paintPal(pal, "happy"));
+      card.addEventListener("mouseleave", () => paintPal(pal, "idle"));
+    });
+
+    const rarityNames = ["common", "rare", "epic", "legendary"];
+    const rosterIndexes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+    const roster = document.querySelector("#palRoster");
+    const pickerSprite = document.querySelector("#pickerSprite");
+    const pickerName = document.querySelector("#pickerName");
+    const pickerMeta = document.querySelector("#pickerMeta");
+
+    function choosePal(index, selectedButton) {
+      roster.querySelectorAll(".jp-pal-tile").forEach((button) => {
+        button.setAttribute("aria-pressed", String(button === selectedButton));
+        paintPal(button.querySelector("canvas"), button === selectedButton ? "happy" : "idle");
+      });
+      pickerSprite.dataset.pal = index;
+      paintPal(pickerSprite, "happy");
+      setSpriteText(pickerName, SPECIES[index].name);
+      setSpriteText(pickerMeta, `${rarityNames[SPECIES[index].r]} · ${SPECIES[index].shape}`);
+    }
+
+    rosterIndexes.forEach((index, position) => {
+      const pal = SPECIES[index];
+      const button = document.createElement("button");
+      button.className = "jp-pal-tile";
+      button.type = "button";
+      button.setAttribute("aria-pressed", String(position === 0));
+      button.setAttribute("aria-label", `${pal.name}, ${rarityNames[pal.r]} pal`);
+
+      const canvas = document.createElement("canvas");
+      canvas.className = "jp-pal-tile__sprite";
+      canvas.dataset.pal = index;
+      canvas.setAttribute("aria-hidden", "true");
+      const name = document.createElement("span");
+      name.textContent = pal.name;
+      const rarity = document.createElement("span");
+      rarity.className = "jp-pal-tile__rarity";
+      rarity.textContent = rarityNames[pal.r];
+      button.append(canvas, name, rarity);
+      roster.append(button);
+      paintPal(canvas, position === 0 ? "happy" : "idle");
+
+      button.addEventListener("mouseenter", () => paintPal(canvas, "happy"));
+      button.addEventListener("mouseleave", () => paintPal(canvas, button.getAttribute("aria-pressed") === "true" ? "happy" : "idle"));
+      button.addEventListener("click", () => choosePal(index, button));
+    });
+    spritefy(document.querySelector(".kit"));
+  </script>
+  <script src="ranch.js"></script>
+</body>
+</html>

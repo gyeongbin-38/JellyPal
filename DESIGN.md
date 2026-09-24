@@ -83,11 +83,34 @@ Load order is `pals.js` → `ranch.js` at end of body. No bundler — plain glob
   and grep that ranch.js symbols exist in pals.js (the last rewrite shipped
   `sprite(p.spIdx)` + a nonexistent `drawPal` — an all-empty page for a day)
 
+## Payments — Stripe (wired, needs account setup)
+
+Flow: **Stripe Payment Link** per pack → buyer's MY ID rides as
+`?client_reference_id=` → Stripe webhook `checkout.session.completed` →
+worker `POST /stripe` verifies `STRIPE_WHSEC` HMAC + dedupes `ev.id` →
+`putGrant` → app polls `/claim` → jelly lands automatically. No codes.
+
+- Site wiring: `PAY_LINKS = {A,B,C,D}` const in `index.html`'s inline script.
+  Buttons stay "checkout — soon" until a real `buy.stripe.com/…` link exists.
+  `#myid` input validates `JP[A-Z2-7]{24}` before checkout.
+- App wiring: `GEM_PACK_URLS` in `src/main.js` — `packUrl()` appends
+  `client_reference_id=<uid>` automatically on buy.stripe.com links.
+  `GEM_SHOP_URL` = `jellypal.fun#jelly`.
+- Worker: `PRICE_<cents>` vars in `wrangler.toml` map amount → pack
+  ($1.00→A, $1.79→B, $2.99→C, $5.99→D); `metadata.pack` also honored.
+
+**Owner to finish** (can't be done from code):
+1. Stripe dashboard → create 4 Payment Links (250/$1.00, 500/$1.79,
+   1000/$2.99, 2500/$5.99) → paste into `PAY_LINKS` + `GEM_PACK_URLS`
+2. Dashboard → Developers → Webhooks → endpoint `https://api.jellypal.fun/stripe`,
+   event `checkout.session.completed` → copy signing secret →
+   `cd server && npx wrangler secret put STRIPE_WHSEC`
+3. Rebuild the app so the shop copy/link wiring ships; update `site/dl`
+   binaries + SHA-256s on the page
+
 ## Design backlog (what's left)
 
-1. **itch.io wiring** — pack `.packbuy` buttons are `disabled` ("itch.io — soon").
-   When the itch listing ships: fill `GEM_SHOP_URL` in `src/main.js` + point the
-   buttons there. Same for `UPDATE_URL`.
+1. ~~itch.io wiring~~ → replaced by Stripe (see above). `UPDATE_URL` still empty.
 2. ~~Product screenshot~~ — DONE via the stylized `shot-desktop.png` (slimes on
    a mock desktop) in a `.deskshot` section + as og:image. A real Win+G capture
    would still be better when someone can grab one.

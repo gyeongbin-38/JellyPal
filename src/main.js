@@ -1762,18 +1762,24 @@ function settingsRows() {
   // 8 SHARE 9 WEATHER 10 BOOT 11 JELLY 12 REDEEM 13 ID 14 QUIT
 }
 
-// gem shop: the paid-gem surface. packs are bought on the itch.io page;
-// the buyer gets a one-shot code and redeems it here (itch has no
-// embedded desktop IAP, so the store link is just a browser hop)
+// gem shop: the paid-gem surface. packs are bought through Stripe Payment
+// Links opened in the browser; the checkout webhook grants the jelly
+// straight to this install's MY ID. a one-shot redeem code still works as
+// a fallback path (gift codes, support fixes).
 let gemShop = false;
-const GEM_SHOP_URL = ""; // itch.io page URL — fill in when the listing ships
-// per-pack checkout links (Stripe Payment Link / Gumroad product / itch
-// reward page per pack id). money flows through YOUR checkout — the app
-// just opens the link in the browser; the buyer receives a redeem code
-// out-of-band (download, email, or success page). empty = falls back to
-// GEM_SHOP_URL.
+const GEM_SHOP_URL = "https://jellypal.fun#jelly"; // pack store = the site
+// per-pack Stripe Payment Links. the app appends
+// ?client_reference_id=<MY ID> so the /stripe webhook on the backend can
+// grant jelly straight to this install — no codes to type. empty = falls
+// back to GEM_SHOP_URL.
 const GEM_PACK_URLS = { A: "", B: "", C: "", D: "" };
-const packUrl = (id) => GEM_PACK_URLS[id] || GEM_SHOP_URL;
+const packUrl = (id) => {
+  const u = GEM_PACK_URLS[id] || GEM_SHOP_URL;
+  if (!u) return "";
+  return /buy\.stripe\.com/.test(u)
+    ? `${u}${u.includes("?") ? "&" : "?"}client_reference_id=${uid}`
+    : u;
+};
 // update probe: a tiny text file hosting the newest version string
 // (e.g. "0.2.1") — any static host works; leave empty to disable
 const UPDATE_URL = "";
@@ -9293,8 +9299,8 @@ function frameBody(now) {
       ctx.strokeRect(BR[0] + 0.5, BR[1] + 0.5, BR[2] - 1, BR[3] - 1);
       drawText(ctx, "BUY", BR[0] + BR[2] / 2 - textW("BUY", 1) / 2, BR[1] + 7, 1, live ? "#2f7e4e" : "#a8907a", null, true);
     }
-    drawText(ctx, "BUY A PACK, GET A ONE-TIME CODE", gx + gw / 2 - textW("BUY A PACK, GET A ONE-TIME CODE", 1) / 2, gy + 168, 1, "#8a6b4a");
-    drawText(ctx, "SAVE IT - ONE USE ONLY", gx + gw / 2 - textW("SAVE IT - ONE USE ONLY", 1) / 2, gy + 182, 1, "#a8845c");
+    drawText(ctx, "PAY ONCE - JELLY LANDS IN YOUR APP", gx + gw / 2 - textW("PAY ONCE - JELLY LANDS IN YOUR APP", 1) / 2, gy + 168, 1, "#8a6b4a");
+    drawText(ctx, "AUTO-DELIVERED TO YOUR MY ID", gx + gw / 2 - textW("AUTO-DELIVERED TO YOUR MY ID", 1) / 2, gy + 182, 1, "#a8845c");
     const rows = gemShopRows();
     const lbls = [GEM_SHOP_URL ? "STORE PAGE" : "STORE LINK TBD", "REDEEM CODE"];
     for (let i = 0; i < rows.length; i++) {

@@ -176,11 +176,16 @@ async function stripe(req, env) {
   if (mac !== v1.toLowerCase()) return J({ error: "bad sig" }, 400);
   const ev = JSON.parse(body);
   if (ev.type !== "checkout.session.completed") return J({ ok: true });
+  // stripe retries webhooks — without this a retry would grant twice
+  const evKey = `stripeev:${ev.id}`;
+  if (ev.id && (await env.DB.get(evKey))) return J({ ok: true, dup: true });
   const s = ev.data?.object || {};
   const uid = s.client_reference_id || s.metadata?.uid;
   const pack = s.metadata?.pack || env[`PRICE_${s.amount_total}`];
   if (!UID_RE.test(uid || "") || !GEMS[pack]) return J({ error: "no uid/pack on session" }, 422);
-  return J({ ok: true, nonce: await putGrant(env, await uidHash(uid), pack) });
+  const nonce = await putGrant(env, await uidHash(uid), pack);
+  if (ev.id) await env.DB.put(evKey, "1", { expirationTtl: 60 * 60 * 24 * 30 });
+  return J({ ok: true, nonce });
 }
 
 export default {
