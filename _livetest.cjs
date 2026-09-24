@@ -84,9 +84,14 @@ const t = (name, ok, extra = "") => {
   t("admin grant with key", r.status === 200 && r.json && r.json.ok === true);
   const adminNonce = r.json && r.json.nonce;
 
-  r = await post("/claim", { uid });
-  const grants = (r.json && r.json.grants) || [];
-  const g2 = grants.find((g) => g.nonce === adminNonce);
+  // KV is eventually consistent — retry claim until the grant is visible
+  let grants = [], g2 = null;
+  for (let i = 0; i < 14 && !g2; i++) {
+    await new Promise((res) => setTimeout(res, 5000));
+    r = await post("/claim", { uid });
+    grants = (r.json && r.json.grants) || [];
+    g2 = grants.find((g) => g.nonce === adminNonce);
+  }
   t("claim returns admin grant", !!g2, `grants=${grants.length}`);
   t("admin grant sig verifies (app pubkey)", g2 && verifyGrant(g2, uid));
 

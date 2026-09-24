@@ -1,11 +1,8 @@
-feat: jellypal.fun domain wiring + commercial-grade site redesign
+test: livetest retries claim for KV list consistency
 
-- api.jellypal.fun route on worker, SERVER_URL points at it
-- site redesign per design skills: single mint accent, Nunito type,
-  left-aligned hero, species strip w/ real palettes, blob CTAs,
-  window-demo economy section, semantic HTML + a11y (skip link,
-  focus rings, reduced motion, og meta)
-- redesign-existing-projects + frontend-design skills installed
+KV list results are edge-cached ~60s, so a grant written moments
+earlier may not appear in /claim immediately. Retry for up to 70s.
+Verified: 15/15 live e2e passing against api.jellypal.fun.
 
 Generated with [Devin](https://devin.ai)
 
