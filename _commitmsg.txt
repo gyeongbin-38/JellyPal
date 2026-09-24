@@ -1,13 +1,7 @@
-feat: web demo parity — props, dress-up, breeding + night ranch look
+refactor: hero ranch — one pal, zero buttons, pure interaction
 
-- port all 8 prop sprites (SPR table) + accessories (drawAccRaw:
-  cap/bow/crown/tophat/specs/party/flower/phones) + makeHybrid engine
-- toybox toolbar: place cushion (pals walk over, plop, nap + zzz),
-  bounce mat (trampoline launches), plant (sniff visit), cookie jar;
-  dress buttons put real accessories on the pal under the cursor
-- breed button: 20 jelly cost (earned by typing demo), pick two pals,
-  they meet mid-ranch, heart burst, egg wobble, hybrid hatches with
-  mixed palette/name — pushed into live SPECIES so dex + pull see it
-- night ranch sky: crescent moon + twinkling stars
-- section heads get real sprite icons (jelly drop, frog, jar, mirror,
-  cushion) instead of text decoration
+stripped pull/feed/breed/props/dress controls and the whole toybox.
+the stage is now just a night ranch with a single live slime:
+it watches the cursor, boops on click/Enter, wiggles held1/held2
+when dragged and dropped, wanders, hops, naps — and typing anywhere
+still drops jelly into the counter. caption rewritten to match.

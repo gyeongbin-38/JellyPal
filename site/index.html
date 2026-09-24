@@ -132,49 +132,11 @@
   .titlebar .dot:nth-child(2) { background: #3a2f6b; }
   .titlebar .dot:nth-child(3) { background: #2d2454; }
   .titlebar span { margin-left: 6px; }
-  #ranch { display: block; width: 100%; height: 300px; cursor: pointer; }
+  #ranch { display: block; width: 100%; height: 300px; }
   .stage .cap { margin-top: 14px; font-size: 12.5px; color: var(--dim); text-align: center; }
-  .ranchctl { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 14px; flex-wrap: wrap; }
-  .ranchctl .cap { margin-top: 0; text-align: right; }
-  #pull {
-    font-family: "Nunito", sans-serif; font-weight: 900; font-size: 14px;
-    color: var(--jelly); background: transparent; border: 2px solid var(--jelly);
-    padding: 11px 20px; cursor: pointer;
-    border-radius: 52% 48% 55% 45% / 58% 62% 38% 42%;
-    transition: transform .18s cubic-bezier(.34,1.56,.64,1), background .2s, color .2s;
-  }
-  #pull:hover, #feed:hover { background: var(--jelly); color: var(--night); transform: scale(1.06) rotate(1deg); }
-  #pull:active, #feed:active { transform: scale(.94); }
-  #pull, #feed {
-    font-family: "Nunito", sans-serif; font-weight: 900; font-size: 14px;
-    color: var(--jelly); background: transparent; border: 2px solid var(--jelly);
-    padding: 11px 20px; cursor: pointer;
-    border-radius: 52% 48% 55% 45% / 58% 62% 38% 42%;
-    transition: transform .18s cubic-bezier(.34,1.56,.64,1), background .2s, color .2s;
-  }
-  #feed { border-color: var(--dim); color: var(--dim); }
-  #feed:hover { background: var(--dim); color: var(--night); }
+  #ranch { cursor: grab; }
+  #ranch:active { cursor: grabbing; }
   #ranch:focus-visible { outline: 3px solid var(--jelly); outline-offset: 4px; }
-  #breed {
-    font-family: "Nunito", sans-serif; font-weight: 900; font-size: 14px;
-    color: #ff9ec6; background: transparent; border: 2px solid #ff9ec6;
-    padding: 11px 20px; cursor: pointer;
-    border-radius: 52% 48% 55% 45% / 58% 62% 38% 42%;
-    transition: transform .18s cubic-bezier(.34,1.56,.64,1), background .2s, color .2s;
-  }
-  #breed:hover { background: #ff9ec6; color: var(--night); transform: scale(1.06) rotate(1deg); }
-  #breed.on { background: #ff9ec6; color: var(--night); }
-  .toybox { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 12px; }
-  .toygrp { display: flex; align-items: center; gap: 6px; }
-  .toylbl { font-family: "Press Start 2P", monospace; font-size: 6.5px; color: var(--dim); margin-right: 3px; }
-  .toygrp button {
-    background: var(--panel); border: none; padding: 4px 6px; cursor: pointer;
-    transition: transform .15s, box-shadow .15s;
-    clip-path: polygon(0 5px, 2px 5px, 2px 2px, 5px 2px, 5px 0, calc(100% - 5px) 0, calc(100% - 5px) 2px, calc(100% - 2px) 2px, calc(100% - 2px) 5px, 100% 5px, 100% calc(100% - 5px), calc(100% - 2px) calc(100% - 5px), calc(100% - 2px) calc(100% - 2px), calc(100% - 5px) calc(100% - 2px), calc(100% - 5px) 100%, 5px 100%, 5px calc(100% - 2px), 2px calc(100% - 2px), 2px calc(100% - 5px), 0 calc(100% - 5px));
-  }
-  .toygrp button:hover { transform: translateY(-2px); }
-  .toygrp button.on { box-shadow: inset 0 0 0 2px var(--jelly); }
-  .toygrp canvas { display: block; image-rendering: pixelated; }
   .hico { vertical-align: -4px; margin-right: 10px; image-rendering: pixelated; }
 
   /* ---------- keystroke economy ---------- */
@@ -310,7 +272,7 @@
       <h1>A tiny <span class="squish">slime</span> that lives on your screen.</h1>
       <p class="sub">Jellypal is a desktop companion for Windows. It naps on your windows,
       snacks on your keystrokes, and squirts out jelly you can spend on new friends.
-      The ones on the right are real — they watch your cursor, and you can boop them.</p>
+      That one on the right is real — go on, boop it.</p>
       <div class="cta">
         <a class="btn" href="dl/Jellypal_0.2.0_x64-setup.exe">Download for Windows</a>
         <a class="link" href="dl/jellypal-0.2.0-win.zip">or grab the portable zip</a>
@@ -321,32 +283,9 @@
     <div class="stage">
       <div class="frame pxframe">
         <div class="titlebar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span>ranch — live</span></div>
-        <canvas id="ranch" width="640" height="300" role="button" aria-label="Animated jelly slimes wandering a ranch. Press Enter to boop one; use the pull and feed buttons to interact more."></canvas>
+        <canvas id="ranch" width="640" height="300" role="button" aria-label="A live jelly slime on a night ranch. It watches your cursor — press Enter or click to boop it, drag to pick it up, or just type anywhere."></canvas>
       </div>
-      <div class="ranchctl">
-        <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <button id="pull" type="button">✦ pull a pal</button>
-          <button id="feed" type="button">drop a treat</button>
-          <button id="breed" type="button">breed ♥ 20</button>
-        </div>
-        <div class="toybox">
-          <div class="toygrp"><span class="toylbl">props</span>
-            <button data-prop="cushion" type="button" title="nap cushion"><canvas class="pico" data-pico="cushion" width="34" height="22"></canvas></button>
-            <button data-prop="mat" type="button" title="bounce mat"><canvas class="pico" data-pico="mat" width="34" height="22"></canvas></button>
-            <button data-prop="plant" type="button" title="potted plant"><canvas class="pico" data-pico="plant" width="34" height="22"></canvas></button>
-            <button data-prop="jar" type="button" title="cookie jar"><canvas class="pico" data-pico="jar" width="34" height="22"></canvas></button>
-          </div>
-          <div class="toygrp"><span class="toylbl">dress</span>
-            <button data-acc="cap" type="button" title="cap"><canvas class="aico" data-aico="cap" width="30" height="18"></canvas></button>
-            <button data-acc="bow" type="button" title="bow"><canvas class="aico" data-aico="bow" width="30" height="18"></canvas></button>
-            <button data-acc="crown" type="button" title="crown"><canvas class="aico" data-aico="crown" width="30" height="18"></canvas></button>
-            <button data-acc="specs" type="button" title="specs"><canvas class="aico" data-aico="specs" width="30" height="18"></canvas></button>
-            <button data-acc="party" type="button" title="party hat"><canvas class="aico" data-aico="party" width="30" height="18"></canvas></button>
-            <button data-acc="flower" type="button" title="flower"><canvas class="aico" data-aico="flower" width="30" height="18"></canvas></button>
-          </div>
-        </div>
-        <div class="cap">boop · drag · feed · breed · props · dress — or just type: they snack on keystrokes</div>
-      </div>
+      <div class="cap">it watches your cursor — boop it, pick it up, or just type: it snacks on keystrokes</div>
     </div>
   </section>
 

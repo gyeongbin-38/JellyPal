@@ -1,791 +1,347 @@
-// ranch.js — interactive Jellypal ranch for the site hero.
-// Real sprites (pals.js) + real behavior seeds (animProf) + the game's
-// pull weight table. Product-parity interactions: pals watch the cursor,
-// boop them, pick them up (held faces), drop a treat to feed them
-// (munch/chew + crumbs), and type anywhere — they snack on keystrokes
-// and squirt jelly into the counter, exactly like the real app.
-
+/* JellyPal hero — one pal, pure interaction. no buttons. */
 (function () {
-  const cv = document.getElementById("ranch");
-  if (!cv || typeof SPECIES === "undefined") return;
-  const cx = cv.getContext("2d");
-  cx.imageSmoothingEnabled = false;
-  const W = cv.width, H = cv.height, GY = 248, SC = 1.75;
-  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const PX = '"Press Start 2P", monospace';
-  cv.tabIndex = 0;
+const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const cv = document.getElementById("ranch");
+if (!cv) return;
+const ctx = cv.getContext("2d");
+ctx.imageSmoothingEnabled = false;
+const off = document.createElement("canvas");
+off.width = 48; off.height = 34;
+const octx = off.getContext("2d");
+let W = 0, H = 0;
+const GY = () => H * 0.8;
+function resize() {
+  const r = cv.getBoundingClientRect();
+  W = cv.width = Math.max(120, r.width | 0);
+  H = cv.height = Math.max(80, r.height | 0);
+}
+addEventListener("resize", resize); resize();
 
-  // ---- pals on the ranch: a spread across rarities ----
-  const STARTERS = ["sprout", "berry", "mochi", "kitty", "aurora", "gold", "stella"];
-  const pals = [];
-  function addPalIdx(spIdx, x) {
-    pals.push({
-      spIdx, x: x ?? 40 + Math.random() * (W - 80), y: 0, vy: 0,
-      vx: (Math.random() - .5) * 14,
-      face: "idle", faceT: 0,
-      blinkT: animProf(spIdx).blink * Math.random(),
-      sq: 0, hopT: 2 + Math.random() * 7,
-      sleepT: 14 + Math.random() * 20, sleeping: 0,
-      held: false, heldF: 0, eatT: 0, eatPhase: 0, scurry: null,
-      ph: Math.random() * 6.28, burstT: 4 + Math.random() * 10, tpT: 6 + Math.random() * 12,
-      ambT: Math.random() * 3, ringT: 4 + Math.random() * 6,
-      acc: null, goal: null, napOn: null, picked: false,
-    });
-    return pals[pals.length - 1];
-  }
-  const addPal = (id, x) => addPalIdx(spIndex(id), x);
-  STARTERS.forEach((id, i) => addPal(id, 55 + i * 78));
+/* ---------- fx state ---------- */
+const fxs = [], hearts = [], rings = [], jdrops = [], pops = [], specks = [];
+function sparkBurst(x, y, col, n = 10) { for (let i = 0; i < n; i++) { const a = Math.random() * 6.28, s = 18 + rng(26); fxs.push({ kind: "sp", x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 18, life: 34 + rng(18), t: 0, col }); } }
+function pop(x, y, txt, col) { pops.push({ x, y, txt, col, t: 0 }); }
+function fxAt(x, y, kind, col) { fxs.push({ kind, x: x + rng(14) - 7, y, vx: 0, vy: 0, life: 30 + rng(40), t: 0, col }); }
+function ring(x, y, col, r1 = 18) { rings.push({ x, y, col, t: 0, r1 }); }
 
-  // ---- placed props: {kind -> {x}} on the ground line ----
-  const props = {};
-  const PROP_X = { cushion: 100, mat: 290, jar: 470, plant: 560 };
-  const GOALABLE = { cushion: 1, plant: 1, jar: 1 }; // mat is a trampoline, not a destination
-  const propBtn = {};
-  document.querySelectorAll("[data-prop]").forEach((b) => {
-    propBtn[b.dataset.prop] = b;
-    b.addEventListener("click", () => {
-      const k = b.dataset.prop;
-      if (props[k]) { delete props[k]; b.classList.remove("on"); return; }
-      props[k] = { x: PROP_X[k], t: 0 };
-      b.classList.add("on");
-      // someone notices the new furniture and wanders over
-      if (GOALABLE[k]) {
-        const awake = pals.filter((p) => !p.sleeping && !p.held && !p.goal && !p.napOn);
-        if (awake.length) {
-          const p = awake[Math.floor(Math.random() * awake.length)];
-          setTimeout(() => { if (!p.napOn && props[k]) { p.goal = { kind: k, x: props[k].x }; p.scurry = p.goal.x; } }, 700 + Math.random() * 1400);
-        }
-      }
-    });
-  });
+/* ---------- sky: moon + stars ---------- */
+const stars = []; for (let i = 0; i < 10; i++) stars.push({ x: Math.random(), y: Math.random() * 0.5, ph: rng(7) });
+function drawMoon(g) {
+  const mx = W * 0.87, my = H * 0.15, u = Math.max(1, W / 320);
+  g.fillStyle = "rgba(240,238,255,.92)";
+  g.fillRect(mx - 4 * u, my - 5 * u, 8 * u, 10 * u); g.fillRect(mx - 5 * u, my - 4 * u, 10 * u, 8 * u);
+  g.fillStyle = "rgba(18,14,38,.9)";
+  g.fillRect(mx - 4 * u, my - 5 * u, 7 * u, 9 * u); g.fillRect(mx - 5 * u, my - 3 * u, 8 * u, 7 * u);
+}
 
-  // ---- accessory bar: click to dress the pal nearest the cursor ----
-  let targetPal = pals[0];
-  const accBtns = {};
-  document.querySelectorAll("[data-acc]").forEach((b) => {
-    accBtns[b.dataset.acc] = b;
-    b.addEventListener("click", () => {
-      const id = b.dataset.acc, p = targetPal || pals[0];
-      if (!p) return;
-      p.acc = p.acc === id ? null : id;
-      p.face = "happy"; p.faceT = 0.9; p.sq = 0.25;
-      hearts.push({ x: p.x - 4, y: GY - 26 * SC - 16 - p.y, vy: -36, life: 1 });
-    });
-  });
+/* ---------- the pal ---------- */
+const p = {
+  id: "sprout", spIdx: 0, x: 0, y: 0, vx: 0, vy: 0, face: 0, faceT: 0,
+  tx: 0, walkT: null, jumpT: 0, scurry: null, blinkCd: 0, blinkFx: 0,
+  blink: false, bt: 0, squash: 0, hapT: 0, lvT: 0, stT: 0, slpT: 0,
+  held: false, heldT: 0, ph: rng(7),
+};
+p.spIdx = SPECIES.findIndex(s => s.id === p.id); if (p.spIdx < 0) p.spIdx = 0;
+function land() { p.y = GY() - sprite(p.spIdx).h / 2 + 2; }
+p.x = W * 0.5; land(); p.tx = W * 0.5;
 
-  // ---- particles: pixel hearts, zzz, text bangs, jelly drops, crumbs ----
-  const hearts = [], zzzs = [], bangs = [], drops = [], crumbs = [], treats = [], specks = [], fxs = [], rings = [];
-  const HEART = ["0110110","1111111","1111111","0111110","0011100","0001000"];
-  const JDROP = ["..b..", ".bbb.", "bbbbb", "bbbbb", ".bbb.", "..b.."];
-  const TREAT = ["..w...", ".kkk..", "kkkkk.", "kkkkk.", "wwwww."];
-  function drawMap(c, map, x, y, s, col) {
-    c.fillStyle = col;
-    for (let r = 0; r < map.length; r++)
-      for (let i = 0; i < map[r].length; i++)
-        if (map[r][i] !== ".") {
-          c.fillStyle = map[r][i] === "w" ? "#fff" : col;
-          c.fillRect(x + i * s, y + r * s, s, s);
-        }
-  }
-  for (let i = 0; i < 16; i++)
-    specks.push({ x: Math.random() * W, y: 10 + Math.random() * 200, s: 1 + Math.random() * 2, v: 2 + Math.random() * 5, a: 0.04 + Math.random() * 0.08 });
+let jelly = 0;
 
-  let jelly = 0, jellyPulse = 0, keys = 0;
+function boop() {
+  if (p.held) return;
+  const prof = animProf(p.spIdx);
+  p.squash = 1; p.vy = 0.5 + Math.random() * 0.7;
+  p.face = prof.glee < 0.3 ? 4 : prof.glee < 0.7 ? 5 : 9;
+  p.faceT = 90;
+  for (let i = 0; i < 6; i++) hearts.push({ x: p.x + rng(36) - 18, y: p.y - 16 + rng(10), vy: 0.4 + rng(0.5), life: 60, t: 0 });
+  if (SPECIES[p.spIdx].r >= 3) sparkBurst(p.x, p.y - 14, "#ffd76a", 12);
+}
 
-  // ---- cursor tracking + drag ----
-  let mx = -999, my = -999, heldPal = null;
-  const toCv = (e) => {
-    const r = cv.getBoundingClientRect();
-    return [(e.clientX - r.left) * (W / r.width), (e.clientY - r.top) * (H / r.height)];
-  };
-  cv.addEventListener("mousemove", (e) => { [mx, my] = toCv(e); });
-  cv.addEventListener("mouseleave", () => { mx = my = -999; });
-  function palAt(bx, by) {
-    for (let i = pals.length - 1; i >= 0; i--) {
-      const p = pals[i], w2 = 18 * SC + 6, h2 = 26 * SC;
-      if (bx > p.x - w2 && bx < p.x + w2 && by > GY - h2 - p.y - 10 && by < GY - p.y + 8) return p;
-    }
-    return null;
-  }
-  cv.addEventListener("pointerdown", (e) => {
-    const [bx, by] = toCv(e);
-    const p = palAt(bx, by);
-    if (p && !p.sleeping && !p.eatT) {
-      heldPal = p; p.held = true; p.heldF = 0; p.vy = 0; p.vx = 0;
-      cv.setPointerCapture(e.pointerId);
-      e.preventDefault();
-    }
-  });
-  cv.addEventListener("pointermove", (e) => {
-    [mx, my] = toCv(e);
-    if (heldPal) heldPal.x = Math.max(30, Math.min(W - 30, mx));
-    // dress-up targets the pal under the cursor
-    let best = null, bd = 70;
-    for (const p of pals) {
-      const d = Math.hypot(p.x - mx, (GY - 24 - p.y) - my);
-      if (d < bd) { bd = d; best = p; }
-    }
-    if (best) targetPal = best;
-  });
-  const release = () => {
-    if (!heldPal) return;
-    heldPal.held = false;
-    heldPal.y = Math.max(heldPal.y, 30);
-    heldPal.vy = 40;
-    heldPal.face = "content"; heldPal.faceT = 0.8;
-    heldPal = null;
-  };
-  cv.addEventListener("pointerup", release);
-  cv.addEventListener("pointercancel", release);
+/* ---------- pointer: look + boop + drag ---------- */
+let mx = -999, my = 0;
+function toCv(e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+cv.addEventListener("pointermove", e => { [mx, my] = toCv(e); });
+cv.addEventListener("pointerleave", () => { mx = -999; });
+cv.addEventListener("pointerdown", e => {
+  e.preventDefault(); [mx, my] = toCv(e);
+  const spr = sprite(p.spIdx);
+  if (!p.held && Math.abs(mx - p.x) < spr.w / 2 + 10 && Math.abs(my - p.y) < spr.h / 2 + 12) {
+    p.held = true; p.heldT = 0; p.slpT = 0; p.walkT = null; p.scurry = null;
+    cv.setPointerCapture(e.pointerId);
+  } else boop();
+});
+cv.addEventListener("pointerup", () => { if (p.held) { p.held = false; p.vy = 1.2; p.face = 4; p.faceT = 70; } });
+cv.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); boop(); } });
 
-  // ---- boop on click (only when it wasn't a drag) ----
-  let downXY = null;
-  cv.addEventListener("pointerdown", (e) => { downXY = toCv(e); });
-  cv.addEventListener("click", (e) => {
-    const [bx, by] = toCv(e);
-    if (downXY && Math.hypot(bx - downXY[0], by - downXY[1]) > 8) return; // was a drag
-    const p = palAt(bx, by);
-    if (!p) return;
-    // breed pick mode: tag parents instead of booping
-    if (breedPicking) {
-      if (!p.picked && breedSel.length < 2) {
-        p.picked = true; breedSel.push(p);
-        hearts.push({ x: p.x - 4, y: GY - 26 * SC - 18 - p.y, vy: -36, life: 1.2 });
-        if (breedSel.length === 2) startBreed();
-      }
-      return;
-    }
-    const prof = animProf(p.spIdx);
-    p.face = prof.glee > 0.5 ? "love" : "happy";
-    p.faceT = 1.3; p.sq = 0.34;
-    if (!p.held) p.vy = 120 + Math.random() * 60;
-    p.sleeping = 0;
-    for (let i = 0; i < 3; i++)
-      hearts.push({ x: p.x - 8 + i * 8, y: GY - 26 * SC - 14 - p.y, vy: -34 - i * 8, life: 1 });
-  });
-  cv.addEventListener("keydown", (e) => {
-    if (e.key !== " " && e.key !== "Enter") return;
-    e.preventDefault();
-    const p = pals[Math.floor(Math.random() * pals.length)];
-    if (!p || p.sleeping) return;
-    p.face = "love"; p.faceT = 1.2; p.sq = 0.3; p.vy = 110;
-    hearts.push({ x: p.x - 4, y: GY - 26 * SC - 14 - p.y, vy: -40, life: 1 });
-  });
+/* typing anywhere → jelly drop flies to counter (game loop, demo speed) */
+addEventListener("keydown", e => {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) return;
+  if (/input|textarea|select/i.test(e.target && e.target.tagName || "")) return;
+  jdrops.push({ x: p.x + rng(70) - 35, y: p.y - 20, tx: 16, ty: 11, t: 0, hit: false });
+});
 
-  // ---- feed: drop a treat, a pal scurries over and eats it ----
-  const feedBtn = document.getElementById("feed");
-  function jellyDrop(fromX, amt) {
-    drops.push({ x: fromX, y: GY - 26 * SC - 10, t: 0, amt });
-  }
-  if (feedBtn) feedBtn.addEventListener("click", () => {
-    if (treats.length >= 2) return;
-    const tx = 60 + Math.random() * (W - 120);
-    treats.push({ x: tx, y: -20, vy: 0 });
-    // nearest free pal goes for it
-    let best = null, bd = 1e9;
-    for (const p of pals)
-      if (!p.sleeping && !p.held && !p.eatT && !p.scurry) {
-        const d = Math.abs(p.x - tx);
-        if (d < bd) { bd = d; best = p; }
-      }
-    if (best) best.scurry = tx;
-  });
-
-  // ---- typing feeds the ranch — the real product loop, live ----
-  addEventListener("keydown", (e) => {
-    if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
-    if (e.key.length > 1) return;
-    keys++;
-    const awake = pals.filter((p) => !p.sleeping && !p.held);
-    if (!awake.length) return;
-    const p = awake[Math.floor(Math.random() * awake.length)];
-    if (Math.random() < 0.3 && !p.eatT) { p.face = "happy"; p.faceT = 0.4; }
-    if (keys % 12 === 0) jellyDrop(p.x, 1);   // demo rate: every 12 keys (game: 600)
-  });
-
-  // ---- breed: pick two pals, they meet, an egg hatches a hybrid ----
-  const breedBtn = document.getElementById("breed");
-  let breedPicking = false, breedSel = [], breeding = null;
-  if (breedBtn) breedBtn.addEventListener("click", () => {
-    if (breedPicking || breeding) return;
-    if (jelly < 20) {
-      breedBtn.textContent = "need 20 jelly — type!";
-      setTimeout(() => { breedBtn.textContent = "breed ♥ 20"; }, 1600);
-      return;
-    }
-    breedPicking = true; breedSel = [];
-    breedBtn.classList.add("on"); breedBtn.textContent = "pick 2 pals…";
-  });
-  function startBreed() {
-    breedPicking = false;
-    breeding = { t: 0, phase: 0, a: breedSel[0], b: breedSel[1], child: null };
-    breedBtn.classList.remove("on"); breedBtn.textContent = "breed ♥ 20";
-  }
-
-  // ---- the pull: real gacha weights, silhouette reveal ----
-  const pullBtn = document.getElementById("pull");
-  let pull = null;
-  const POOL = SPECIES.map((s, i) => ({ s, i })).filter(({ s }) => !s.season);
-  function roll() {
-    const tot = POOL.reduce((a, { s }) => a + RARITY_W[s.r], 0);
-    let r = Math.random() * tot;
-    for (const { s, i } of POOL) { r -= RARITY_W[s.r]; if (r <= 0) return i; }
-    return 0;
-  }
-  if (pullBtn) pullBtn.addEventListener("click", () => { if (!pull) pull = { spIdx: roll(), t: 0 }; });
-
-  // ---- tick ----
-  let t0 = 0;
-  function tick(now) {
-    requestAnimationFrame(tick);
-    const dt = Math.min(0.05, (now - t0) / 1000 || 0.016); t0 = now;
-    cx.clearRect(0, 0, W, H);
-
-    // 2.5D: faint drifting specks behind everything, pals stay crisp
-    for (const s of specks) {
-      s.x += s.v * dt;
-      if (s.x > W) s.x = -4;
-      cx.globalAlpha = s.a;
-      cx.fillStyle = "#a9d8f7";
-      cx.fillRect(s.x, s.y, s.s, s.s);
-    }
-    cx.globalAlpha = 1;
-
-    // ground
-    cx.fillStyle = "#1a1440";
-    cx.fillRect(0, GY + 6, W, 8);
-    cx.fillStyle = "rgba(143,232,192,.08)";
-    cx.fillRect(0, GY + 6, W, 2);
-
-    // jelly counter
-    jellyPulse = Math.max(0, jellyPulse - dt * 3);
-    cx.font = `8px ${PX}`;
-    cx.fillStyle = jellyPulse > 0 ? "#fff" : "#8fe8c0";
-    cx.fillText("JELLY " + jelly, 14, 24);
-    drawMap(cx, JDROP, 74, 15, 1.4 + jellyPulse * 0.6, "#8fe8c0");
-
-    // night sky: moon + twinkling stars (specks already drift below)
-    cx.fillStyle = "#f0ead0";
-    cx.beginPath(); cx.arc(W - 60, 42, 16, 0, 7); cx.fill();
-    cx.fillStyle = "#0f0b26";
-    cx.beginPath(); cx.arc(W - 54, 38, 14, 0, 7); cx.fill();
-    for (let i = 0; i < 10; i++) {
-      const tw = reduce ? 0.6 : 0.35 + 0.3 * Math.sin(now / 400 + i * 2.1);
-      cx.globalAlpha = tw;
-      cx.fillStyle = "#e8f0ff";
-      cx.fillRect(30 + ((i * 137) % (W - 120)), 16 + ((i * 61) % 90), 2, 2);
-    }
-    cx.globalAlpha = 1;
-
-    // placed props sit on the ground line, popping in
-    for (const k in props) {
-      const pr = props[k]; pr.t += dt;
-      const img = sprImg(k);
-      if (!img) continue;
-      const pop = Math.min(1, pr.t * 3.5);
-      const syq = (k === "cushion" && pr.occupied) ? 0.75 : 1;
-      const s = 2.6 * (0.6 + 0.4 * pop);
-      cx.drawImage(img, 0, 0, img.width, img.height,
-        Math.round(pr.x - img.width * s / 2), Math.round(GY + 6 - img.height * s * syq),
-        img.width * s, img.height * s * syq);
-    }
-
-    // treats falling / on the ground
-    for (let i = treats.length - 1; i >= 0; i--) {
-      const tr = treats[i];
-      if (tr.y < GY - 6) { tr.vy += 500 * dt; tr.y = Math.min(GY - 6, tr.y + tr.vy * dt); }
-      const bob = tr.y >= GY - 6 && !reduce ? Math.sin(now / 300) * 1.5 : 0;
-      drawMap(cx, TREAT, tr.x - 8, tr.y - 16 + bob, 2, "#ff9ec6");
-    }
-
-    for (const p of pals) {
-      const prof = animProf(p.spIdx);
-
-      // held: dangle + flail frames
-      if (p.held) {
-        p.heldF += dt;
-        p.face = (p.heldF % 0.5) < 0.25 ? "held1" : "held2";
-        p.faceT = 99;
-        p.y = 60 + Math.sin(p.heldF * 6) * 4;
-      } else {
-        // sleep cycle
-        if (!reduce && !p.sleeping) {
-          p.sleepT -= dt;
-          if (p.sleepT <= 0) { p.sleeping = 5 + Math.random() * 4; p.sleepT = 16 + Math.random() * 22; }
-        }
-        if (p.sleeping > 0) {
-          p.sleeping -= dt;
-          if (Math.random() < dt * 1.4)
-            zzzs.push({ x: p.x + 18, y: GY - 26 * SC - 8, vy: -16, life: 1.6 });
-        }
-
-        // scurry toward a treat or a furniture goal
-        if (p.scurry != null) {
-          const dx = p.scurry - p.x;
-          if (Math.abs(dx) < 16) {
-            p.scurry = null; p.vx = 0;
-            if (p.goal && p.goal.kind === "cushion" && props.cushion) {
-              p.napOn = { t: 6 + Math.random() * 3 };
-              props.cushion.occupied = true;
-              for (let i = 0; i < 5; i++) fxs.push({ x: p.x + (i - 2) * 8, y: GY - 6, vx: (i - 2) * 16, vy: -12, life: 0.4, c: "#f0d0e0" });
-            } else if (p.goal && p.goal.kind === "plant" && props.plant) {
-              p.sniffT = 1.6;
-              p.face = p.x < p.goal.x ? "lookR" : "lookL"; p.faceT = 1.5;
-              for (let i = 0; i < 4; i++) fxs.push({ x: p.goal.x + (Math.random() - .5) * 12, y: GY - 24, vx: (Math.random() - .5) * 30, vy: -30 - Math.random() * 20, life: 0.5, c: "#9adf8a" });
-            } else {
-              p.eatT = 1.8; p.eatPhase = 0;
-              p.face = "munch"; p.faceT = 0.4;
-            }
-            p.goal = null;
-          } else {
-            p.vx = Math.sign(dx) * 90;
-            p.face = dx < 0 ? "lookL" : "lookR"; p.faceT = 0.2;
-          }
-        } else if (!p.sleeping && !p.eatT && !p.napOn && !p.sniffT) {
-          if (!reduce && Math.random() < dt * 0.25) p.vx = (Math.random() - .5) * 20;
-          // idle pals wander over to check out furniture sometimes
-          if (!reduce && !p.goal && Math.random() < dt * 0.04) {
-            const ks = Object.keys(props).filter((k) => GOALABLE[k] && !(k === "cushion" && props[k].occupied));
-            if (ks.length) {
-              const k = ks[(Math.random() * ks.length) | 0];
-              p.goal = { kind: k, x: props[k].x };
-              p.scurry = p.goal.x;
-            }
-          }
-        }
-
-        // napping on the cushion
-        if (p.napOn) {
-          p.napOn.t -= dt; p.vx = 0;
-          p.face = "sleeping"; p.faceT = 99;
-          if (Math.random() < dt * 1.4) zzzs.push({ x: p.x + 18, y: GY - 26 * SC - 8, vy: -16, life: 1.6 });
-          if (p.napOn.t <= 0) {
-            if (props.cushion) props.cushion.occupied = false;
-            p.napOn = null; p.face = "happy"; p.faceT = 0.8; p.vy = 140;
-          }
-        }
-        // sniffing the plant
-        if (p.sniffT) {
-          p.sniffT -= dt; p.vx = 0;
-          if (Math.random() < dt * 3) fxs.push({ x: p.x + (Math.random() - .5) * 10, y: GY - 26, vx: 0, vy: -14, life: 0.5, c: "#9adf8a" });
-          if (p.sniffT <= 0) { p.sniffT = null; p.face = "happy"; p.faceT = 0.7; }
-        }
-
-        // jelly bounce mat — anything grounded on it gets launched
-        if (props.mat && p.y === 0 && !p.sleeping && !p.held && !p.napOn && (p.matCd || 0) <= 0 && Math.abs(p.x - props.mat.x) < 38) {
-          p.vy = 240 + Math.random() * 80; p.sq = 0.42; p.matCd = 0.7;
-          p.face = "happy"; p.faceT = 0.8;
-          for (let i = 0; i < 4; i++) fxs.push({ x: p.x + (i - 1.5) * 10, y: GY - 4, vx: (i - 1.5) * 20, vy: -20, life: 0.4, c: "#a8e8c0" });
-        }
-        p.matCd = Math.max(0, (p.matCd || 0) - dt);
-
-        // eating animation
-        if (p.eatT > 0) {
-          p.eatT -= dt; p.vx = 0;
-          const ph = p.eatT > 1.4 ? "munch" : p.eatT > 0.5 ? "chew" : "content";
-          p.face = ph; p.faceT = 99;
-          if (p.eatT > 0.5 && Math.random() < dt * 8)
-            crumbs.push({ x: p.x + (Math.random() - .5) * 20, y: GY - 20, vy: 20 + Math.random() * 30, life: 0.7 });
-          if (p.eatT <= 0) {
-            const ti = treats.findIndex((t) => Math.abs(t.x - p.x) < 24);
-            if (ti >= 0) treats.splice(ti, 1);
-            jellyDrop(p.x, 5);
-          }
-        }
-
-        // ambient trait motes — the same fx language the desktop pet uses
-        const sp = SPECIES[p.spIdx], tr = sp.trait, lg = LEG[sp.id];
-        p.ambT -= dt;
-        if (!reduce && !p.sleeping && p.ambT <= 0) {
-          p.ambT = 1.2 + Math.random() * 3;
-          if (tr === "spark") fxs.push({ x: p.x + Math.random() * 16 - 8, y: GY - 12 - p.y, vx: 0, vy: -30, life: 0.9, c: "#f0a05c" });
-          else if (tr === "drip") fxs.push({ x: p.x + Math.random() * 14 - 7, y: GY - 10 - p.y, vx: 0, vy: 50, life: 0.5, c: "#69b7ec" });
-          else if (tr === "wisp") fxs.push({ x: p.x + Math.random() * 30 - 15, y: GY - 26 - p.y - Math.random() * 14, vx: Math.random() * 8 - 4, vy: -10, life: 1.2, c: "#c4b2f0" });
-          else if (tr === "glint") bangs.push({ x: p.x + Math.random() * 30 - 15, y: GY - 20 - p.y - Math.random() * 30, life: 0.7, t: "✦", c: "#e8f0ff" });
-          else if (tr === "bubble") fxs.push({ x: p.x + Math.random() * 16 - 8, y: GY - 18 - p.y, vx: Math.random() * 6 - 3, vy: -28, life: 1, c: "#b8e8f5" });
-          else if (tr === "gravity") fxs.push({ x: p.x + Math.random() * 26 - 13, y: GY - 20 - p.y, vx: (Math.random() - .5) * 20, vy: 12, life: 0.8, c: "#b8a8ff" });
-          else if (tr === "royal") bangs.push({ x: p.x + Math.random() * 30 - 15, y: GY - 30 - p.y - Math.random() * 20, life: 0.7, t: "✦", c: "#ffd75e" });
-        }
-        // legendary ambient quirks — every legendary sheds its own signature
-        if (!reduce && !p.sleeping && lg) {
-          const moving = Math.abs(p.vx) > 6 || p.y > 0;
-          if (lg.starburst && Math.random() < dt * 1.8) fxs.push({ x: p.x + (Math.random() - .5) * 34, y: GY - 10 - p.y - Math.random() * 38, vx: 0, vy: -14, life: 0.8, c: "#e8f0ff" });
-          if (lg.embers && Math.random() < dt * 1.4) fxs.push({ x: p.x + (Math.random() - .5) * 12, y: GY - 30 - p.y, vx: (Math.random() - .5) * 12, vy: -36, life: 0.7, c: "#e05a3a" });
-          if (lg.halo && Math.random() < dt * 1.2) fxs.push({ x: p.x + Math.random() * 30 - 15, y: GY - 8 - p.y - Math.random() * 36, vx: 0, vy: -18, life: 0.8, c: lg.halo });
-          if (lg.goldtrail && moving && Math.random() < dt * 10) fxs.push({ x: p.x + (Math.random() - .5) * 26, y: GY - 10 - p.y - Math.random() * 18, vx: (Math.random() - .5) * 10, vy: -8, life: 0.6, c: "#ffe98f" });
-          if (lg.glow && Math.random() < dt * 1.6) fxs.push({ x: p.x + Math.random() * 18 - 9, y: GY - 6 - p.y, vx: Math.random() * 6 - 3, vy: -30, life: 0.8, c: lg.glow });
-          if (lg.trail && moving && Math.random() < dt * 14) fxs.push({ x: p.x, y: GY - 12 - p.y, vx: (Math.random() - .5) * 16, vy: 36, life: 0.4, c: lg.trail });
-          if (lg.drool && Math.random() < dt * 0.6) fxs.push({ x: p.x + 8, y: GY - 20 - p.y, vx: 0, vy: 26, life: 0.7, c: "#8ad4f0" });
-          if (lg.chips && moving && Math.random() < dt * 3) fxs.push({ x: p.x + (Math.random() - .5) * 20, y: GY - 6 - p.y, vx: (Math.random() - .5) * 40, vy: -30, life: 0.5, c: "#c8b8a0" });
-          if (lg.notes && Math.random() < dt * 0.35) bangs.push({ x: p.x + (Math.random() - .5) * 30, y: GY - 54 - p.y, life: 1.1, t: "♪", c: "#ffd9ea" });
-          if (lg.pulse) { p.ringT -= dt; if (p.ringT <= 0) { p.ringT = 5 + Math.random() * 4; rings.push({ x: p.x, y: GY - 24 - p.y, r: 44, life: 1 }); } }
-        }
-
-        // movement styles: hover pals float, scurry pals burst, blink pals teleport
-        if (!p.sleeping && !p.eatT && p.scurry == null) {
-          if (sp.mv === "scurry") {
-            p.burstT -= dt;
-            if (p.burstT <= 0) { p.burstT = 5 + Math.random() * 8; p.vx = (Math.random() < .5 ? -1 : 1) * (110 + Math.random() * 60); }
-          } else if (sp.mv === "blink") {
-            p.tpT -= dt;
-            if (!reduce && p.tpT <= 0) {
-              p.tpT = 7 + Math.random() * 10;
-              for (let i = 0; i < 5; i++) fxs.push({ x: p.x + (Math.random() - .5) * 20, y: GY - 14 - Math.random() * 24, vx: 0, vy: -10, life: 0.5, c: "#e8f0ff" });
-              p.x = 40 + Math.random() * (W - 80);
-              for (let i = 0; i < 5; i++) fxs.push({ x: p.x + (Math.random() - .5) * 20, y: GY - 14 - Math.random() * 24, vx: 0, vy: -10, life: 0.5, c: "#e8f0ff" });
-            }
-          }
-          p.hopT -= dt * (reduce ? 0 : 1);
-          if (p.hopT <= 0 && p.y === 0) {
-            p.vy = (sp.mv === "hop" ? 200 : 120) + 110 * prof.hop; p.hopT = 3 + Math.random() * 8;
-          }
-        }
-        p.x += p.vx * dt;
-        const half = 18 * SC;
-        if (p.x < half + 6) { p.x = half + 6; p.vx = Math.abs(p.vx); }
-        if (p.x > W - half - 6) { p.x = W - half - 6; p.vx = -Math.abs(p.vx); }
-
-        // face selection
-        p.faceT -= dt;
-        if (p.faceT <= 0) {
-          p.blinkT -= dt * 1000;
-          if (p.sleeping > 0) p.face = "sleeping";
-          else if (p.blinkT <= 0) { p.face = "blink"; p.faceT = prof.blinkLen / 1000; p.blinkT = prof.blink; }
-          else if (mx > -900) p.face = mx < p.x - 30 ? "lookL" : mx > p.x + 30 ? "lookR" : "idle";
-          else p.face = "idle";
-        }
-      }
-
-      // gravity (held pals float, everyone else falls)
-      if (!p.held && (p.y > 0 || p.vy > 0)) {
-        p.y += p.vy * dt;
-        p.vy -= 420 * dt;
-        if (p.y <= 0) { p.y = 0; if (p.vy < -80) p.sq = 0.3; p.vy = 0; }
-      }
-      p.sq *= Math.pow(0.02, dt);
-
-      // breathing squash
-      const br = reduce ? 0 : Math.sin(now / 600 * prof.breathe) * 0.03;
-      const sx = 1 + p.sq - br * 0.4, sy = 1 - p.sq * 0.8 + br;
-      const spr = sprite(p.face, p.spIdx);
-      const pw = SW * SC * sx, ph = SH * SC * sy;
-      // hover species drift above the ground like they do on the desktop
-      const phov = SPECIES[p.spIdx].mv === "hover" && !p.held ? 10 + Math.sin(now / 450 + p.ph) * 6 : 0;
-      const feetY = GY - p.y - phov;
-      // legendary wings flap behind the body
-      const lgq = LEG[SPECIES[p.spIdx].id];
-      if (lgq && lgq.wings) {
-        const wph = now / 1000 * (p.y > 0 ? 14 : 5);
-        const wf = Math.min(2, Math.floor(((Math.sin(wph) + 1) / 2) * 3));
-        const img = wingImg(wf, lgq.wings);
-        const ww = img.width * SC * sx, wh = img.height * SC * sy;
-        const wbob = Math.sin(wph - 0.6) * (p.y > 0 ? 1.6 : 0.8);
-        for (const m of [-1, 1]) {
-          cx.save();
-          cx.translate(p.x + m * SW * SC * sx * 0.3, feetY - SH * SC * sy * 0.56 + wbob);
-          cx.scale(m, 1);
-          cx.rotate(-0.12 + Math.sin(wph - 0.9) * (p.y > 0 ? 0.16 : 0.07));
-          cx.drawImage(img, 0, -wh, ww, wh);
-          cx.restore();
-        }
-      }
-      cx.globalAlpha = SPECIES[p.spIdx].trait === "wisp" ? 0.85 : 1;
-      cx.drawImage(spr, 0, 0, SW * 2, SH * 2, p.x - pw / 2, feetY - ph, pw, ph);
-      cx.globalAlpha = 1;
-      // equipped accessory rides the head — same anchor math as the game
-      if (p.acc) drawAccRaw(cx, p.acc, p.x, feetY - ph + 4, Math.max(1.2, SC * sy * 0.82));
-      // breed pick marker
-      if (p.picked) {
-        cx.font = `10px ${PX}`; cx.fillStyle = "#ff8fb0"; cx.textAlign = "center";
-        cx.fillText("♥", p.x, feetY - ph - 8);
-        cx.textAlign = "left";
-      }
-      // webby kicks her little legs while you carry her
-      if (p.held && lgq && lgq.legs) {
-        const t9 = now / 1000 * 9;
-        for (const m of [-1, 1]) for (let l = 0; l < 2; l++) {
-          const k = Math.sin(t9 + l * 2.1 + (m < 0 ? 1.4 : 0));
-          cx.save();
-          cx.translate(p.x + m * (SW * SC * sx * 0.3 + l * 4), feetY - SH * SC * sy * (0.32 - l * 0.14));
-          cx.scale(m, 1);
-          cx.rotate(0.5 + k * 0.45);
-          drawMap(cx, LEG_SPR, 0, 0, 2.2, "#3a3048");
-          cx.restore();
-        }
-      }
-      // pulsar's orbiting motes
-      if (lgq && lgq.orbit && !reduce) {
-        for (let o = 0; o < 2; o++) {
-          const a = now / 900 + p.ph + o * 3.14;
-          cx.fillStyle = "#b8a8ff";
-          cx.fillRect(p.x + Math.cos(a) * 30 - 1.5, feetY - 20 + Math.sin(a) * 10 - 1.5, 3, 3);
-        }
-      }
-    }
-
-    // particles
-    for (let i = hearts.length - 1; i >= 0; i--) {
-      const h = hearts[i]; h.y += h.vy * dt; h.life -= dt;
-      if (h.life <= 0) { hearts.splice(i, 1); continue; }
-      drawMap(cx, HEART, h.x, h.y, 2.2, "#ff8fb0");
-      cx.globalAlpha = 1;
-    }
-    for (let i = zzzs.length - 1; i >= 0; i--) {
-      const z = zzzs[i]; z.y += z.vy * dt; z.life -= dt;
-      if (z.life <= 0) { zzzs.splice(i, 1); continue; }
-      cx.globalAlpha = Math.min(1, z.life);
-      cx.font = `9px ${PX}`; cx.fillStyle = "#9c92d0";
-      cx.fillText("z", z.x, z.y);
-      cx.globalAlpha = 1;
-    }
-    for (let i = crumbs.length - 1; i >= 0; i--) {
-      const c = crumbs[i]; c.y += c.vy * dt; c.life -= dt;
-      if (c.life <= 0 || c.y > GY) { crumbs.splice(i, 1); continue; }
-      cx.fillStyle = "#ffd9ea";
-      cx.fillRect(c.x, c.y, 2, 2);
-    }
-    for (let i = fxs.length - 1; i >= 0; i--) {
-      const f = fxs[i]; f.x += f.vx * dt; f.y += f.vy * dt; f.life -= dt;
-      if (f.life <= 0 || f.y > GY) { fxs.splice(i, 1); continue; }
-      cx.globalAlpha = Math.min(1, f.life * 2);
-      cx.fillStyle = f.c;
-      cx.fillRect(f.x, f.y, 2.5, 2.5);
-    }
-    cx.globalAlpha = 1;
-    for (let i = rings.length - 1; i >= 0; i--) {
-      const r = rings[i]; r.life -= dt * 1.2; r.r -= 38 * dt;
-      if (r.life <= 0 || r.r < 4) { rings.splice(i, 1); continue; }
-      cx.globalAlpha = r.life * 0.6;
-      cx.strokeStyle = "#b8a8ff";
-      cx.lineWidth = 2;
-      cx.strokeRect(r.x - r.r, r.y - r.r * 0.5, r.r * 2, r.r);
-    }
-    cx.globalAlpha = 1;
-    for (let i = drops.length - 1; i >= 0; i--) {
-      const d = drops[i]; d.t += dt * 1.4;
-      if (d.t >= 1) { jelly += d.amt; jellyPulse = 1; drops.splice(i, 1); continue; }
-      const t2 = d.t * d.t * (3 - 2 * d.t);
-      const dx = 60 + (d.x - 60) * (1 - t2), dy = 20 + (d.y - 20) * (1 - t2) - Math.sin(t2 * Math.PI) * 60;
-      drawMap(cx, JDROP, dx, dy, 1.6, "#8fe8c0");
-    }
-
-    // ---- breed sequence: parents meet at midfield, egg, hybrid hatches ----
-    if (breeding) {
-      breeding.t += dt;
-      const { a, b } = breeding, mid = (a.x + b.x) / 2;
-      if (breeding.phase === 0) {
-        a.scurry = mid - 16; b.scurry = mid + 16;
-        breeding.phase = 1;
-      } else if (breeding.phase === 1 && a.scurry == null && b.scurry == null) {
-        breeding.phase = 2; breeding.t = 0;
-        a.face = b.face = "love"; a.faceT = b.faceT = 1.4;
-        for (let i = 0; i < 6; i++)
-          hearts.push({ x: mid - 10 + i * 4, y: GY - 30 * SC - i * 6, vy: -30 - i * 6, life: 1.2 });
-      } else if (breeding.phase === 2 && breeding.t > 1.1) {
-        breeding.phase = 3; breeding.t = 0;
-        breeding.child = makeHybrid(SPECIES[a.spIdx], SPECIES[b.spIdx]);
-      } else if (breeding.phase === 3) {
-        // the egg sits mid-ranch and wobbles before it pops
-        const wob = reduce ? 0 : Math.sin(breeding.t * 14) * Math.min(4, breeding.t * 3);
-        drawMap(cx, ["..ww..", ".wkkk.", "wkkwwk", "wkkwkk", ".wkkk.", "..ww.."], mid - 9 + wob, GY - 24, 3, "#f4ead8");
-        if (breeding.t > 1.7) {
-          jelly -= 20;
-          SPECIES.push(breeding.child);
-          const np = addPalIdx(SPECIES.length - 1, mid);
-          np.face = "star"; np.faceT = 1.6; np.vy = 190;
-          bangs.push({ x: mid, y: 80, life: 1.8, t: "+ " + breeding.child.name.toUpperCase() + "!", c: RARITY_COLOR[breeding.child.r] });
-          for (let i = 0; i < 8; i++)
-            fxs.push({ x: mid + (Math.random() - .5) * 30, y: GY - 20 - Math.random() * 30, vx: (Math.random() - .5) * 40, vy: -20 - Math.random() * 30, life: 0.7, c: "#f4ead8" });
-          a.picked = b.picked = false;
-          breedSel = []; breeding = null;
-        }
-      }
-    }
-
-    // ---- pull sequence ----
-    if (pull) {
-      pull.t += dt;
-      const sp = SPECIES[pull.spIdx];
-      const dim = pull.t < 1 ? Math.min(0.55, pull.t) : Math.max(0, 0.55 - (pull.t - 1) * 2);
-      cx.fillStyle = `rgba(10,8,26,${dim})`;
-      cx.fillRect(0, 0, W, H);
-      const cxp = W / 2, grow = Math.min(1, pull.t / 0.8);
-      const wob = reduce ? 0 : Math.sin(pull.t * 22) * 3 * (1 - grow);
-      if (pull.t < 1) {
-        const sil = sprite("idle", pull.spIdx, true);
-        const s = SC * 1.6 * (0.5 + grow * 0.5);
-        cx.globalAlpha = Math.min(1, grow * 1.5);
-        cx.drawImage(sil, 0, 0, SW * 2, SH * 2, cxp - SW * s / 2 + wob, GY - SH * s - 40 * grow, SW * s, SH * s);
-        cx.globalAlpha = 1;
-      } else {
-        if (pull.t - dt < 1) {
-          bangs.push({ x: cxp, y: 70, life: 1.6, t: `+ ${sp.name.toUpperCase()}!`, c: RARITY_COLOR[sp.r] });
-          // higher rarity, bigger fanfare — epic+ sheds a ring, legendary bursts
-          if (sp.r >= 2) rings.push({ x: cxp, y: GY - 50, r: 60, life: 1 });
-          if (sp.r >= 3)
-            for (let i = 0; i < 12; i++)
-              fxs.push({ x: cxp + (Math.random() - .5) * 80, y: GY - 20 - Math.random() * 70, vx: (Math.random() - .5) * 40, vy: -20 - Math.random() * 40, life: 0.9, c: i % 2 ? "#ffd75e" : "#e8f0ff" });
-          if (pals.length < 10 && !pals.some((p) => p.spIdx === pull.spIdx)) {
-            addPal(sp.id, cxp);
-            const np = pals[pals.length - 1];
-            np.face = "star"; np.faceT = 1.6; np.vy = 170;
-          } else {
-            jellyDrop(cxp, 20);
-            bangs.push({ x: cxp, y: 92, life: 1.6, t: "DUP +20 JELLY", c: "#8fe8c0" });
-          }
-        }
-        const real = sprite("star", pull.spIdx);
-        const s = SC * 1.6;
-        const pop = 1 + Math.max(0, 0.25 - (pull.t - 1)) * 0.8;
-        cx.drawImage(real, 0, 0, SW * 2, SH * 2, cxp - SW * s * pop / 2, GY - SH * s * pop - 40, SW * s * pop, SH * s * pop);
-        if (pull.t > 1.9) pull = null;
-      }
-    }
-    for (let i = bangs.length - 1; i >= 0; i--) {
-      const b = bangs[i]; b.y -= 14 * dt; b.life -= dt;
-      if (b.life <= 0) { bangs.splice(i, 1); continue; }
-      cx.globalAlpha = Math.min(1, b.life);
-      cx.font = `9px ${PX}`; cx.textAlign = "center";
-      cx.fillStyle = b.c || "#ece8fb";
-      cx.fillText(b.t, b.x, b.y);
-      cx.textAlign = "left"; cx.globalAlpha = 1;
-    }
-  }
+/* ---------- tick ---------- */
+let last = 0;
+function tick(ts) {
   requestAnimationFrame(tick);
+  const dt = Math.min(3, (ts - last) / 16.7 || 1); last = ts;
+  const t = ts / 16.7;
+  const spr = sprite(p.spIdx), sp = SPECIES[p.spIdx];
+  const prof = animProf(p.spIdx), leg = LEG[sp.id];
+  const T = dt * (RM ? 0.35 : 1);
 
-  // ---- shared: fit a sprite (72x52) into a box, bottom-anchored ----
-  function fit(cc, spr, bw, bh, pad = 0) {
-    const sw = SW * 2, sh = SH * 2;
-    const s = Math.min((bw - pad * 2) / sw, (bh - pad * 2) / sh);
-    const dw = sw * s, dh = sh * s;
-    cc.imageSmoothingEnabled = false;
-    cc.drawImage(spr, 0, 0, sw, sh, (bw - dw) / 2, bh - dh - pad, dw, dh);
+  /* ambient fx — same table as product */
+  if (sp && !p.held && p.slpT <= 0 && Math.random() < T * 0.05) {
+    const bx = p.x, by = p.y - spr.h / 2;
+    if (sp.trait === "drip") fxAt(bx, by - 4, "drip", "#7ecbff");
+    else if (sp.trait === "spark") fxAt(bx, by, "ember", "#ffb35e");
+    else if (sp.trait === "bubble") fxAt(bx, by, "bub", "#bfe8ff");
+    else if (sp.trait === "glint" && Math.random() < 0.5) fxAt(bx + rng(20) - 10, by + rng(16) - 8, "glint", prof.glint);
+    else if (sp.trait === "wisp") fxAt(bx, by, "mote", "#c88dff");
+    else if (sp.trait === "gravity" && Math.random() < 0.4) fxAt(bx, by - rng(12), "mote", "#b28dff");
+    if (leg === "starmotes") fxAt(bx, by, "mote", "#ffe98a");
+    else if (leg === "embers" && Math.random() < 0.7) fxAt(bx, by, "ember", "#ff9e5e");
+    else if (leg === "royal" && Math.random() < 0.4) fxAt(bx + rng(20) - 10, by + rng(10), "glint", "#ffd76a");
+    else if (leg === "magmotes" && Math.random() < 0.5) fxAt(bx, by, "mote", "#ff8a5e");
+    else if (leg === "notes" && Math.random() < 0.35) fxAt(bx, by - 6, "note", "#8ef0ff");
+    else if (leg === "drool" && Math.random() < 0.3) fxAt(bx, p.y, "drip", "#9be89b");
+    else if (leg === "orbit" && Math.random() < 0.5) fxAt(bx, by, "mote", "#8ef0ff");
+    if (leg === "orbit" && Math.random() < T * 0.008) ring(p.x, p.y - spr.h / 2, "#8ef0ff", 16);
   }
-  window.palSprite = (face, idx) => sprite(face, idx);
-  window.palFit = fit;
+  if (leg === "comettrail" && Math.abs(p.vx) > 1 && Math.random() < T * 0.3) fxAt(p.x - p.vx * 4, p.y, "ember", "#ffc46a");
+  if (leg === "goldtrail" && Math.abs(p.vx) > 1 && Math.random() < T * 0.2) fxAt(p.x - p.vx * 4, p.y, "glint", "#ffe9a0");
 
-  // ---- species dex: filter + featured first, real sprites ----
-  const dex = document.getElementById("dex");
-  if (dex) {
-    const FEATURED = ["sprout", "kitty", "aurora", "gold", "drago", "mochi", "void", "frost", "waffle", "siren", "frog", "ninja"];
-    const FEATURED_SET = new Set(FEATURED.map(spIndex));
-    let filter = -1, expanded = false;
-    const cells = [];
-    SPECIES.forEach((sp, i) => {
-      const cell = document.createElement("div");
-      cell.className = "cell pxframe r" + sp.r;
-      const cnv = document.createElement("canvas");
-      cnv.width = 66; cnv.height = 44;
-      fit(cnv.getContext("2d"), sprite("idle", i), 66, 44);
-      const nm = document.createElement("div");
-      nm.className = "nm"; nm.textContent = sp.name;
-      const rr = document.createElement("div");
-      rr.className = "rr"; rr.textContent = RARITY_NAME[sp.r];
-      rr.style.color = RARITY_COLOR[sp.r];
-      cell.append(cnv, nm, rr);
-      if (sp.sig) {
-        const sg = document.createElement("div");
-        sg.className = "sg"; sg.textContent = "◆ " + sp.sig.toUpperCase();
-        sg.title = "signature move";
-        cell.appendChild(sg);
+  /* state */
+  if (p.held) {
+    p.heldT += T;
+    p.x += (mx - p.x) * 0.5 * T; p.y += (my - p.y) * 0.5 * T;
+    p.y = Math.min(p.y, GY() - spr.h / 2 + 2);
+    p.face = ((p.heldT | 0) % 90 < 45) ? 10 : 11;
+    if (sp.id === "spidr" && Math.random() < T * 0.08) sparkBurst(p.x, p.y + 10, "#cfc4f5", 2);
+  } else {
+    /* gravity */
+    p.vy -= 0.055 * T; p.y -= p.vy * T;
+    const fl = GY() - spr.h / 2 + 2;
+    if (p.y > fl) { p.y = fl; if (p.vy < -1.4) { p.squash = Math.max(p.squash, 0.5); p.vy = 0.4; } else p.vy = 0; }
+
+    /* movement style */
+    const onG = p.y >= fl - 1;
+    if (sp.mv === "blink") {
+      p.blinkCd -= T;
+      if (p.blinkCd <= 0 && onG && p.slpT <= 0) {
+        sparkBurst(p.x, p.y, "#cdb9ff", 8);
+        p.x = 16 + spr.w / 2 + Math.random() * (W - 32 - spr.w);
+        sparkBurst(p.x, p.y, "#cdb9ff", 8);
+        p.blinkCd = 200 + rng(260); p.blinkFx = 14;
       }
-      if (sp.season) {
-        const sn = document.createElement("div");
-        sn.className = "sn"; sn.textContent = "★";
-        cell.appendChild(sn);
-      }
-      cell.tabIndex = 0;
-      cell.setAttribute("role", "button");
-      const react = () => {
-        if (cell._anim) return;
-        cell._anim = true;
-        const prof = animProf(i), cc = cnv.getContext("2d"), t00 = performance.now();
-        const face = prof.glee > 0.5 ? "love" : "happy";
-        (function fr(now) {
-          const t = (now - t00) / 1000;
-          if (t > 1.1) { cell._anim = false; fit(cc, sprite("idle", i), 66, 44); return; }
-          requestAnimationFrame(fr);
-          cc.clearRect(0, 0, 66, 44);
-          const hop = Math.abs(Math.sin(t * 7)) * 6, sq = Math.sin(t * 14) * 0.12;
-          const spr = sprite(t < 0.8 ? face : "idle", i);
-          const s = Math.min(58 / (SW * 2), 40 / (SH * 2));
-          const dw = SW * 2 * s * (1 + sq), dh = SH * 2 * s * (1 - sq);
-          cc.imageSmoothingEnabled = false;
-          cc.drawImage(spr, 0, 0, SW * 2, SH * 2, (66 - dw) / 2, 44 - dh - hop, dw, dh);
-        })(t00);
-      };
-      cell.addEventListener("click", react);
-      cell.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); react(); } });
-      cells.push({ el: cell, r: sp.r, feat: FEATURED_SET.has(i) });
-      dex.appendChild(cell);
-    });
-    const applyDex = () => {
-      for (const c of cells) {
-        const ok = (filter < 0 || c.r === filter) && (expanded || c.feat || filter >= 0);
-        c.el.style.display = ok ? "" : "none";
-      }
-      const more = document.getElementById("dexmore");
-      if (more) more.style.display = expanded ? "none" : "";
+    } else if (sp.mv === "scurry") {
+      if (p.scurry != null) {
+        p.vx += Math.sign(p.scurry - p.x) * 0.45 * T;
+        if (Math.abs(p.scurry - p.x) < 6) p.scurry = null;
+      } else if (Math.random() < T * 0.004 && p.slpT <= 0) p.scurry = 20 + Math.random() * (W - 40);
+    } else if (p.walkT != null) {
+      p.vx += Math.sign(p.tx - p.x) * 0.055 * T;
+      if (Math.abs(p.tx - p.x) < 4) { p.walkT = null; p.vx *= 0.3; }
+    }
+    p.vx *= Math.pow(0.9, T); p.x += p.vx * T;
+    p.x = Math.max(14 + spr.w / 2, Math.min(W - 14 - spr.w / 2, p.x));
+
+    /* hop */
+    if (sp.mv === "hop" && onG && p.walkT != null && p.vy === 0 && Math.random() < T * 0.06) p.vy = 1.1;
+    else if (onG && p.jumpT <= 0 && Math.random() < T * 0.0025 * prof.hopF && p.slpT <= 0) { p.vy = 1.3 + rng(1); p.jumpT = 60 + rng(80); }
+    if (p.jumpT > 0) p.jumpT -= T;
+
+    /* wander / sleep */
+    if (p.slpT > 0) { p.slpT -= T; if (p.slpT <= 0) { p.face = 0; p.faceT = 0; } }
+    else if (p.walkT == null && p.scurry == null && Math.random() < T * 0.004) {
+      if (Math.random() < 0.12) { p.slpT = 240 + rng(160); p.face = 8; p.faceT = 9999; }
+      else { p.tx = 16 + spr.w / 2 + Math.random() * (W - 32 - spr.w); p.walkT = 1; }
+    }
+    if (p.blinkFx > 0) p.blinkFx -= T;
+  }
+
+  /* face: cursor look + blink */
+  if (p.faceT > 0) { p.faceT -= T; if (p.faceT <= 0 && p.slpT <= 0) p.face = 0; }
+  else if (!p.held) {
+    const dx = mx - p.x;
+    p.face = Math.abs(dx) < 7 ? 0 : dx > 0 ? 1 : 2;
+  }
+  if (p.slpT <= 0 && !p.held) { p.bt -= T; if (p.bt <= 0) { p.bt = 150 + rng(240); p.blink = true; } if (p.blink && p.bt % 12 < T) p.blink = false; }
+  if (p.squash > 0) p.squash = Math.max(0, p.squash - 0.05 * T);
+
+  /* ---------- draw ---------- */
+  ctx.clearRect(0, 0, W, H);
+  drawMoon(ctx);
+  for (const s of stars) { const a = 0.25 + 0.5 * (0.5 + 0.5 * Math.sin(t * 0.02 + s.ph)); ctx.fillStyle = `rgba(230,225,255,${a.toFixed(2)})`; ctx.fillRect(s.x * W | 0, s.y * H | 0, s.ph > 5 ? 2 : 1, s.ph > 5 ? 2 : 1); }
+  ctx.fillStyle = "rgba(255,255,255,.06)"; ctx.fillRect(0, GY() | 0, W, 1);
+  ctx.fillStyle = "rgba(255,255,255,.03)"; ctx.fillRect(0, (GY() | 0) + 4, W, 1);
+
+  /* shadow */
+  const airH = Math.max(0, (GY() - spr.h / 2 + 2) - p.y);
+  const shw = spr.w * 0.34 * Math.max(0.4, 1 - airH / 120);
+  ctx.fillStyle = `rgba(0,0,0,${(0.28 * Math.max(0.3, 1 - airH / 140)).toFixed(2)})`;
+  ctx.beginPath(); ctx.ellipse(p.x, GY() + 2, shw, 3, 0, 0, 7); ctx.fill();
+
+  /* pal */
+  const hov = (sp.mv === "hover" && !p.held) ? Math.sin(t * 0.045 + p.ph) * 2.2 - 3 : 0;
+  ctx.save(); ctx.translate(p.x, p.y + hov);
+  const sq = p.squash, stretch = p.vy > 0.8 ? Math.min(0.22, p.vy * 0.06) : 0;
+  ctx.scale(1 + sq * 0.3 - stretch * 0.5, 1 - sq * 0.24 + stretch);
+  if (p.blinkFx > 0) ctx.globalAlpha = Math.max(0.25, p.blinkFx / 14);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(off, -spr.w / 2 | 0, -spr.h / 2 | 0);
+  ctx.restore();
+
+  /* wings + orbit ring above pal */
+  if (!p.held && p.slpT <= 0 && (leg === "wings" || leg === "wingsgold")) {
+    const wimg = wingImg(leg === "wings" ? 0 : 1, (t * 0.12 | 0) % 3);
+    const sc = 0.8, wy = p.y + hov - spr.h / 2 + 4;
+    ctx.drawImage(wimg, p.x - spr.w / 2 - wimg.width * sc + 4, wy, wimg.width * sc, wimg.height * sc);
+    ctx.save(); ctx.scale(-1, 1); ctx.drawImage(wimg, -(p.x + spr.w / 2 - 4), wy, wimg.width * sc, wimg.height * sc); ctx.restore();
+  }
+  if (sp.id === "spidr" && p.held) {
+    ctx.strokeStyle = "#3d3655"; ctx.lineWidth = 2;
+    for (let s2 = -1; s2 <= 1; s2 += 2) for (let l = 0; l < 4; l++) {
+      const wig = Math.sin(t * 0.35 + l) * 4;
+      ctx.beginPath(); ctx.moveTo(p.x + s2 * spr.w * 0.3, p.y + 4 + l * 3);
+      ctx.quadraticCurveTo(p.x + s2 * (spr.w * 0.3 + 8), p.y + 8 + l * 3 + wig, p.x + s2 * (spr.w * 0.3 + 12), p.y + 14 + l * 3 + wig); ctx.stroke();
+    }
+  }
+
+  /* hearts / zzz */
+  for (let i = hearts.length - 1; i >= 0; i--) { const h = hearts[i]; h.t += T; h.y -= h.vy * T; if (h.t > h.life) { hearts.splice(i, 1); continue; } ctx.globalAlpha = 1 - h.t / h.life; ctx.fillStyle = "#ff8fb3"; ctx.font = "10px monospace"; ctx.fillText("♥", h.x, h.y); }
+  if (p.slpT > 0 && Math.floor(t / 30) % 2 === 0) { ctx.globalAlpha = 0.7; ctx.fillStyle = "#aab3ff"; ctx.font = "10px monospace"; ctx.fillText("z", p.x + 12, p.y - spr.h / 2 - 8 - (t % 30) * 0.3); }
+  ctx.globalAlpha = 1;
+
+  /* fx particles */
+  for (let i = fxs.length - 1; i >= 0; i--) {
+    const f = fxs[i]; f.t += T;
+    if (f.t > f.life) { fxs.splice(i, 1); continue; }
+    const a = 1 - f.t / f.life;
+    ctx.globalAlpha = a; ctx.fillStyle = f.col;
+    if (f.kind === "drip") { f.y += 0.35 * T; ctx.fillRect(f.x | 0, f.y | 0, 2, 3); }
+    else if (f.kind === "ember" || f.kind === "mote") { f.y -= 0.4 * T; f.x += Math.sin(t * 0.1 + i) * 0.3 * T; ctx.fillRect(f.x | 0, f.y | 0, 2, 2); }
+    else if (f.kind === "bub") { f.y -= 0.5 * T; ctx.strokeStyle = f.col; ctx.strokeRect(f.x | 0, f.y | 0, 3, 3); }
+    else if (f.kind === "glint") { ctx.font = "8px monospace"; ctx.fillText("✦", f.x, f.y); }
+    else if (f.kind === "note") { f.y -= 0.5 * T; ctx.font = "9px monospace"; ctx.fillText("♪", f.x, f.y); }
+    else { f.x += f.vx * T * 0.05; f.y += f.vy * T * 0.05; f.vy += 0.4 * T; ctx.fillRect(f.x | 0, f.y | 0, 2, 2); }
+  }
+  ctx.globalAlpha = 1;
+  for (let i = rings.length - 1; i >= 0; i--) { const r = rings[i]; r.t += T; if (r.t > 30) { rings.splice(i, 1); continue; } ctx.globalAlpha = (1 - r.t / 30) * 0.6; ctx.strokeStyle = r.col; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(r.x, r.y, 4 + (r.r1 - 4) * (r.t / 30), 0, 7); ctx.stroke(); }
+  ctx.globalAlpha = 1;
+
+  /* jelly drops → counter */
+  for (let i = jdrops.length - 1; i >= 0; i--) {
+    const j = jdrops[i]; j.t += T * 0.045;
+    if (j.t >= 1) { jdrops.splice(i, 1); if (!j.hit) { jelly++; sparkBurst(j.tx + 8, j.ty + 6, "#9dffc4", 5); pop(j.tx + 12, j.ty + 4, "+1", "#9dffc4"); } continue; }
+    const e = j.t * j.t;
+    const jx = j.x + (j.tx - j.x) * e, jy = j.y + (j.ty - j.y) * e - Math.sin(j.t * Math.PI) * 18;
+    ctx.drawImage(jellyImg(), jx - 4, jy - 4, 8, 8);
+  }
+  ctx.font = "8px 'Press Start 2P',monospace"; ctx.textBaseline = "top";
+  ctx.drawImage(jellyImg(), 8, 8, 11, 11);
+  ctx.fillStyle = "#9dffc4"; ctx.fillText("JELLY " + jelly, 24, 10);
+
+  /* pops + specks */
+  for (let i = pops.length - 1; i >= 0; i--) { const q = pops[i]; q.t += T; if (q.t > 50) { pops.splice(i, 1); continue; } ctx.globalAlpha = 1 - q.t / 50; ctx.fillStyle = q.col; ctx.font = "8px 'Press Start 2P',monospace"; ctx.fillText(q.txt, q.x, q.y - q.t * 0.5); }
+  ctx.globalAlpha = 1;
+  if (!RM && Math.random() < 0.03 && specks.length < 10) specks.push({ x: Math.random() * W, y: GY() - rng(40), t: 0 });
+  for (let i = specks.length - 1; i >= 0; i--) { const s = specks[i]; s.t += T; if (s.t > 140) { specks.splice(i, 1); continue; } ctx.fillStyle = `rgba(200,190,255,${(0.1 * (1 - s.t / 140)).toFixed(2)})`; ctx.fillRect(s.x + Math.sin(s.t * 0.02) * 6, s.y - s.t * 0.15, 1, 1); }
+
+  /* ---------- paint pal sprite into offscreen ---------- */
+  let face = p.face;
+  if (p.blink && (face === 0 || face === 1 || face === 2)) face = 3;
+  octx.clearRect(0, 0, 48, 34);
+  drawPal(octx, p.spIdx, 0, 0, face, true);
+}
+
+/* ---------- helpers ---------- */
+function fit(img, dw, dh) {
+  const s = Math.min(dw / img.width, dh / img.height);
+  const w = img.width * s | 0 || 1, h = img.height * s | 0 || 1;
+  return [(dw - w) / 2 | 0, (dh - h) / 2 | 0, w, h];
+}
+function roundRectPath(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+function drawStar(g, cx, cy, r, col) { g.fillStyle = col; g.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.42 : r; g[i ? "lineTo" : "moveTo"](cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); } g.fill(); }
+
+/* ---------- section icons (real game sprites) ---------- */
+document.querySelectorAll(".hico").forEach(c => {
+  const g = c.getContext("2d"); g.imageSmoothingEnabled = false;
+  const k = c.dataset.hico;
+  if (k === "jelly") g.drawImage(jellyImg(), ...fit(jellyImg(), 20, 20));
+  else if (k === "jar" || k === "mirror" || k === "cushion") { const im = sprImg(k); g.drawImage(im, ...fit(im, 22, 18)); }
+  else { const i = SPECIES.findIndex(s => s.id === k); if (i >= 0) { const im = sprite(i); g.drawImage(im, ...fit(im, 24, 18)); } }
+});
+document.querySelectorAll("[data-lico]").forEach(c => {
+  const g = c.getContext("2d"); g.imageSmoothingEnabled = false;
+  const k = c.dataset.lico;
+  const im = k === "jelly" ? jellyImg() : sprite(SPECIES.findIndex(s => s.id === k));
+  g.drawImage(im, ...fit(im, 26, 22));
+});
+const jp = document.getElementById("jellypic");
+if (jp) { const g = jp.getContext("2d"); g.imageSmoothingEnabled = false; g.drawImage(jellyImg(), ...fit(jellyImg(), 34, 34)); }
+
+/* ---------- dex (compendium) ---------- */
+const dexgrid = document.getElementById("dexgrid");
+const dexcells = [];
+if (dexgrid) {
+  const FEATURED = ["mochi", "sprout", "pep", "drop", "berry", "frog", "beebop", "toxi", "ghoo", "magma", "goldie", "stella"];
+  let rarF = null, showAll = false;
+  function cell(i, big) {
+    const d = document.createElement("div"); d.className = "dexcell r" + SPECIES[i].r;
+    if (big) d.classList.add("big");
+    d.tabIndex = 0; d.setAttribute("role", "button");
+    d.setAttribute("aria-label", SPECIES[i].n + " — " + RARITY_COLOR[SPECIES[i].r][1] + " pal");
+    const c = document.createElement("canvas"); c.width = big ? 48 : 34; c.height = big ? 36 : 28;
+    const g = c.getContext("2d"); g.imageSmoothingEnabled = false;
+    const im = sprite(i); const f = fit(im, c.width - 4, c.height - (big ? 6 : 4));
+    g.drawImage(im, f[0], f[1] - (big ? 4 : 0), f[2], f[3]);
+    d.appendChild(c);
+    const nm = document.createElement("span"); nm.textContent = SPECIES[i].n; d.appendChild(nm);
+    const tg = document.createElement("i"); tg.textContent = RARITY_COLOR[SPECIES[i].r][1]; tg.style.color = RARITY_COLOR[SPECIES[i].r][0]; d.appendChild(tg);
+    if (SPECIES[i].sig) { const sg = document.createElement("b"); sg.textContent = "◆ SIG"; d.appendChild(sg); }
+    dexcells[i] = { el: d, t: 0 };
+    d.addEventListener("click", () => dexreact(i));
+    d.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); dexreact(i); } });
+    return d;
+  }
+  function dexreact(i) {
+    const dc = dexcells[i]; if (!dc) return;
+    dc.t = 18;
+    const c = dc.el.querySelector("canvas"), g = c.getContext("2d"), im = sprite(i);
+    const face = [4, 5, 9][i % 3];
+    const f = fit(im, c.width - 4, c.height - (c.width > 40 ? 6 : 4));
+    const anim = () => {
+      dc.t -= 1;
+      g.clearRect(0, 0, c.width, c.height); g.imageSmoothingEnabled = false;
+      const sq = dc.t > 9 ? (dc.t - 9) / 9 * 0.3 : 0;
+      const hop = dc.t > 0 ? Math.sin(dc.t / 18 * Math.PI) * 5 : 0;
+      g.save(); g.translate(c.width / 2, c.height - (c.width > 40 ? 6 : 4) - hop);
+      g.scale(1 + sq, 1 - sq * 0.7);
+      drawPal(g, i, 0, 0, dc.t > 0 ? face : 0, true);
+      g.restore();
+      if (dc.t > 0) requestAnimationFrame(anim);
+      else { g.clearRect(0, 0, c.width, c.height); g.drawImage(im, f[0], f[1] - (c.width > 40 ? 4 : 0), f[2], f[3]); }
     };
-    document.querySelectorAll(".dexfilter button").forEach((b) => {
-      b.addEventListener("click", () => {
-        filter = b.dataset.r === "all" ? -1 : +b.dataset.r;
-        document.querySelectorAll(".dexfilter button").forEach((x) => x.classList.toggle("on", x === b));
-        applyDex();
-      });
-    });
-    const more = document.getElementById("dexmore");
-    if (more) more.addEventListener("click", () => { expanded = true; applyDex(); });
-    applyDex();
+    anim();
   }
+  function dexrender() {
+    dexgrid.innerHTML = "";
+    let idx = SPECIES.map((_, i) => i);
+    if (rarF != null) idx = idx.filter(i => SPECIES[i].r === rarF);
+    else if (!showAll) { const f = FEATURED.map(id => SPECIES.findIndex(s => s.id === id)).filter(i => i >= 0); idx = f; }
+    idx.forEach(i => dexgrid.appendChild(cell(i, FEATURED.includes(SPECIES[i].id) && rarF == null)));
+    dexgrid.classList.toggle("feat", rarF == null && !showAll);
+    const mb = document.getElementById("dexmore"); if (mb) mb.hidden = rarF != null || showAll;
+  }
+  document.querySelectorAll(".dfbtn").forEach(b => b.addEventListener("click", () => {
+    document.querySelectorAll(".dfbtn").forEach(x => x.classList.toggle("on", x === b));
+    rarF = b.dataset.r === "" ? null : +b.dataset.r; showAll = false; dexrender();
+  }));
+  const mb = document.getElementById("dexmore");
+  if (mb) mb.addEventListener("click", () => { showAll = true; dexrender(); });
+  dexrender();
+}
 
-  // ---- pack icons + loop-step icons ----
-  const PACK_SP = ["sprout", "berry", "gold", "stella"];
-  document.querySelectorAll(".jellypic").forEach((el, i) => {
-    fit(el.getContext("2d"), sprite("idle", spIndex(PACK_SP[i] || "sprout")), el.width, el.height, 2);
-  });
-  document.querySelectorAll(".lico").forEach((el) => {
-    const cc = el.getContext("2d");
-    if (el.dataset.lico === "pal") {
-      fit(cc, sprite("happy", spIndex("sprout")), el.width, el.height, 2);
-    } else {
-      cc.imageSmoothingEnabled = false;
-      drawMap(cc, JDROP, el.width / 2 - 9, 4, 3.4, "#8fe8c0");
-    }
-  });
-
-  // ---- toybox icons: real prop sprites + real accessory art ----
-  document.querySelectorAll(".pico").forEach((el) => {
-    const img = sprImg(el.dataset.pico);
-    if (!img) return;
-    const cc = el.getContext("2d");
-    cc.imageSmoothingEnabled = false;
-    const s = Math.min((el.width - 4) / img.width, (el.height - 4) / img.height);
-    cc.drawImage(img, 0, 0, img.width, img.height,
-      (el.width - img.width * s) / 2, el.height - img.height * s - 1,
-      img.width * s, img.height * s);
-  });
-  document.querySelectorAll(".aico").forEach((el) => {
-    const cc = el.getContext("2d");
-    cc.imageSmoothingEnabled = false;
-    drawAccRaw(cc, el.dataset.aico, el.width / 2, el.height * 0.68, 1.15);
-  });
-
-  // ---- section icons: real sprites marking each chapter ----
-  document.querySelectorAll(".hico").forEach((el) => {
-    const cc = el.getContext("2d");
-    cc.imageSmoothingEnabled = false;
-    const k = el.dataset.ico;
-    if (k === "jelly") drawMap(cc, JDROP, 2, 2, 3, "#8fe8c0");
-    else if (k === "pal") fit(cc, sprite("happy", spIndex("frog")), el.width, el.height, 1);
-    else if (k === "hybrid") fit(cc, sprite("love", spIndex("mochi")), el.width, el.height, 1);
-    else {
-      const img = sprImg(k);
-      if (img) {
-        const s = Math.min((el.width - 2) / img.width, (el.height - 2) / img.height);
-        cc.drawImage(img, 0, 0, img.width, img.height,
-          (el.width - img.width * s) / 2, el.height - img.height * s - 1, img.width * s, img.height * s);
-      }
-    }
-  });
+requestAnimationFrame(tick);
 })();
