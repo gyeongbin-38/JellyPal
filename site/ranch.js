@@ -162,6 +162,8 @@ function tick(ts) {
   if (p.held) {
     p.heldT += T;
     p.x += (mx - p.x) * 0.5 * T; p.y += (my - p.y) * 0.5 * T;
+    /* pointer capture lets the cursor leave the canvas — keep the pal inside */
+    p.x = Math.max(4 + spr.width / 2, Math.min(W - 4 - spr.width / 2, p.x));
     p.y = Math.min(p.y, GY() - spr.height / 2 + 2);
     p.face = ((p.heldT | 0) % 90 < 45) ? 10 : 11;
     if (sp.id === "spidr" && Math.random() < T * 0.08) sparkBurst(p.x, p.y + 10, "#cfc4f5", 2);

@@ -164,6 +164,8 @@
   .pack .flag { font-size: 11px; font-weight: 900; letter-spacing: .06em; }
   .pack .amt small { font-size: 10px; color: var(--dim); font-weight: 900; letter-spacing: .08em; }
   .packbuy { margin-top: 12px; }
+  .packbuy[aria-disabled="true"] { cursor: not-allowed; opacity: .7; }
+  .packbuy[aria-disabled="true"]:hover { transform: none; }
   .packs .note { text-align: center; margin-top: 26px; color: var(--dim); font-size: 13.5px; line-height: 1.7; }
   .note.bad { color: var(--danger); }
 
@@ -271,7 +273,7 @@
     <div class="stage">
       <div class="frame jp-window pxframe">
         <div class="titlebar jp-window__bar"><i class="dot jp-window__dot"></i><i class="dot jp-window__dot"></i><i class="dot jp-window__dot"></i><span class="jp-window__title">ranch</span><span class="jp-window__status">live</span></div>
-        <canvas id="ranch" width="640" height="300" role="button" aria-label="A live jelly slime on a night ranch. It watches your cursor — press Enter or click to boop it, drag to pick it up, or just type anywhere."></canvas>
+        <canvas id="ranch" width="640" height="300" role="button" tabindex="0" aria-label="A live jelly slime on a night ranch. It watches your cursor — press Enter or click to boop it, drag to pick it up, or just type anywhere."></canvas>
       </div>
       <div class="cap">browser preview — same sprite and behavior as the app.<br>
       boop it, pick it up, or just type: it snacks on keystrokes <i>(counted, never read — nothing leaves this page)</i>.
@@ -334,10 +336,10 @@
         maxlength="26" placeholder="JPXXXXXXXXXXXXXXXXXXXXXXXX" aria-describedby="myidhint">
     </div>
     <div class="pack-row" style="margin-top:22px">
-      <div class="pack jp-card jp-card--lift dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">250 <small>JELLY</small></div><div class="usd">$1.00 · ≈5 pulls</div><a class="packbuy jp-button jp-button--small jp-button--secondary" data-pack="A" role="button">buy · $1.00</a></div>
-      <div class="pack jp-card jp-card--lift dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">500 <small>JELLY</small></div><div class="usd">$1.79 · ≈10 pulls</div><a class="packbuy jp-button jp-button--small jp-button--secondary" data-pack="B" role="button">buy · $1.79</a></div>
-      <div class="pack best jp-card jp-card--lift dither"><div class="jp-badge jp-badge--gold flag">best value</div><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">1000 <small>JELLY</small></div><div class="usd">$2.99 · ≈20 pulls</div><a class="packbuy jp-button jp-button--small jp-button--primary" data-pack="C" role="button">buy · $2.99</a></div>
-      <div class="pack jp-card jp-card--lift dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">2500 <small>JELLY</small></div><div class="usd">$5.99 · ≈50 pulls</div><a class="packbuy jp-button jp-button--small jp-button--secondary" data-pack="D" role="button">buy · $5.99</a></div>
+      <div class="pack jp-card jp-card--lift dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">250 <small>JELLY</small></div><div class="usd">$1.00 · ≈5 pulls</div><a class="packbuy jp-button jp-button--small jp-button--secondary" data-pack="A">buy · $1.00</a></div>
+      <div class="pack jp-card jp-card--lift dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">500 <small>JELLY</small></div><div class="usd">$1.79 · ≈10 pulls</div><a class="packbuy jp-button jp-button--small jp-button--secondary" data-pack="B">buy · $1.79</a></div>
+      <div class="pack best jp-card jp-card--lift dither"><div class="jp-badge jp-badge--gold flag">best value</div><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">1000 <small>JELLY</small></div><div class="usd">$2.99 · ≈20 pulls</div><a class="packbuy jp-button jp-button--small jp-button--primary" data-pack="C">buy · $2.99</a></div>
+      <div class="pack jp-card jp-card--lift dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">2500 <small>JELLY</small></div><div class="usd">$5.99 · ≈50 pulls</div><a class="packbuy jp-button jp-button--small jp-button--secondary" data-pack="D">buy · $5.99</a></div>
     </div>
     <div class="note" id="myidhint">One-time purchase, not a subscription. Paste your <b>MY&nbsp;ID</b> above,
     then check out — Stripe sends the jelly to that install (usually within a minute; open the app and it arrives).
@@ -427,27 +429,32 @@ const PAY_LINKS = { A: "", B: "", C: "", D: "" };
     input.classList.toggle("ok", okId(v));
     input.classList.remove("bad");
     btns.forEach((b) => {
-      const live = /^https:\/\/buy\.stripe\.com\//.test(PAY_LINKS[b.dataset.pack] || "");
-      b.textContent = live ? b.dataset.lbl : "checkout — soon";
-      live ? b.removeAttribute("aria-disabled") : b.setAttribute("aria-disabled", "true");
+      const link = PAY_LINKS[b.dataset.pack];
+      const live = /^https:\/\/buy\.stripe\.com\//.test(link || "");
+      if (live && okId(v)) {
+        /* a real href makes it a real link: tabbable, Enter-activates */
+        b.href = `${link}${link.includes("?") ? "&" : "?"}client_reference_id=${encodeURIComponent(v)}`;
+        b.target = "_blank"; b.rel = "noopener";
+        b.textContent = b.dataset.lbl;
+        b.removeAttribute("aria-disabled");
+      } else {
+        b.removeAttribute("href");
+        b.textContent = live ? b.dataset.lbl : "checkout — soon";
+        b.setAttribute("aria-disabled", "true");
+      }
     });
   }
   input.addEventListener("input", () => { input.value = input.value.toUpperCase().replace(/[^A-Z2-7]/g, ""); refresh(); });
   input.addEventListener("paste", () => setTimeout(refresh));
 
   btns.forEach((b) => b.addEventListener("click", (e) => {
-    const link = PAY_LINKS[b.dataset.pack];
-    if (!/^https:\/\/buy\.stripe\.com\//.test(link || "")) { e.preventDefault(); return; }
-    if (!okId(input.value)) {
-      e.preventDefault();
-      input.classList.add("bad"); input.focus();
-      note.classList.add("bad");
-      note.innerHTML = "paste your <b>MY&nbsp;ID</b> first — it's how the jelly finds your app. (in the app: settings → MY&nbsp;ID → tap to copy)";
-      setTimeout(() => { note.classList.remove("bad"); note.innerHTML = defaultNote; }, 6000);
-      return;
-    }
-    b.href = `${link}${link.includes("?") ? "&" : "?"}client_reference_id=${encodeURIComponent(myId())}`;
-    b.target = "_blank"; b.rel = "noopener";
+    if (b.href) return; /* valid link — let it navigate */
+    e.preventDefault();
+    if (!/^https:\/\/buy\.stripe\.com\//.test(PAY_LINKS[b.dataset.pack] || "")) return;
+    input.classList.add("bad"); input.focus();
+    note.classList.add("bad");
+    note.innerHTML = "paste your <b>MY&nbsp;ID</b> first — it's how the jelly finds your app. (in the app: settings → MY&nbsp;ID → tap to copy)";
+    setTimeout(() => { note.classList.remove("bad"); note.innerHTML = defaultNote; }, 6000);
   }));
   refresh();
 })();

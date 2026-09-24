@@ -182,6 +182,12 @@ async function stripe(req, env) {
   const s = ev.data?.object || {};
   const uid = s.client_reference_id || s.metadata?.uid;
   const pack = s.metadata?.pack || env[`PRICE_${s.amount_total}`];
+  /* unrelated checkouts on the same stripe account should not 422 —
+     otherwise stripe retries them for days. only a session that clearly
+     tried to be a jellypal purchase (a uid was supplied, or the amount
+     maps to a pack) earns a loud failure. */
+  const looksOurs = UID_RE.test(uid || "") || !!env[`PRICE_${s.amount_total}`] || !!s.metadata?.pack;
+  if (!looksOurs) return J({ ok: true, ignored: true });
   if (!UID_RE.test(uid || "") || !GEMS[pack]) return J({ error: "no uid/pack on session" }, 422);
   const nonce = await putGrant(env, await uidHash(uid), pack);
   if (ev.id) await env.DB.put(evKey, "1", { expirationTtl: 60 * 60 * 24 * 30 });
