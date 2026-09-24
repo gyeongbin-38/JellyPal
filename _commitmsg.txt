@@ -1,7 +1,27 @@
-refactor: hero ranch — one pal, zero buttons, pure interaction
+fix+feat: site review pass — dex/icons repair, trust & purchase clarity
 
-stripped pull/feed/breed/props/dress controls and the whole toybox.
-the stage is now just a night ranch with a single live slime:
-it watches the cursor, boops on click/Enter, wiggles held1/held2
-when dragged and dropped, wanders, hops, naps — and typing anywhere
-still drops jelly into the counter. caption rewritten to match.
+fixes (regressions from the one-pal rewrite):
+- dex grid rendered nothing: selectors pointed at #dexgrid/.dfbtn,
+  real markup is #dex/.dexfilter — rewired, cells use .cell/.nm/.rr/.sn/.sg
+- section icons blank: attribute is data-ico not data-hico;
+  "pal"/lico ids map via ICO_PAL to real species ids
+- LEG table is object-shaped (leg.wings/leg.embers...), string
+  comparisons were dead code — ambient fx, halo, wings, orbit now
+  read the real flags; wingImg(frame, color) call fixed
+- FEATURED ids pointed at old ids (goldie/drop/pep) — now real ones
+- .jellypic is a class used 4x, not an id
+- sp.n -> sp.name; animProf has .hop/.glee, not .hopF/.glint
+
+review-driven improvements:
+- h1 names Windows desktop; sys line corrected to real 1.7 MB
+  (was "5 MB" — actual installer is 1,715,066 bytes)
+- caption labels the ranch as a browser preview + states keys are
+  counted never read; pause-motion toggle added
+- packs: "250 JELLY · $1.00 · ≈5 pulls" format, BEST VALUE flag,
+  disabled itch.io buttons until the listing ships, MY ID redeem steps
+- new "Small, local, verifiable" section: real sizes, privacy scope,
+  unsigned-app explanation, SHA-256 for both downloads
+- FAQ: keystroke privacy, internet use, uninstall; footer gains
+  release-notes/bug-report links and "early release" label
+- nav gets a Download link; dex filters get aria-pressed, dexmore
+  aria-expanded, catalog announces result counts

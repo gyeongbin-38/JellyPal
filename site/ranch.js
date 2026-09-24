@@ -81,9 +81,17 @@ addEventListener("keydown", e => {
 });
 
 /* ---------- tick ---------- */
+let paused = false;
+const mot = document.getElementById("mot");
+if (mot) mot.addEventListener("click", () => {
+  paused = !paused;
+  mot.textContent = paused ? "resume motion" : "pause motion";
+  mot.setAttribute("aria-pressed", String(paused));
+});
 let last = 0;
 function tick(ts) {
   requestAnimationFrame(tick);
+  if (paused) { last = ts; return; }
   const dt = Math.min(3, (ts - last) / 16.7 || 1); last = ts;
   const t = ts / 16.7;
   const spr = sprite(p.spIdx), sp = SPECIES[p.spIdx];
@@ -96,20 +104,25 @@ function tick(ts) {
     if (sp.trait === "drip") fxAt(bx, by - 4, "drip", "#7ecbff");
     else if (sp.trait === "spark") fxAt(bx, by, "ember", "#ffb35e");
     else if (sp.trait === "bubble") fxAt(bx, by, "bub", "#bfe8ff");
-    else if (sp.trait === "glint" && Math.random() < 0.5) fxAt(bx + rng(20) - 10, by + rng(16) - 8, "glint", prof.glint);
+    else if (sp.trait === "glint" && Math.random() < 0.5) fxAt(bx + rng(20) - 10, by + rng(16) - 8, "glint", "#ffe9a0");
     else if (sp.trait === "wisp") fxAt(bx, by, "mote", "#c88dff");
     else if (sp.trait === "gravity" && Math.random() < 0.4) fxAt(bx, by - rng(12), "mote", "#b28dff");
-    if (leg === "starmotes") fxAt(bx, by, "mote", "#ffe98a");
-    else if (leg === "embers" && Math.random() < 0.7) fxAt(bx, by, "ember", "#ff9e5e");
-    else if (leg === "royal" && Math.random() < 0.4) fxAt(bx + rng(20) - 10, by + rng(10), "glint", "#ffd76a");
-    else if (leg === "magmotes" && Math.random() < 0.5) fxAt(bx, by, "mote", "#ff8a5e");
-    else if (leg === "notes" && Math.random() < 0.35) fxAt(bx, by - 6, "note", "#8ef0ff");
-    else if (leg === "drool" && Math.random() < 0.3) fxAt(bx, p.y, "drip", "#9be89b");
-    else if (leg === "orbit" && Math.random() < 0.5) fxAt(bx, by, "mote", "#8ef0ff");
-    if (leg === "orbit" && Math.random() < T * 0.008) ring(p.x, p.y - spr.h / 2, "#8ef0ff", 16);
+    if (leg) {
+      if (leg.starburst) fxAt(bx, by, "mote", "#ffe98a");
+      if (leg.embers && Math.random() < 0.7) fxAt(bx, by, "ember", "#ff9e5e");
+      if (leg.strut && Math.random() < 0.4) fxAt(bx + rng(20) - 10, by + rng(10), "glint", "#ffd76a");
+      if (leg.glow && Math.random() < 0.5) fxAt(bx, by, "mote", leg.glow);
+      if (leg.notes && Math.random() < 0.35) fxAt(bx, by - 6, "note", "#8ef0ff");
+      if (leg.drool && Math.random() < 0.3) fxAt(bx, p.y, "drip", "#9be89b");
+      if (leg.orbit && Math.random() < 0.5) fxAt(bx, by, "mote", "#8ef0ff");
+      if (leg.pulse && Math.random() < T * 0.008) ring(p.x, p.y - spr.h / 2, "#8ef0ff", 16);
+    }
   }
-  if (leg === "comettrail" && Math.abs(p.vx) > 1 && Math.random() < T * 0.3) fxAt(p.x - p.vx * 4, p.y, "ember", "#ffc46a");
-  if (leg === "goldtrail" && Math.abs(p.vx) > 1 && Math.random() < T * 0.2) fxAt(p.x - p.vx * 4, p.y, "glint", "#ffe9a0");
+  if (leg && Math.abs(p.vx) > 1) {
+    if (leg.trail && Math.random() < T * 0.3) fxAt(p.x - p.vx * 4, p.y, "ember", leg.trail);
+    if (leg.goldtrail && Math.random() < T * 0.2) fxAt(p.x - p.vx * 4, p.y, "glint", "#ffe9a0");
+    if (leg.chips && Math.random() < T * 0.15) fxAt(p.x - p.vx * 3, p.y + 6, "mote", "#9a8f7a");
+  }
 
   /* state */
   if (p.held) {
@@ -148,7 +161,7 @@ function tick(ts) {
 
     /* hop */
     if (sp.mv === "hop" && onG && p.walkT != null && p.vy === 0 && Math.random() < T * 0.06) p.vy = 1.1;
-    else if (onG && p.jumpT <= 0 && Math.random() < T * 0.0025 * prof.hopF && p.slpT <= 0) { p.vy = 1.3 + rng(1); p.jumpT = 60 + rng(80); }
+    else if (onG && p.jumpT <= 0 && Math.random() < T * 0.0025 * prof.hop && p.slpT <= 0) { p.vy = 1.3 + rng(1); p.jumpT = 60 + rng(80); }
     if (p.jumpT > 0) p.jumpT -= T;
 
     /* wander / sleep */
@@ -183,7 +196,7 @@ function tick(ts) {
   ctx.beginPath(); ctx.ellipse(p.x, GY() + 2, shw, 3, 0, 0, 7); ctx.fill();
 
   /* pal */
-  const hov = (sp.mv === "hover" && !p.held) ? Math.sin(t * 0.045 + p.ph) * 2.2 - 3 : 0;
+  const hov = ((sp.mv === "hover" || (leg && leg.floaty)) && !p.held) ? Math.sin(t * 0.045 + p.ph) * 2.2 - 3 : 0;
   ctx.save(); ctx.translate(p.x, p.y + hov);
   const sq = p.squash, stretch = p.vy > 0.8 ? Math.min(0.22, p.vy * 0.06) : 0;
   ctx.scale(1 + sq * 0.3 - stretch * 0.5, 1 - sq * 0.24 + stretch);
@@ -192,12 +205,22 @@ function tick(ts) {
   ctx.drawImage(off, -spr.w / 2 | 0, -spr.h / 2 | 0);
   ctx.restore();
 
-  /* wings + orbit ring above pal */
-  if (!p.held && p.slpT <= 0 && (leg === "wings" || leg === "wingsgold")) {
-    const wimg = wingImg(leg === "wings" ? 0 : 1, (t * 0.12 | 0) % 3);
+  /* legendary extras: halo, wings, orbit ring, spidr legs */
+  if (leg && leg.halo && !p.held && p.slpT <= 0) {
+    ctx.strokeStyle = leg.halo; ctx.globalAlpha = 0.55 + 0.2 * Math.sin(t * 0.06); ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.ellipse(p.x, p.y + hov - spr.h / 2 - 6, 8, 2.5, 0, 0, 7); ctx.stroke(); ctx.globalAlpha = 1;
+  }
+  if (leg && leg.wings && !p.held && p.slpT <= 0) {
+    const wimg = wingImg((t * 0.12 | 0) % 3, leg.wings);
     const sc = 0.8, wy = p.y + hov - spr.h / 2 + 4;
     ctx.drawImage(wimg, p.x - spr.w / 2 - wimg.width * sc + 4, wy, wimg.width * sc, wimg.height * sc);
     ctx.save(); ctx.scale(-1, 1); ctx.drawImage(wimg, -(p.x + spr.w / 2 - 4), wy, wimg.width * sc, wimg.height * sc); ctx.restore();
+  }
+  if (leg && leg.orbit) {
+    const oa = t * 0.05 + p.ph;
+    ctx.fillStyle = "#8ef0ff"; ctx.globalAlpha = 0.7;
+    ctx.fillRect(p.x + Math.cos(oa) * (spr.w / 2 + 8) - 1, p.y + hov - 6 + Math.sin(oa) * 5, 2, 2);
+    ctx.globalAlpha = 1;
   }
   if (sp.id === "spidr" && p.held) {
     ctx.strokeStyle = "#3d3655"; ctx.lineWidth = 2;
@@ -265,63 +288,67 @@ function roundRectPath(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.
 function drawStar(g, cx, cy, r, col) { g.fillStyle = col; g.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * 0.42 : r; g[i ? "lineTo" : "moveTo"](cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); } g.fill(); }
 
 /* ---------- section icons (real game sprites) ---------- */
+const ICO_PAL = { pal: "sprout" };
 document.querySelectorAll(".hico").forEach(c => {
   const g = c.getContext("2d"); g.imageSmoothingEnabled = false;
-  const k = c.dataset.hico;
+  const k = c.dataset.ico;
   if (k === "jelly") g.drawImage(jellyImg(), ...fit(jellyImg(), 20, 20));
   else if (k === "jar" || k === "mirror" || k === "cushion") { const im = sprImg(k); g.drawImage(im, ...fit(im, 22, 18)); }
-  else { const i = SPECIES.findIndex(s => s.id === k); if (i >= 0) { const im = sprite(i); g.drawImage(im, ...fit(im, 24, 18)); } }
+  else { const i = SPECIES.findIndex(s => s.id === (ICO_PAL[k] || k)); if (i >= 0) { const im = sprite(i); g.drawImage(im, ...fit(im, 24, 18)); } }
 });
 document.querySelectorAll("[data-lico]").forEach(c => {
   const g = c.getContext("2d"); g.imageSmoothingEnabled = false;
   const k = c.dataset.lico;
-  const im = k === "jelly" ? jellyImg() : sprite(SPECIES.findIndex(s => s.id === k));
+  const im = k === "jelly" ? jellyImg() : sprite(SPECIES.findIndex(s => s.id === (ICO_PAL[k] || k)));
   g.drawImage(im, ...fit(im, 26, 22));
 });
-const jp = document.getElementById("jellypic");
-if (jp) { const g = jp.getContext("2d"); g.imageSmoothingEnabled = false; g.drawImage(jellyImg(), ...fit(jellyImg(), 34, 34)); }
+document.querySelectorAll(".jellypic").forEach(c => {
+  const g = c.getContext("2d"); g.imageSmoothingEnabled = false;
+  g.drawImage(jellyImg(), ...fit(jellyImg(), c.width - 14, c.height - 8));
+});
 
 /* ---------- dex (compendium) ---------- */
-const dexgrid = document.getElementById("dexgrid");
+const dexgrid = document.getElementById("dex");
 const dexcells = [];
 if (dexgrid) {
-  const FEATURED = ["mochi", "sprout", "pep", "drop", "berry", "frog", "beebop", "toxi", "ghoo", "magma", "goldie", "stella"];
+  const FEATURED = ["sprout", "mochi", "tide", "ember", "frog", "toxic", "ghost", "astro", "stella", "gold", "drago", "pulsar"];
   let rarF = null, showAll = false;
-  function cell(i, big) {
-    const d = document.createElement("div"); d.className = "dexcell r" + SPECIES[i].r;
-    if (big) d.classList.add("big");
+  function cell(i) {
+    const sp = SPECIES[i];
+    const d = document.createElement("div"); d.className = "cell r" + sp.r;
     d.tabIndex = 0; d.setAttribute("role", "button");
-    d.setAttribute("aria-label", SPECIES[i].n + " — " + RARITY_COLOR[SPECIES[i].r][1] + " pal");
-    const c = document.createElement("canvas"); c.width = big ? 48 : 34; c.height = big ? 36 : 28;
+    d.setAttribute("aria-label", sp.name + " — " + RARITY_COLOR[sp.r][1] + " pal" + (sp.sig ? ", signature move" : "") + (sp.season ? ", " + sp.season + " seasonal" : ""));
+    const c = document.createElement("canvas"); c.width = 40; c.height = 30;
     const g = c.getContext("2d"); g.imageSmoothingEnabled = false;
-    const im = sprite(i); const f = fit(im, c.width - 4, c.height - (big ? 6 : 4));
-    g.drawImage(im, f[0], f[1] - (big ? 4 : 0), f[2], f[3]);
+    const im = sprite(i); const f = fit(im, c.width - 4, c.height - 4);
+    g.drawImage(im, f[0], f[1], f[2], f[3]);
     d.appendChild(c);
-    const nm = document.createElement("span"); nm.textContent = SPECIES[i].n; d.appendChild(nm);
-    const tg = document.createElement("i"); tg.textContent = RARITY_COLOR[SPECIES[i].r][1]; tg.style.color = RARITY_COLOR[SPECIES[i].r][0]; d.appendChild(tg);
-    if (SPECIES[i].sig) { const sg = document.createElement("b"); sg.textContent = "◆ SIG"; d.appendChild(sg); }
+    const nm = document.createElement("div"); nm.className = "nm"; nm.textContent = sp.name; d.appendChild(nm);
+    const tg = document.createElement("div"); tg.className = "rr"; tg.textContent = RARITY_COLOR[sp.r][1]; tg.style.color = RARITY_COLOR[sp.r][0]; d.appendChild(tg);
+    if (sp.season) { const sn = document.createElement("div"); sn.className = "sn"; sn.textContent = "★"; d.appendChild(sn); }
+    if (sp.sig) { const sg = document.createElement("div"); sg.className = "sg"; sg.textContent = "◆ SIG"; d.appendChild(sg); }
     dexcells[i] = { el: d, t: 0 };
     d.addEventListener("click", () => dexreact(i));
     d.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); dexreact(i); } });
     return d;
   }
   function dexreact(i) {
-    const dc = dexcells[i]; if (!dc) return;
+    const dc = dexcells[i]; if (!dc || dc.t > 0) return;
     dc.t = 18;
     const c = dc.el.querySelector("canvas"), g = c.getContext("2d"), im = sprite(i);
     const face = [4, 5, 9][i % 3];
-    const f = fit(im, c.width - 4, c.height - (c.width > 40 ? 6 : 4));
+    const f = fit(im, c.width - 4, c.height - 4);
     const anim = () => {
       dc.t -= 1;
       g.clearRect(0, 0, c.width, c.height); g.imageSmoothingEnabled = false;
       const sq = dc.t > 9 ? (dc.t - 9) / 9 * 0.3 : 0;
-      const hop = dc.t > 0 ? Math.sin(dc.t / 18 * Math.PI) * 5 : 0;
-      g.save(); g.translate(c.width / 2, c.height - (c.width > 40 ? 6 : 4) - hop);
+      const hop = dc.t > 0 ? Math.sin(dc.t / 18 * Math.PI) * 4 : 0;
+      g.save(); g.translate(c.width / 2, c.height - 2 - hop);
       g.scale(1 + sq, 1 - sq * 0.7);
       drawPal(g, i, 0, 0, dc.t > 0 ? face : 0, true);
       g.restore();
       if (dc.t > 0) requestAnimationFrame(anim);
-      else { g.clearRect(0, 0, c.width, c.height); g.drawImage(im, f[0], f[1] - (c.width > 40 ? 4 : 0), f[2], f[3]); }
+      else { g.clearRect(0, 0, c.width, c.height); g.drawImage(im, f[0], f[1], f[2], f[3]); }
     };
     anim();
   }
@@ -329,15 +356,22 @@ if (dexgrid) {
     dexgrid.innerHTML = "";
     let idx = SPECIES.map((_, i) => i);
     if (rarF != null) idx = idx.filter(i => SPECIES[i].r === rarF);
-    else if (!showAll) { const f = FEATURED.map(id => SPECIES.findIndex(s => s.id === id)).filter(i => i >= 0); idx = f; }
-    idx.forEach(i => dexgrid.appendChild(cell(i, FEATURED.includes(SPECIES[i].id) && rarF == null)));
-    dexgrid.classList.toggle("feat", rarF == null && !showAll);
-    const mb = document.getElementById("dexmore"); if (mb) mb.hidden = rarF != null || showAll;
+    else if (!showAll) idx = FEATURED.map(id => SPECIES.findIndex(s => s.id === id)).filter(i => i >= 0);
+    idx.forEach(i => dexgrid.appendChild(cell(i)));
+    const mb = document.getElementById("dexmore");
+    if (mb) { mb.hidden = rarF != null || showAll; mb.setAttribute("aria-expanded", String(showAll)); }
+    dexgrid.setAttribute("aria-label", `Species catalog — showing ${idx.length} of ${SPECIES.length}`);
   }
-  document.querySelectorAll(".dfbtn").forEach(b => b.addEventListener("click", () => {
-    document.querySelectorAll(".dfbtn").forEach(x => x.classList.toggle("on", x === b));
-    rarF = b.dataset.r === "" ? null : +b.dataset.r; showAll = false; dexrender();
-  }));
+  document.querySelectorAll(".dexfilter button").forEach(b => {
+    b.setAttribute("aria-pressed", b.classList.contains("on") ? "true" : "false");
+    b.addEventListener("click", () => {
+      document.querySelectorAll(".dexfilter button").forEach(x => {
+        x.classList.toggle("on", x === b);
+        x.setAttribute("aria-pressed", x === b ? "true" : "false");
+      });
+      rarF = b.dataset.r === "all" ? null : +b.dataset.r; showAll = false; dexrender();
+    });
+  });
   const mb = document.getElementById("dexmore");
   if (mb) mb.addEventListener("click", () => { showAll = true; dexrender(); });
   dexrender();

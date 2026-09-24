@@ -219,7 +219,25 @@
   .pack.best { background: #241d4e; border: 2px solid var(--gold); transform: translateY(-10px); }
   .pack.best:hover { transform: translateY(-14px); }
   .pack .flag { font-size: 11px; font-weight: 900; color: var(--gold); letter-spacing: .06em; }
-  .packs .note { text-align: center; margin-top: 26px; color: var(--dim); font-size: 13.5px; }
+  .pack .amt small { font-size: 10px; color: var(--dim); font-weight: 900; letter-spacing: .08em; }
+  .packbuy {
+    margin-top: 12px; font-family: "Press Start 2P", monospace; font-size: 7px;
+    background: transparent; color: var(--dim); border: none; padding: 8px 10px;
+    letter-spacing: .04em;
+  }
+  .packbuy:not([disabled]) { color: var(--jelly); cursor: pointer; }
+  .packbuy:not([disabled]):hover { color: #fff; box-shadow: 0 2px 0 var(--jelly); }
+  .packs .note { text-align: center; margin-top: 26px; color: var(--dim); font-size: 13.5px; line-height: 1.7; }
+  .hash { font-family: monospace; font-size: 10.5px; color: var(--jelly); word-break: break-all; display: inline-block; margin-top: 4px; }
+  .safe { padding: 88px 0 30px; }
+  #mot {
+    margin-left: 8px; font-family: inherit; font-size: 11px; color: var(--dim);
+    background: transparent; border: 1px solid var(--edge); border-radius: 4px;
+    padding: 2px 8px; cursor: pointer;
+  }
+  #mot:hover { color: var(--ink); border-color: var(--dim); }
+  .cap i { font-style: normal; opacity: .8; }
+  .navdl { color: var(--jelly) !important; font-weight: 800; }
 
   /* ---------- qa ---------- */
   .qa { padding: 88px 0 40px; }
@@ -263,21 +281,22 @@
       <a href="#jelly">Jelly</a>
       <a href="#qa">Questions</a>
       <a href="https://github.com/gyeongbin-38/JellyPal">GitHub</a>
+      <a class="navdl" href="dl/Jellypal_0.2.0_x64-setup.exe">Download</a>
     </nav>
   </div>
 
   <main id="main">
   <section class="hero">
     <div>
-      <h1>A tiny <span class="squish">slime</span> that lives on your screen.</h1>
-      <p class="sub">Jellypal is a desktop companion for Windows. It naps on your windows,
-      snacks on your keystrokes, and squirts out jelly you can spend on new friends.
-      That one on the right is real — go on, boop it.</p>
+      <h1>A tiny <span class="squish">slime</span> that lives on your Windows desktop.</h1>
+      <p class="sub">Jellypal is a desktop pet that snacks on your typing. Earn jelly,
+      then spend it on new species, hybrids and accessories.
+      That one on the right is the real sprite — go on, boop it.</p>
       <div class="cta">
         <a class="btn" href="dl/Jellypal_0.2.0_x64-setup.exe">Download for Windows</a>
         <a class="link" href="dl/jellypal-0.2.0-win.zip">or grab the portable zip</a>
       </div>
-      <div class="sys">Windows 10 or 11 · 5 MB · free to start · no account</div>
+      <div class="sys">Windows 10/11 64-bit · 1.7 MB download · free to start · no account</div>
       <div class="sys" style="margin-top:8px">First run? Windows may warn — <b style="color:var(--ink)">More info → Run anyway</b>. It's a plain local app.</div>
     </div>
     <div class="stage">
@@ -285,7 +304,9 @@
         <div class="titlebar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span>ranch — live</span></div>
         <canvas id="ranch" width="640" height="300" role="button" aria-label="A live jelly slime on a night ranch. It watches your cursor — press Enter or click to boop it, drag to pick it up, or just type anywhere."></canvas>
       </div>
-      <div class="cap">it watches your cursor — boop it, pick it up, or just type: it snacks on keystrokes</div>
+      <div class="cap">browser preview — same sprite and behavior as the app.<br>
+      boop it, pick it up, or just type: it snacks on keystrokes <i>(counted, never read — nothing leaves this page)</i>.
+      <button id="mot" type="button" aria-pressed="false">pause motion</button></div>
     </div>
   </section>
 
@@ -296,9 +317,9 @@
       Try it above: type anywhere on this page and watch the counter.
     </p>
     <div class="loop">
-      <div class="lstep pxframe"><div class="keycap">A</div><div class="lt">you type</div><div class="ld">work, chat, game — it all counts</div></div>
+      <div class="lstep pxframe"><div class="keycap">A</div><div class="lt">you type</div><div class="ld">work, chat, game — every key counts</div></div>
       <div class="larrow">▶</div>
-      <div class="lstep pxframe"><canvas class="lico" width="52" height="40" data-lico="jelly"></canvas><div class="lt">it pops jelly</div><div class="ld">one drop every 600 keystrokes</div></div>
+      <div class="lstep pxframe"><canvas class="lico" width="52" height="40" data-lico="jelly"></canvas><div class="lt">600 keys = 1 jelly</div><div class="ld">a few minutes of normal typing</div></div>
       <div class="larrow">▶</div>
       <div class="lstep pxframe"><canvas class="lico" width="52" height="40" data-lico="pal"></canvas><div class="lt">jelly = new friends</div><div class="ld">pull species, breed hybrids, dress them up</div></div>
     </div>
@@ -329,12 +350,34 @@
       Buy a code on itch.io, redeem it in-game against your MY&nbsp;ID.
     </p>
     <div class="pack-row" style="margin-top:30px">
-      <div class="pack pxframe dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">250</div><div class="usd">$1.00</div></div>
-      <div class="pack pxframe dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">500</div><div class="usd">$1.79</div></div>
-      <div class="pack best pxframe dither"><div class="flag">POPULAR</div><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">1000</div><div class="usd">$2.99</div></div>
-      <div class="pack pxframe dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">2500</div><div class="usd">$5.99</div></div>
+      <div class="pack pxframe dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">250 <small>JELLY</small></div><div class="usd">$1.00 · ≈5 pulls</div><button class="packbuy" type="button" disabled>itch.io — soon</button></div>
+      <div class="pack pxframe dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">500 <small>JELLY</small></div><div class="usd">$1.79 · ≈10 pulls</div><button class="packbuy" type="button" disabled>itch.io — soon</button></div>
+      <div class="pack best pxframe dither"><div class="flag">BEST VALUE</div><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">1000 <small>JELLY</small></div><div class="usd">$2.99 · ≈20 pulls</div><button class="packbuy" type="button" disabled>itch.io — soon</button></div>
+      <div class="pack pxframe dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">2500 <small>JELLY</small></div><div class="usd">$5.99 · ≈50 pulls</div><button class="packbuy" type="button" disabled>itch.io — soon</button></div>
     </div>
-    <div class="note">Completely optional — every drop of jelly is earnable free by typing.<br>Pulls cost 50 jelly · breeds cost 20 · premium accessories 800–1400</div>
+    <div class="note">One-time purchase, not a subscription. How it works: find your <b>MY&nbsp;ID</b> in the app's
+    settings → buy a code on itch.io → redeem it in-game. Pulls cost 50 jelly · breeds cost 20 ·
+    premium accessories 800–1400 — and every drop is earnable free by typing.</div>
+  </section>
+
+  <section class="safe" id="safe">
+    <h2 class="big"><canvas class="hico" data-ico="jar" width="26" height="24"></canvas>Small, local, verifiable.</h2>
+    <div class="qa-grid" style="margin-top:26px">
+      <div><div class="q">Tiny by design</div>
+        <div class="a">1.7 MB installer · 2.1 MB zip. It sips CPU and sleeps when you do —
+        built for small laptops.</div></div>
+      <div><div class="q">Your typing stays yours</div>
+        <div class="a">Keystrokes are <b>counted, never read</b> — the app can't see what you type.
+        The only network call is redeeming a jelly code. No account, no ads, no tracking.</div></div>
+      <div><div class="q">Why does Windows warn?</div>
+        <div class="a">Jellypal isn't code-signed (a certificate costs ~$300/yr — hard to justify
+        for a $3 slime). Choose <b>More info → Run anyway</b>, and only download from
+        <b>jellypal.fun</b>.</div></div>
+      <div><div class="q">Verify your download</div>
+        <div class="a">SHA-256, checkable with <code>certutil -hashfile</code>:<br>
+        <code class="hash">setup.exe&nbsp; e09642049719d9eb36fd3212efae73a012e5198b4781f922b5e60b1c9baf45de</code><br>
+        <code class="hash">win.zip&nbsp;&nbsp;&nbsp; 55709b604dd254e75e079bcadaa366e21a4904ae72b6a3a0aa013853ca283c36</code></div></div>
+    </div>
   </section>
 
   <section class="qa" id="qa">
@@ -347,7 +390,14 @@
         <div class="a">The installer puts it in C:\Jellypal and bundles WebView2. The zip runs
         from anywhere but needs Edge WebView2 already installed (most Windows 11 PCs have it).</div></div>
       <div><div class="q">Will it slow my laptop?</div>
-        <div class="a">It's a 5 MB app built for small machines — it sips CPU and sleeps when you do.</div></div>
+        <div class="a">It's a ~2 MB app built for small machines — it sips CPU and sleeps when you do.</div></div>
+      <div><div class="q">Does it record what I type?</div>
+        <div class="a">No — it counts keystrokes, it can't read them. What you type never leaves your PC.</div></div>
+      <div><div class="q">Does it need internet?</div>
+        <div class="a">Only when you redeem a jelly code. Everything else runs fully offline.</div></div>
+      <div><div class="q">How do I uninstall?</div>
+        <div class="a">Installer: remove it from Windows Settings → Apps. Zip: delete the folder.
+        Your save lives in the app's data folder and goes with it.</div></div>
       <div><div class="q">Mac version?</div>
         <div class="a">In the works. Windows first.</div></div>
     </div>
@@ -359,14 +409,18 @@
       <a class="btn" href="dl/Jellypal_0.2.0_x64-setup.exe">Download for Windows</a>
       <a class="link" href="dl/jellypal-0.2.0-win.zip">portable zip</a>
     </div>
-    <div class="trust">Free to start · 5 MB · no account, no ads, no tracking.<br>
+    <div class="trust">Free to start · 1.7 MB · no account, no ads, no tracking.<br>
     If Windows says <b>"unrecognized app"</b>, choose <b>More info → Run anyway</b> — that's normal for a small unsigned app.</div>
   </section>
   </main>
 
   <footer>
-    <div>made with 🫠 for small computers — v0.2.0</div>
-    <div><a href="https://github.com/gyeongbin-38/JellyPal">github</a></div>
+    <div>made with 🫠 for small computers — v0.2.0 · early release</div>
+    <div>
+      <a href="https://github.com/gyeongbin-38/JellyPal">github</a> ·
+      <a href="https://github.com/gyeongbin-38/JellyPal/releases">release notes</a> ·
+      <a href="https://github.com/gyeongbin-38/JellyPal/issues">report a bug</a>
+    </div>
   </footer>
 </div>
 
