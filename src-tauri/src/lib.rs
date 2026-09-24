@@ -306,9 +306,9 @@ const SERVER_PUBKEY: [u8; 32] = [
     0xC9, 0xA7, 0xC5, 0x34, 0x05, 0x17, 0x41, 0x78, 0x42, 0x4A, 0x18, 0x66, 0x8C, 0xC0, 0xC1, 0x63,
     0xDB, 0xA3, 0x8D, 0xE7, 0xA4, 0xB6, 0x93, 0x8B, 0x04, 0xBF, 0x44, 0xBB, 0x05, 0x45, 0xEC, 0x91,
 ];
-// the deployed worker's URL — empty until `wrangler deploy` wires it up;
-// every server call degrades gracefully to the offline path while unset
-const SERVER_URL: &str = "";
+// the deployed worker's URL — every server call degrades gracefully to the
+// offline path if this is unreachable
+const SERVER_URL: &str = "https://jellypal-api.gyeongbin-38.workers.dev";
 
 fn curl_post(url: &str, body: &str) -> Option<String> {
     let out = std::process::Command::new("curl")

@@ -35,3 +35,5 @@ _macart/
 _zipstage/  
 server_ed25519.key 
 _secrets.local.txt 
+_cf_token.txt
+_livetest_code.txt

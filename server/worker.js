@@ -108,8 +108,8 @@ async function redeem(req, env) {
   if (!v) return J({ error: "bad code" });
   const cKey = `code:${await sha(code.toUpperCase().trim())}`;
   const bound = await env.DB.get(cKey);
-  if (bound && bound !== uh) return J({ error: "code already claimed" });
-  if (!bound) await env.DB.put(cKey, uh);
+  if (bound) return J({ error: "code already claimed" });
+  await env.DB.put(cKey, uh);
   const uKey = `user:${uh}`;
   const u = (await env.DB.get(uKey, "json")) || { created: Date.now(), codes: 0, granted: 0 };
   u.codes++; u.granted += v.gems;
