@@ -1,8 +1,16 @@
-test: livetest retries claim for KV list consistency
+feat: real pals + interactive ranch on the site
 
-KV list results are edge-cached ~60s, so a grant written moments
-earlier may not appear in /claim immediately. Retry for up to 70s.
-Verified: 15/15 live e2e passing against api.jellypal.fun.
+- site/pals.js: verbatim port of the game's sprite pipeline —
+  HW_* body shapes, 48 species palettes/tops, per-species seeded
+  silhouette variation, generated eyes (EYE_TPL), full FACES set,
+  2x supersampled pastel-jelly pipeline with translucency
+- site/ranch.js: interactive hero — cursor-tracking faces
+  (lookL/lookR), boop on click (squish + love/happy + hearts),
+  autonomous wander/hop/blink/sleep per animProf, and a working
+  gacha pull demo using the real RARITY_W odds with silhouette
+  reveal, dup -> +20 jelly counter
+- species strip + pack icons now render real in-game sprites
+- pull button + controls under the ranch frame
 
 Generated with [Devin](https://devin.ai)
 

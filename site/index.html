@@ -103,6 +103,17 @@
   .titlebar span { margin-left: 6px; }
   #ranch { display: block; width: 100%; height: 300px; cursor: pointer; }
   .stage .cap { margin-top: 14px; font-size: 12.5px; color: var(--dim); text-align: center; }
+  .ranchctl { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 14px; flex-wrap: wrap; }
+  .ranchctl .cap { margin-top: 0; text-align: right; }
+  #pull {
+    font-family: "Nunito", sans-serif; font-weight: 900; font-size: 14px;
+    color: var(--jelly); background: transparent; border: 2px solid var(--jelly);
+    padding: 11px 20px; cursor: pointer;
+    border-radius: 52% 48% 55% 45% / 58% 62% 38% 42%;
+    transition: transform .18s cubic-bezier(.34,1.56,.64,1), background .2s, color .2s;
+  }
+  #pull:hover { background: var(--jelly); color: var(--night); transform: scale(1.06) rotate(1deg); }
+  #pull:active { transform: scale(.94); }
 
   /* ---------- keystroke economy ---------- */
   .eco { padding: 88px 0; }
@@ -199,7 +210,7 @@
       <h1>A tiny <span class="squish">slime</span> that lives on your screen.</h1>
       <p class="sub">Jellypal is a desktop companion for Windows. It naps on your windows,
       snacks on your keystrokes, and squirts out jelly you can spend on new friends.
-      Click the ones on the right — they bounce.</p>
+      The ones on the right are real — they watch your cursor, and you can boop them.</p>
       <div class="cta">
         <a class="btn" href="dl/Jellypal_0.2.0_x64-setup.exe">Download for Windows</a>
         <a class="link" href="dl/jellypal-0.2.0-win.zip">or grab the portable zip</a>
@@ -209,9 +220,12 @@
     <div class="stage">
       <div class="frame">
         <div class="titlebar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span>ranch — live</span></div>
-        <canvas id="ranch" width="640" height="300" aria-label="Animated jelly slimes bouncing around. Click to make one jump."></canvas>
+        <canvas id="ranch" width="640" height="300" aria-label="Animated jelly slimes wandering a ranch. Click one to boop it, or use the pull button to summon a random species."></canvas>
       </div>
-      <div class="cap">six real species palettes from the game — click a slime to boop it</div>
+      <div class="ranchctl">
+        <button id="pull" type="button">✦ pull a pal — free demo</button>
+        <div class="cap">real sprites, real pull odds — click a slime to boop it</div>
+      </div>
     </div>
   </section>
 
@@ -249,10 +263,10 @@
       Buy a code on itch.io, redeem it in-game against your MY&nbsp;ID.
     </p>
     <div class="pack-row" style="margin-top:30px">
-      <div class="pack"><canvas class="jellypic" width="40" height="34" data-pal="sprout"></canvas><div class="amt">250</div><div class="usd">$1.00</div></div>
-      <div class="pack"><canvas class="jellypic" width="40" height="34" data-pal="berry"></canvas><div class="amt">500</div><div class="usd">$1.79</div></div>
-      <div class="pack best"><div class="flag">POPULAR</div><canvas class="jellypic" width="40" height="34" data-pal="goldie"></canvas><div class="amt">1000</div><div class="usd">$2.99</div></div>
-      <div class="pack"><canvas class="jellypic" width="40" height="34" data-pal="stella"></canvas><div class="amt">2500</div><div class="usd">$5.99</div></div>
+      <div class="pack"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">250</div><div class="usd">$1.00</div></div>
+      <div class="pack"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">500</div><div class="usd">$1.79</div></div>
+      <div class="pack best"><div class="flag">POPULAR</div><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">1000</div><div class="usd">$2.99</div></div>
+      <div class="pack"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">2500</div><div class="usd">$5.99</div></div>
     </div>
     <div class="note">Pulls cost 50 jelly · breeds cost 20 · premium accessories 800–1400</div>
   </section>
@@ -280,102 +294,7 @@
   </footer>
 </div>
 
-<script>
-// ---- shared blob renderer: same dome family + real species palettes ----
-const PAL = {
-  sprout: { b:"#6fdca0", l:"#a9f0cb", s:"#4cb07e", e:"#23332c", name:"Sprout",  r:"common" },
-  berry:  { b:"#f78fb3", l:"#ffc2d4", s:"#d4608c", e:"#33232c", name:"Berry",   r:"common" },
-  tide:   { b:"#69b7ec", l:"#a9d8f7", s:"#4a90c4", e:"#1f2f3c", name:"Droplet", r:"rare" },
-  ember:  { b:"#f0975c", l:"#ffcfa8", s:"#d1743f", e:"#33231c", name:"Ember",   r:"rare" },
-  moss:   { b:"#5d9e4f", l:"#8cc97a", s:"#467a3c", e:"#1f2b20", name:"Moss",    r:"common" },
-  sunny:  { b:"#ffd75e", l:"#fff0a8", s:"#e0a83f", e:"#33291c", name:"Sunny",   r:"common" },
-  candy:  { b:"#ff9ec6", l:"#ffd9ea", s:"#e06ba0", e:"#33202b", name:"Candy",   r:"rare" },
-  frost:  { b:"#a8ddf0", l:"#e0f6ff", s:"#7ab8d4", e:"#1e3038", name:"Frost",   r:"rare" },
-  kitty:  { b:"#f0c078", l:"#ffe8c0", s:"#d19a52", e:"#33291c", name:"Kitty",   r:"epic" },
-  shade:  { b:"#9b86d9", l:"#c4b2f0", s:"#7a62b8", e:"#1e1830", name:"Shade",   r:"epic" },
-  prism:  { b:"#b9a5f0", l:"#e0d4ff", s:"#8a72c4", e:"#241c33", name:"Prism",   r:"epic" },
-  void_:  { b:"#4a3f6b", l:"#6b5a9e", s:"#332a4a", e:"#0f0c18", name:"Void",    r:"epic" },
-  goldie: { b:"#eec23f", l:"#ffe98f", s:"#c99a2a", e:"#3a2f12", name:"Goldie",  r:"legend" },
-  stella: { b:"#5a6bd9", l:"#9aadff", s:"#3f4aa8", e:"#181c33", name:"Stella",  r:"legend" },
-};
-const ROWS = [3, 6, 8, 9, 9.5, 9.5, 9, 8, 6.5, 4.5];
-const RCOL = { common:"#8a84b8", rare:"#69b7ec", epic:"#c4a5f0", legend:"#eec23f" };
-
-function blob(c, x, y, w, h, p, sq, blink) {
-  const sx = 1 + sq, sy = 1 - sq * 0.8;
-  c.save(); c.translate(x, y); c.scale(sx, sy);
-  const rh = h / ROWS.length;
-  for (let i = 0; i < ROWS.length; i++) {
-    const t = i / (ROWS.length - 1), rw = ROWS[i] * (w / 9.5);
-    c.fillStyle = t < 0.35 ? p.l : t > 0.75 ? p.s : p.b;
-    c.fillRect(Math.round(-rw / 2), Math.round(-h + i * rh), Math.round(rw), Math.ceil(rh) + 1);
-  }
-  const ex = w * 0.16, ey = -h * 0.52, eh = h * 0.14 * (blink ? 0.15 : 1);
-  c.fillStyle = p.e;
-  c.fillRect(-ex - 2, ey, 4, eh); c.fillRect(ex - 2, ey, 4, eh);
-  c.fillStyle = "#fff";
-  c.fillRect(-ex - 2, ey, 2, Math.max(1, eh * 0.3)); c.fillRect(ex - 2, ey, 2, Math.max(1, eh * 0.3));
-  c.fillStyle = "rgba(255,255,255,.75)";
-  c.fillRect(-w * 0.3, -h * 0.78, w * 0.16, h * 0.08);
-  c.restore();
-}
-
-// mini jelly icons for pack cards
-document.querySelectorAll(".jellypic").forEach((el) => {
-  const c = el.getContext("2d");
-  c.imageSmoothingEnabled = false;
-  blob(c, 20, 33, 30, 24, PAL[el.dataset.pal], 0, false);
-});
-
-// species strip
-const strip = document.getElementById("strip");
-for (const [k, p] of Object.entries(PAL)) {
-  const chip = document.createElement("div");
-  chip.className = "chip";
-  chip.innerHTML = `<canvas class="mini" width="34" height="28"></canvas><div>${p.name}<small>${p.r}</small></div>`;
-  strip.appendChild(chip);
-  const c = chip.querySelector("canvas").getContext("2d");
-  c.imageSmoothingEnabled = false;
-  blob(c, 17, 27, 26, 20, p, 0, false);
-  chip.style.borderLeft = "3px solid " + (RCOL[p.r] || RCOL.common);
-}
-
-// ---- the ranch ----
-const cv = document.getElementById("ranch"), cx = cv.getContext("2d");
-const GY = 268;
-const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-const keys = ["sprout","berry","tide","ember","goldie","stella"];
-const slimes = keys.map((k, i) => ({
-  pal: PAL[k], x: 60 + i * 96 + Math.random() * 30, vx: (Math.random() - .5) * 0.25,
-  w: 34 + Math.random() * 14, h: 26 + Math.random() * 10,
-  sq: 0, vy: 0, y: 0, air: false, blink: 0, hop: 2 + Math.random() * 6, face: 0,
-}));
-cv.addEventListener("click", (e) => {
-  const r = cv.getBoundingClientRect(), mx = (e.clientX - r.left) * (cv.width / r.width);
-  slimes.forEach((s) => { if (Math.abs(mx - s.x) < s.w) { s.vy = -4.6; s.air = true; } });
-});
-let t0 = 0;
-function tick(now) {
-  requestAnimationFrame(tick);
-  const dt = Math.min(0.05, (now - t0) / 1000); t0 = now;
-  cx.clearRect(0, 0, cv.width, cv.height);
-  cx.fillStyle = "#1a1440";
-  cx.fillRect(0, GY + 4, cv.width, 6);
-  for (const s of slimes) {
-    if (!s.air && Math.random() < 0.006) s.vx = (Math.random() - .5) * 0.5;
-    s.x += s.vx;
-    if (s.x < s.w) s.vx = Math.abs(s.vx); if (s.x > cv.width - s.w) s.vx = -Math.abs(s.vx);
-    if (!reduce) {
-      s.hop -= dt;
-      if (s.hop <= 0 && !s.air) { s.vy = -3 - Math.random() * 2; s.air = true; s.hop = 3 + Math.random() * 7; }
-    }
-    if (s.air) { s.y += s.vy; s.vy += 0.28; if (s.y >= 0) { s.y = 0; s.air = false; s.sq = 0.32; } }
-    s.sq *= 0.88;
-    s.blink -= dt; if (s.blink < -3 - Math.random() * 3) s.blink = 0.12;
-    blob(cx, s.x, GY + s.y, s.w, s.h, s.pal, s.sq, s.blink > 0);
-  }
-}
-requestAnimationFrame(tick);
-</script>
+<script src="pals.js"></script>
+<script src="ranch.js"></script>
 </body>
 </html>
