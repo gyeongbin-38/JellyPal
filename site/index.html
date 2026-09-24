@@ -226,10 +226,6 @@
     nav a:not(.navdl) { display: none; }
     h1 { font-size: clamp(30px, 8vw, 40px); }
   }
-  .deskshot { padding: 0 0 88px; }
-  .deskshot img { width: 100%; display: block; image-rendering: pixelated; }
-  .deskshot .frame { overflow: hidden; }
-  .deskshot .cap { margin-top: 14px; font-size: 12.5px; color: var(--dim); text-align: center; }
   @media (prefers-reduced-motion: reduce) {
     * { animation: none !important; transition: none !important; }
     html { scroll-behavior: auto; }
@@ -295,18 +291,10 @@
     <div class="loop">
       <div class="lstep jp-card jp-card--lift"><div class="keycap">A</div><div class="lt">you type</div><div class="ld">work, chat, game — every key counts</div></div>
       <div class="larrow">▶</div>
-      <div class="lstep jp-card jp-card--lift"><canvas class="lico" width="52" height="40" data-lico="jelly"></canvas><div class="lt">600 keys = 1 jelly</div><div class="ld">a few minutes of normal typing</div></div>
+      <div class="lstep jp-card jp-card--lift"><canvas class="lico" width="52" height="40" data-lico="jelly"></canvas><div class="lt">600 keys = 1 jelly</div><div class="ld">a few minutes of typing · active legendary? every 300</div></div>
       <div class="larrow">▶</div>
       <div class="lstep jp-card jp-card--lift"><canvas class="lico" width="52" height="40" data-lico="pal"></canvas><div class="lt">jelly = new friends</div><div class="ld">pull species, breed hybrids, dress them up</div></div>
     </div>
-  </section>
-
-  <section class="deskshot">
-    <div class="frame jp-window pxframe">
-      <div class="titlebar jp-window__bar"><i class="dot jp-window__dot"></i><i class="dot jp-window__dot"></i><i class="dot jp-window__dot"></i><span class="jp-window__title">your desktop, with pals</span></div>
-      <img src="shot-desktop.png" alt="Three jelly slimes on a dark desktop — one naps on a notes window title bar, one floats beside the cursor, one munches a snack near the taskbar" width="960" height="540">
-    </div>
-    <div class="cap">that's the whole app — transparent overlay, always on top, never in the way</div>
   </section>
 
   <section class="species" id="species">

@@ -1,11 +1,9 @@
-feat: og:image, favicon, desktop shot section, 404 page, mobile pass
+feat: drop deskshot section; document legendary 2x jelly rate
 
-- shot-desktop.png (stylized slimes-on-desktop render from assets/) is
-  now a .deskshot section after the loop + the og:image — answers the
-  "show me the actual app" review item
-- favicon = real 32px app icon instead of inline SVG
-- 404.html: themed lost-slime page (sleeping Ghost pal sprite)
-- mobile @560px: packs 1-col, ranch 240px, dex cells smaller, nav
-  collapses to just the Download link
-- DESIGN.md backlog updated (4 of 5 items done; itch.io wiring + a
-  real capture remain blocked on the user)
+The mock-desktop screenshot section is gone per request (the png stays
+for og:image). Loop copy now says "600 keys = 1 jelly / active legendary?
+every 300" — verified against JELLY_EVERY and the r>=3 halving in
+src/main.js.
+
+Generated with Devin
+Co-Authored-By: Devin <158243242+devin-ai-integration[bot]@users.noreply.github.com>
