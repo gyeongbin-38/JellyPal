@@ -60,6 +60,37 @@
     transition: color .2s;
   }
   .bar nav a:hover { color: var(--jelly); }
+  .bar nav a:hover { text-decoration: none; box-shadow: 0 2px 0 var(--jelly), 0 4px 0 var(--jelly-shadow); }
+
+  /* ---------- pixel world ---------- */
+  /* stepped corner: 2px pixel notch on every panel corner */
+  .pxframe {
+    clip-path: polygon(
+      0 10px, 4px 10px, 4px 4px, 10px 4px, 10px 0,
+      calc(100% - 10px) 0, calc(100% - 10px) 4px, calc(100% - 4px) 4px, calc(100% - 4px) 10px, 100% 10px,
+      100% calc(100% - 10px), calc(100% - 4px) calc(100% - 10px), calc(100% - 4px) calc(100% - 4px),
+      calc(100% - 10px) calc(100% - 4px), calc(100% - 10px) 100%,
+      10px 100%, 10px calc(100% - 4px), 4px calc(100% - 4px), 4px calc(100% - 10px), 0 calc(100% - 10px)
+    );
+  }
+  /* jelly dither — the game's own translucent checker, as surface grain */
+  .dither {
+    background-image:
+      linear-gradient(45deg, rgba(143,232,192,.035) 25%, transparent 25%, transparent 75%, rgba(143,232,192,.035) 75%),
+      linear-gradient(45deg, rgba(143,232,192,.035) 25%, transparent 25%, transparent 75%, rgba(143,232,192,.035) 75%);
+    background-size: 4px 4px;
+    background-position: 0 0, 2px 2px;
+  }
+  /* pixel divider — stepped pixel row between sections */
+  .pxsep { display: flex; gap: 6px; align-items: center; padding: 10px 0 0; }
+  .pxsep i { width: 8px; height: 8px; background: var(--edge); }
+  .pxsep i:nth-child(3n+1) { background: var(--jelly-shadow); }
+  .pxsep i:nth-child(7n+2) { background: var(--jelly); }
+  /* themed scrollbar */
+  ::-webkit-scrollbar { width: 12px; height: 12px; }
+  ::-webkit-scrollbar-track { background: var(--night); }
+  ::-webkit-scrollbar-thumb { background: var(--edge); border: 3px solid var(--night); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--jelly-shadow); }
 
   /* ---------- hero ---------- */
   .hero {
@@ -88,8 +119,8 @@
   /* the ranch frame */
   .stage { position: relative; }
   .stage .frame {
-    background: var(--deep); border: 2px solid var(--edge); border-radius: var(--r-lg);
-    overflow: hidden; box-shadow: 0 30px 60px -20px rgba(0,0,0,.6);
+    background: var(--deep); border: 2px solid var(--edge);
+    overflow: hidden;
   }
   .frame .titlebar {
     display: flex; align-items: center; gap: 8px; padding: 10px 14px;
@@ -121,43 +152,47 @@
   h2.big { font-weight: 900; font-size: clamp(26px, 3.4vw, 38px); line-height: 1.15; letter-spacing: -0.015em; text-wrap: balance; }
   .eco p { margin-top: 18px; color: var(--dim); line-height: 1.65; max-width: 46ch; }
   .window-demo {
-    background: var(--deep); border: 2px solid var(--edge); border-radius: var(--r-lg);
-    box-shadow: 0 24px 50px -18px rgba(0,0,0,.55); overflow: hidden;
-    transform: rotate(1.5deg);
+    background: var(--deep); border: 2px solid var(--edge);
+    overflow: hidden; transform: rotate(1.5deg);
   }
   .window-demo .body { padding: 26px 22px; font-size: 13px; line-height: 1.7; color: var(--dim); }
   .window-demo .body .line { display: block; margin-bottom: 8px; }
   .window-demo .cursor { display: inline-block; width: 9px; height: 16px; background: var(--jelly); vertical-align: -3px; animation: blink 1.1s steps(1) infinite; }
   @keyframes blink { 50% { opacity: 0; } }
 
-  /* ---------- species marquee ---------- */
+  /* ---------- species dex ---------- */
   .species { padding: 88px 0; overflow: hidden; }
   .species .head { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
   .species .head p { color: var(--dim); font-size: 15px; }
-  .strip {
-    margin-top: 30px; display: flex; gap: 14px; padding: 6px 2px 18px;
-    overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--edge) transparent;
+  .dex {
+    margin-top: 30px; display: grid; gap: 10px;
+    grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
   }
-  .chip {
-    flex: 0 0 auto; display: flex; align-items: center; gap: 12px;
-    background: var(--panel); border-radius: var(--r-md); padding: 12px 18px 12px 12px;
-    font-weight: 800; font-size: 14px;
+  .cell {
+    background: var(--panel); padding: 14px 8px 10px; text-align: center;
+    position: relative; cursor: default;
+    transition: transform .16s cubic-bezier(.34,1.56,.64,1), background .2s;
   }
-  .chip small { display: block; font-weight: 700; font-size: 11px; color: var(--dim); }
+  .cell:hover { transform: translateY(-4px); background: #241d4e; }
+  .cell canvas { display: block; margin: 0 auto; transition: transform .18s cubic-bezier(.34,1.56,.64,1); }
+  .cell:hover canvas { transform: translateY(-3px) scale(1.08); }
+  .cell .nm { font-weight: 800; font-size: 13px; margin-top: 6px; }
+  .cell .rr { font-family: "Press Start 2P", monospace; font-size: 6.5px; margin-top: 4px; letter-spacing: .04em; }
+  .cell .sn { position: absolute; top: 5px; right: 7px; font-family: "Press Start 2P", monospace; font-size: 6px; color: var(--gold); }
   .mini { width: 34px; height: 28px; flex: 0 0 auto; }
 
   /* ---------- packs ---------- */
   .packs { padding: 88px 0; }
   .pack-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; align-items: end; }
   .pack {
-    background: var(--panel); border-radius: var(--r-lg); padding: 26px 20px 22px;
+    background: var(--panel); padding: 26px 20px 22px;
     text-align: center; transition: transform .2s;
   }
   .pack:hover { transform: translateY(-4px); }
   .pack .jellypic { margin: 0 auto 6px; }
   .pack .amt { font-weight: 900; font-size: 20px; margin-top: 10px; font-variant-numeric: tabular-nums; }
   .pack .usd { color: var(--dim); font-size: 14px; margin-top: 2px; font-variant-numeric: tabular-nums; }
-  .pack.best { background: #241d4e; outline: 2px solid var(--gold); transform: translateY(-10px); }
+  .pack.best { background: #241d4e; border: 2px solid var(--gold); transform: translateY(-10px); }
   .pack.best:hover { transform: translateY(-14px); }
   .pack .flag { font-size: 11px; font-weight: 900; color: var(--gold); letter-spacing: .06em; }
   .packs .note { text-align: center; margin-top: 26px; color: var(--dim); font-size: 13.5px; }
@@ -218,7 +253,7 @@
       <div class="sys">Windows 10 or 11 · 5 MB · free to start</div>
     </div>
     <div class="stage">
-      <div class="frame">
+      <div class="frame pxframe">
         <div class="titlebar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span>ranch — live</span></div>
         <canvas id="ranch" width="640" height="300" aria-label="Animated jelly slimes wandering a ranch. Click one to boop it, or use the pull button to summon a random species."></canvas>
       </div>
@@ -237,7 +272,7 @@
         Jelly buys new species, snacks, props and accessories. No grind, no ads:
         the thing you were doing anyway is the gameplay loop.</p>
       </div>
-      <div class="window-demo">
+      <div class="window-demo pxframe">
         <div class="titlebar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span>report_final_v3.docx</span></div>
         <div class="body">
           <span class="line">Dear team,</span>
@@ -253,8 +288,10 @@
       <h2 class="big">48+ species, four rarities, one hybrid engine.</h2>
       <p>each one moves, eats and acts differently</p>
     </div>
-    <div class="strip" id="strip" aria-label="Example species"></div>
+    <div class="dex" id="dex" aria-label="Species catalog"></div>
   </section>
+
+  <div class="pxsep" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
 
   <section class="packs" id="jelly">
     <h2 class="big" style="text-align:left">Jelly, for the impatient collector.</h2>
@@ -263,10 +300,10 @@
       Buy a code on itch.io, redeem it in-game against your MY&nbsp;ID.
     </p>
     <div class="pack-row" style="margin-top:30px">
-      <div class="pack"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">250</div><div class="usd">$1.00</div></div>
-      <div class="pack"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">500</div><div class="usd">$1.79</div></div>
-      <div class="pack best"><div class="flag">POPULAR</div><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">1000</div><div class="usd">$2.99</div></div>
-      <div class="pack"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">2500</div><div class="usd">$5.99</div></div>
+      <div class="pack pxframe dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">250</div><div class="usd">$1.00</div></div>
+      <div class="pack pxframe dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">500</div><div class="usd">$1.79</div></div>
+      <div class="pack best pxframe dither"><div class="flag">POPULAR</div><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">1000</div><div class="usd">$2.99</div></div>
+      <div class="pack pxframe dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">2500</div><div class="usd">$5.99</div></div>
     </div>
     <div class="note">Pulls cost 50 jelly · breeds cost 20 · premium accessories 800–1400</div>
   </section>

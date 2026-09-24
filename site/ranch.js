@@ -218,33 +218,42 @@
   }
   requestAnimationFrame(tick);
 
-  // ---- species strip: real sprites ----
-  const strip = document.getElementById("strip");
-  if (strip) {
+  // ---- shared: fit a sprite (72x52) into a box, bottom-anchored ----
+  function fit(cc, spr, bw, bh, pad = 0) {
+    const sw = SW * 2, sh = SH * 2;
+    const s = Math.min((bw - pad * 2) / sw, (bh - pad * 2) / sh);
+    const dw = sw * s, dh = sh * s;
+    cc.imageSmoothingEnabled = false;
+    cc.drawImage(spr, 0, 0, sw, sh, (bw - dw) / 2, bh - dh - pad, dw, dh);
+  }
+
+  // ---- species dex: game-catalog grid, real sprites ----
+  const dex = document.getElementById("dex");
+  if (dex) {
     SPECIES.forEach((sp, i) => {
-      const chip = document.createElement("div");
-      chip.className = "chip";
-      chip.style.borderLeft = "3px solid " + RARITY_COLOR[sp.r];
+      const cell = document.createElement("div");
+      cell.className = "cell pxframe";
       const cnv = document.createElement("canvas");
-      cnv.width = 48; cnv.height = 36; cnv.className = "mini";
-      const cc = cnv.getContext("2d");
-      cc.imageSmoothingEnabled = false;
-      const s = 0.68;
-      cc.drawImage(sprite("idle", i), 0, 0, SW * 2, SH * 2, 24 - SW * s, 35 - SH * s, SW * 2 * s, SH * 2 * s);
-      const label = document.createElement("div");
-      label.innerHTML = `${sp.name}<small>${RARITY_NAME[sp.r].toLowerCase()}${sp.season ? " · seasonal" : ""}</small>`;
-      chip.append(cnv, label);
-      strip.appendChild(chip);
+      cnv.width = 66; cnv.height = 44;
+      fit(cnv.getContext("2d"), sprite("idle", i), 66, 44);
+      const nm = document.createElement("div");
+      nm.className = "nm"; nm.textContent = sp.name;
+      const rr = document.createElement("div");
+      rr.className = "rr"; rr.textContent = RARITY_NAME[sp.r];
+      rr.style.color = RARITY_COLOR[sp.r];
+      cell.append(cnv, nm, rr);
+      if (sp.season) {
+        const sn = document.createElement("div");
+        sn.className = "sn"; sn.textContent = "★";
+        cell.appendChild(sn);
+      }
+      dex.appendChild(cell);
     });
   }
 
   // ---- pack icons: real pals per tier ----
   const PACK_SP = ["sprout", "berry", "gold", "stella"];
   document.querySelectorAll(".jellypic").forEach((el, i) => {
-    const cc = el.getContext("2d");
-    cc.imageSmoothingEnabled = false;
-    const idx = spIndex(PACK_SP[i] || "sprout");
-    const s = 0.62;
-    cc.drawImage(sprite("idle", idx), 0, 0, SW * 2, SH * 2, el.width / 2 - SW * s, el.height - 2 - SH * s, SW * 2 * s, SH * 2 * s);
+    fit(el.getContext("2d"), sprite("idle", spIndex(PACK_SP[i] || "sprout")), el.width, el.height, 2);
   });
 })();

@@ -7,5 +7,6 @@ for (const f of ["site/pals.js", "site/ranch.js"]) {
 const s = fs.readFileSync("site/index.html", "utf8");
 console.log("script tags:", (s.match(/<script/g) || []).length);
 console.log("has pals.js:", s.includes("pals.js"), "| ranch.js:", s.includes("ranch.js"));
-console.log("has pull btn:", s.includes('id="pull"'), "| strip:", s.includes('id="strip"'));
-console.log("old PAL gone:", !s.includes("const PAL"), "| old blob gone:", !s.includes("function blob"));
+console.log("has pull btn:", s.includes('id="pull"'), "| dex:", s.includes('id="dex"'));
+console.log("pxsep:", s.includes("pxsep"), "| pxframe count:", (s.match(/pxframe/g) || []).length);
+console.log("no strip:", !s.includes('id="strip"'), "| old PAL gone:", !s.includes("const PAL"));
