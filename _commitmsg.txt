@@ -1,9 +1,19 @@
-feat: drop deskshot section; document legendary 2x jelly rate
+fix first-run polish: always breed a baby, 100 jelly start, owned filter default
 
-The mock-desktop screenshot section is gone per request (the png stays
-for og:image). Loop copy now says "600 keys = 1 jelly / active legendary?
-every 300" — verified against JELLY_EVERY and the r>=3 halving in
-src/main.js.
+- doBreed: drop the 25% "surprise adult species" roll — breeding now
+  always produces a hybrid with bornAt, so the nursery always opens.
+  The adult roll read as 'breeding didn't work' on itch test runs.
+- starting jelly 10 -> 100 to match the stated onboarding grant
+- collection filter defaults to OWNED instead of ALL
+- RANCH header: clamp the dex counter (+hyb suffix / EVENT tag) so it
+  can't collide with the BREED button when numbers grow
+- version 0.2.0 -> 0.2.1; rebuild binaries (windres can't handle the
+  Korean home path — build staged under C:\build, ASCII-only)
 
-Generated with Devin
+Note: 3 pals / placed props on the itch test were save carryover from
+%APPDATA%\com.jellypal.desktop\state.json, not the clean-start path —
+a fresh save still starts with only sprout and no props.
+
+Generated with [Devin](https://devin.ai)
+
 Co-Authored-By: Devin <158243242+devin-ai-integration[bot]@users.noreply.github.com>

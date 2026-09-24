@@ -1354,7 +1354,7 @@ const TREATS = [
 
 let xp = 0;
 let level = 0;
-let jelly = 10;
+let jelly = 100;
 let owned = ["sprout"];
 let active = 0;
 let dirty = false;
@@ -4411,7 +4411,7 @@ const SORTS = ["DEX", "RARE", "NAME"];
 const FILTS = ["ALL", "OWNED", "MISS", "SHINY"];
 let ranchPage = 0;
 let sortMode = 0;
-let filtMode = 0;
+let filtMode = 1; // default OWNED — your pals first, not a wall of ???
 const gridIdx = () => {
   let list = SPECIES.map((s, i) => i).filter((i) => !isBaby(SPECIES[i]));
   const f = FILTS[filtMode];
@@ -4604,13 +4604,19 @@ function drawRanch(ms) {
   drawText(rctx, "RANCH", 14, 14, 2, "#5c4632");
   bubbleIcon(rctx, 96, 19);
   const jellyX = drawText(rctx, String(jelly), 108, 13, 2, "#5c4632");
-  // collection counter: owned base/total base + hybrids
+  // collection counter: owned base/total base + hybrids — drawn only
+  // while it clears the BREED button; big numbers drop the +hyb suffix
   const nBase = owned.filter((id) => !id.startsWith("hyb")).length;
   const nHyb = owned.length - nBase;
   const mBase = SPECIES.filter((p) => !p.id.startsWith("hyb") && (seasonOpen(p) || owned.includes(p.id))).length;
-  const dexEnd = drawText(rctx, `${nBase}/${mBase}${nHyb ? ` +${nHyb}` : ""}`, jellyX + 8, 20, 1, "#8a6b4a");
+  const dexX = jellyX + 8, dexCap = BREED_R[0] - 6 - dexX;
+  const dexFull = `${nBase}/${mBase}${nHyb ? ` +${nHyb}` : ""}`, dexShort = `${nBase}/${mBase}`;
+  let dexEnd = jellyX;
+  if (dexCap >= textW(dexFull, 1)) dexEnd = drawText(rctx, dexFull, dexX, 20, 1, "#8a6b4a");
+  else if (dexCap >= textW(dexShort, 1)) dexEnd = drawText(rctx, dexShort, dexX, 20, 1, "#8a6b4a");
   // gold EVENT tag pulses while any seasonal window is open
-  if (SPECIES.some((p) => p.season && seasonOpen(p)) || ACCS.some((a) => a.season && seasonOpen(a))) {
+  if (BREED_R[0] - 6 - dexEnd >= 44 &&
+      (SPECIES.some((p) => p.season && seasonOpen(p)) || ACCS.some((a) => a.season && seasonOpen(a)))) {
     drawText(rctx, "EVENT", dexEnd + 8, 20, 1, Math.sin(t * 4) > 0 ? "#d98a2b" : "#eec23f", null, true);
   }
 
@@ -5771,16 +5777,12 @@ function doBreed() {
   breedReadyAt = Date.now() + BREED_CD;
   const A = SPECIES[breedSel[0]];
   const B = SPECIES[breedSel[1]];
-  let child;
-  const unownedBase = SPECIES.filter((s) => s.r <= 2 && !s.id.startsWith("hyb") && !owned.includes(s.id) && seasonOpen(s));
-  if (unownedBase.length && Math.random() < 0.25) {
-    child = unownedBase[(Math.random() * unownedBase.length) | 0];
-  } else {
-    child = makeHybrid(A, B);
-    SPECIES.push(child);
-    slotPh.push(Math.random() * 5);
-    fitRanch();
-  }
+  // breeding always yields a hybrid baby — the old 25% "surprise adult
+  // species" read as 'breeding didn't work' to players
+  const child = makeHybrid(A, B);
+  SPECIES.push(child);
+  slotPh.push(Math.random() * 5);
+  fitRanch();
   owned.push(child.id);
   // shiny parents pass the spark down: 15% when either parent is shiny
   const bShiny = (shinyOwned[A.id] || shinyOwned[B.id]) && Math.random() < 0.15;
