@@ -88,13 +88,13 @@ Load order is `pals.js` → `ranch.js` at end of body. No bundler — plain glob
 1. **itch.io wiring** — pack `.packbuy` buttons are `disabled` ("itch.io — soon").
    When the itch listing ships: fill `GEM_SHOP_URL` in `src/main.js` + point the
    buttons there. Same for `UPDATE_URL`.
-2. **Real product screenshot/clip** for the hero or a "how it looks on your
-   desktop" strip — hardware overlay makes it un-capturable from CI; needs a
-   user-side Win+G grab.
-3. **Mobile audit** — hero stacking, pack-row → 1 col, dex filters wrapping,
-   touch sizes. Never verified on a real phone.
-4. **Polish the review leftovers**: og:image (a rendered pal would be a great
-   card image), favicon, 404 page.
+2. ~~Product screenshot~~ — DONE via the stylized `shot-desktop.png` (slimes on
+   a mock desktop) in a `.deskshot` section + as og:image. A real Win+G capture
+   would still be better when someone can grab one.
+3. ~~Mobile audit~~ — CSS pass done (@560px: packs 1-col, ranch 240px, nav
+   collapses to Download only). Still unverified on a real phone.
+4. ~~og:image / favicon / 404~~ — DONE: og:image = shot-desktop.png, favicon =
+   real 32px app icon, `404.html` shows a sleeping Ghost pal.
 5. Optional: props/accessories/breeding were ported once (`SPR`, `drawAccRaw`,
    `makeHybrid` are still in pals.js) then cut when the hero went minimal —
    they can come back as a separate "playground" section if wanted, the

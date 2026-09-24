@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jellypal — lost slime</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;900&family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background:#0e0a1e; color:#e8e4ff; font-family:"Nunito",sans-serif; text-align:center; }
+  .px { font-family:"Press Start 2P",monospace; font-size:11px; color:#8fe8c0; letter-spacing:.1em; }
+  h1 { font-weight:900; font-size:34px; margin:18px 0 8px; }
+  p { color:#8f86c8; margin:0 0 26px; }
+  a { color:#8fe8c0; font-weight:900; text-decoration:none; border-bottom:2px solid #8fe8c0; padding-bottom:2px; }
+  a:hover { color:#fff; }
+  canvas { image-rendering:pixelated; }
+</style>
+</head>
+<body>
+<div>
+  <canvas id="pal" width="96" height="68" aria-hidden="true"></canvas>
+  <div class="px">404</div>
+  <h1>this slime wandered off</h1>
+  <p>the page you wanted isn't here — probably hiding under a window.</p>
+  <a href="/">back to the ranch</a>
+</div>
+<script src="pals.js"></script>
+<script>
+  const g = document.getElementById("pal").getContext("2d");
+  g.imageSmoothingEnabled = false;
+  const i = SPECIES.findIndex(s => s.id === "ghost");
+  const im = sprite("sleeping", i >= 0 ? i : 0);
+  g.drawImage(im, 12, 8);
+</script>
+</body>
+</html>

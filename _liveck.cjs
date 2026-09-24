@@ -1,10 +1,12 @@
-const checks = [
-  ['https://jellypal.fun', ['id="safe"', 'id="mot"', 'navdl', 'e0964204', '600 keys = 1 jelly', 'itch.io — soon']],
-  ['https://jellypal.fun/ranch.js', ['getElementById("dex")', 'dataset.ico', 'leg.starburst', 'paused']],
-];
 (async () => {
-  for (const [url, keys] of checks) {
-    const t = await (await fetch(url)).text();
-    console.log(url.padEnd(42), keys.map(k => `${t.includes(k) ? 'Y' : 'N'}`).join(''));
+  for (const [url, keys] of [
+    ['https://jellypal.fun', ['shot-desktop.png', 'og:image', 'favicon.png', 'deskshot']],
+    ['https://jellypal.fun/shot-desktop.png', []],
+    ['https://jellypal.fun/favicon.png', []],
+    ['https://jellypal.fun/nonexistent-page', ['404', 'wandered off']],
+  ]) {
+    const r = await fetch(url, { cache: 'no-store' });
+    const t = keys.length ? await r.text() : '';
+    console.log(url.padEnd(50), r.status, keys.map(k => t.includes(k) ? 'Y' : 'N').join(''));
   }
 })();

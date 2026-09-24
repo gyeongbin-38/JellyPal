@@ -8,7 +8,10 @@
 <meta property="og:title" content="Jellypal — a tiny slime that lives on your screen">
 <meta property="og:description" content="A cute pixel-art slime companion for your Windows desktop. Feed it keystrokes, collect 48+ species, breed hybrids.">
 <meta property="og:type" content="website">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect x='5' y='3' width='6' height='2' fill='%238fe8c0'/%3E%3Crect x='3' y='5' width='10' height='2' fill='%238fe8c0'/%3E%3Crect x='2' y='7' width='12' height='4' fill='%238fe8c0'/%3E%3Crect x='3' y='11' width='10' height='2' fill='%238fe8c0'/%3E%3Crect x='5' y='13' width='6' height='1' fill='%238fe8c0'/%3E%3Crect x='5' y='8' width='1' height='2' fill='%232e5a44'/%3E%3Crect x='10' y='8' width='1' height='2' fill='%232e5a44'/%3E%3Crect x='4' y='6' width='2' height='1' fill='%23ffffff'/%3E%3C/svg%3E">
+<meta property="og:url" content="https://jellypal.fun">
+<meta property="og:image" content="https://jellypal.fun/shot-desktop.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/png" href="favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800;900&family=Press+Start+2P&display=swap" rel="stylesheet">
 <style>
@@ -261,6 +264,17 @@
     .hero { padding-top: 30px; gap: 34px; }
     .frame canvas { height: 300px; }
   }
+  @media (max-width: 560px) {
+    .pack-row { grid-template-columns: 1fr; }
+    #ranch { height: 240px; }
+    .dex { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+    nav a:not(.navdl) { display: none; }
+    h1 { font-size: clamp(30px, 8vw, 40px); }
+  }
+  .deskshot { padding: 0 0 88px; }
+  .deskshot img { width: 100%; display: block; image-rendering: pixelated; }
+  .deskshot .frame { overflow: hidden; }
+  .deskshot .cap { margin-top: 14px; font-size: 12.5px; color: var(--dim); text-align: center; }
   @media (prefers-reduced-motion: reduce) {
     * { animation: none !important; transition: none !important; }
     html { scroll-behavior: auto; }
@@ -323,6 +337,14 @@
       <div class="larrow">▶</div>
       <div class="lstep pxframe"><canvas class="lico" width="52" height="40" data-lico="pal"></canvas><div class="lt">jelly = new friends</div><div class="ld">pull species, breed hybrids, dress them up</div></div>
     </div>
+  </section>
+
+  <section class="deskshot">
+    <div class="frame pxframe">
+      <div class="titlebar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span>your desktop, with pals</span></div>
+      <img src="shot-desktop.png" alt="Three jelly slimes on a dark desktop — one naps on a notes window title bar, one floats beside the cursor, one munches a snack near the taskbar" width="960" height="540">
+    </div>
+    <div class="cap">that's the whole app — transparent overlay, always on top, never in the way</div>
   </section>
 
   <section class="species" id="species">

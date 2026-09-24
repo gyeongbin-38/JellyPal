@@ -1,14 +1,11 @@
-fix: runtime repair — sprite() API misuse broke the live ranch + dex
+feat: og:image, favicon, desktop shot section, 404 page, mobile pass
 
-the one-pal rewrite called sprite(p.spIdx) but the signature is
-sprite(faceName, spIdx, sil), referenced a drawPal() that never existed,
-and used rng()/jellyImg() that weren't in pals.js — the live hero canvas,
-dex grid and all icons rendered nothing since 88c1cde.
-
-- FACE_N index->name map + sprOf()/idleOf() helpers; all sprite() calls
-  corrected, canvases measured via .width/.height
-- added SPR.gem (product's jelly icon) + jellyImg() + rng() to pals.js
-- LEG object flags wired properly (wings/halo/orbit/glow/chips/floaty)
-- DESIGN.md: full handoff brief for the commercial workspace —
-  live URLs, deploy steps, pals.js API reference, design tokens,
-  regression rules, and the remaining design backlog
+- shot-desktop.png (stylized slimes-on-desktop render from assets/) is
+  now a .deskshot section after the loop + the og:image — answers the
+  "show me the actual app" review item
+- favicon = real 32px app icon instead of inline SVG
+- 404.html: themed lost-slime page (sleeping Ghost pal sprite)
+- mobile @560px: packs 1-col, ranch 240px, dex cells smaller, nav
+  collapses to just the Download link
+- DESIGN.md backlog updated (4 of 5 items done; itch.io wiring + a
+  real capture remain blocked on the user)
