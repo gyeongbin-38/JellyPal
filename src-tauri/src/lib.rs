@@ -940,6 +940,8 @@ pub fn run() {
                 let mut inside = false;
                 let mut last_cur = (0.0f64, 0.0f64);
                 let mut tick = 0u32;
+                let mut flip_fail = 0u32;
+                let mut held_stall = 0u32;
                 loop {
                     std::thread::sleep(Duration::from_millis(30));
                     tick += 1;
@@ -975,6 +977,13 @@ pub fn run() {
                         last_cur = (lx, ly);
                         let _ = win_poll.emit("cursor", [lx, ly]);
                     }
+                    // windows silently demotes always-on-top windows after UAC
+                    // prompts, lock screens and fullscreen takeovers — then the
+                    // slimes vanish behind work windows. re-assert every ~3s;
+                    // the call is idempotent so it costs nothing while healthy
+                    if tick % 100 == 3 {
+                        let _ = win_poll.set_always_on_top(true);
+                    }
                     let now_inside = DRAGGING.load(Ordering::Relaxed)
                         || CLICKABLE
                             .lock()
@@ -985,11 +994,25 @@ pub fn run() {
                             });
                     // never flip click-through while a mouse button is held —
                     // toggling mid-gesture can deadlock the webview's input
-                    // pipeline and hang the window
+                    // pipeline and hang the window. if the global press/release
+                    // counter ever leaks (a release event that never arrived),
+                    // btn_held stays true forever and every flip is skipped —
+                    // force the flip after ~2s of divergence so a leaked count
+                    // can't freeze input permanently
                     let btn_held = MOUSE_HELD.load(Ordering::Relaxed) > 0;
-                    if now_inside != inside && !btn_held {
-                        inside = now_inside;
-                        let _ = win_poll.set_ignore_cursor_events(!inside);
+                    let diverged = now_inside != inside;
+                    held_stall = if diverged && btn_held { held_stall + 1 } else { 0 };
+                    if diverged && (!btn_held || held_stall > 66) {
+                        // only commit the state when the OS actually flipped —
+                        // a swallowed error used to leave `inside` claiming
+                        // enabled while the OS still ignored every event, and
+                        // the `!=` guard meant the retry never ran: dead input
+                        // until the cursor happened to leave and re-enter a rect
+                        if win_poll.set_ignore_cursor_events(!now_inside).is_ok() {
+                            inside = now_inside;
+                        } else {
+                            flip_fail = flip_fail.saturating_add(1);
+                        }
                     }
                     // live click-state snapshot every ~1s — proves whether the
                     // frontend's rects arrived and whether the poll loop is
@@ -998,12 +1021,13 @@ pub fn run() {
                         if let Ok(dir) = win_poll.app_handle().path().app_data_dir() {
                             let n = CLICKABLE.lock().unwrap().len();
                             let body = format!(
-                                "{{\"inside\":{},\"rects\":{},\"cursor\":[{},{}],\"dragging\":{}}}",
+                                "{{\"inside\":{},\"rects\":{},\"cursor\":[{},{}],\"dragging\":{},\"flipfail\":{}}}",
                                 inside,
                                 n,
                                 lx,
                                 ly,
-                                DRAGGING.load(Ordering::Relaxed)
+                                DRAGGING.load(Ordering::Relaxed),
+                                flip_fail
                             );
                             let _ = std::fs::write(dir.join("clickdbg.json"), body);
                         }

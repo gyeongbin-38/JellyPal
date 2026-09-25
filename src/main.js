@@ -397,7 +397,7 @@ const FLAVOR = {
   hyb: "BORN RIGHT ON THIS DESKTOP|ONE OF A KIND",
 };
 
-const APP_VER = "0.2.2"; // keep in sync with tauri.conf.json version
+const APP_VER = "0.2.3"; // keep in sync with tauri.conf.json version
 
 // species -> personality assignment (hybrids inherit one parent's)
 const PSY_ASSIGN = {
@@ -5899,7 +5899,11 @@ addEventListener("keydown", (e) => {
 });
 
 // ---------- clickable regions ----------
-setInterval(() => {
+// the rust click-through poll starts with an EMPTY rect list and a fully
+// ignored window — every early click drops to the desktop until the first
+// batch lands. send immediately at boot, then keep refreshing; the interval
+// alone left a dead window long enough to read as "pals can't be grabbed"
+function sendClickable() {
   const rects = petHome ? [] : [petRect()];
   { const [fx, fy] = fabPos(); rects.push([fx - 20, fy - 20, 40, 40]); }
   if (fabOpen) for (let k = 0; k < FAB_ITEMS.length; k++) rects.push(fabItemRect(k));
@@ -5925,7 +5929,9 @@ setInterval(() => {
   if (nurseryOpen) rects.push([nursery.offsetLeft, nursery.offsetTop, nursery.offsetWidth, nursery.offsetHeight]);
   if (cardTarget) rects.push([cardEl.offsetLeft, cardEl.offsetTop, cardEl.offsetWidth, cardEl.offsetHeight]);
   invoke("set_clickable", { rects });
-}, 250);
+}
+sendClickable();
+setInterval(sendClickable, 250);
 
 // ---------- mood ----------
 let sleepMs = 0;
