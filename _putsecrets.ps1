@@ -1,7 +1,8 @@
 $ErrorActionPreference = 'Stop'
 Set-Location "$PSScriptRoot\server"
 $secrets = @{}
-Get-Content "$PSScriptRoot\_secrets.local.txt" | ForEach-Object {
+$secretsDir = if ($env:JP_SECRETS_DIR) { $env:JP_SECRETS_DIR } else { "$PSScriptRoot\..\typet-secrets" }
+Get-Content "$secretsDir\_secrets.local.txt" | ForEach-Object {
   $p = $_ -split '=', 2
   $secrets[$p[0].Trim()] = $p[1].Trim()
 }

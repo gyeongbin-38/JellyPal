@@ -3,12 +3,14 @@ const crypto = require("crypto");
 const fs = require("fs");
 
 const BASE = "https://api.jellypal.fun";
-const code = fs.readFileSync("_livetest_code.txt", "utf8").trim();
+const path = require("path");
+const SECRETS = process.env.JP_SECRETS_DIR || path.join(__dirname, "..", "typet-secrets");
+const code = fs.readFileSync(path.join(SECRETS, "_livetest_code.txt"), "utf8").trim();
 const uid = "JPLIVEE2ETESTABCDEFGHIJ2XYZ".slice(0, 26);
 const uidB = "JP" + "Q".repeat(24);
 
 const secrets = {};
-for (const line of fs.readFileSync("_secrets.local.txt", "utf8").split(/\r?\n/)) {
+for (const line of fs.readFileSync(path.join(SECRETS, "_secrets.local.txt"), "utf8").split(/\r?\n/)) {
   const i = line.indexOf("=");
   if (i > 0) secrets[line.slice(0, i).trim()] = line.slice(i + 1).trim();
 }

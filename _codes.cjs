@@ -11,9 +11,12 @@ const check = (n, ok, extra = "") => {
   ok ? pass++ : fail++;
 };
 
-check("seller key exists", fs.existsSync("seller_ed25519.key"),
+const path = require("path");
+const SECRETS = process.env.JP_SECRETS_DIR || path.join(__dirname, "..", "typet-secrets");
+const KEY = path.join(SECRETS, "seller_ed25519.key");
+check("seller key exists", fs.existsSync(KEY),
   "run `node codes.cjs keygen` if missing");
-const priv = crypto.createPrivateKey(fs.readFileSync("seller_ed25519.key"));
+const priv = crypto.createPrivateKey(fs.readFileSync(KEY));
 const pubDer = crypto.createPublicKey(priv).export({ format: "der", type: "spki" });
 const pubHex = Buffer.from(pubDer.slice(-32)).toString("hex").toUpperCase();
 

@@ -3,9 +3,13 @@
 // privkey -> server_ed25519.key (gitignored) -> `wrangler secret put`.
 const c = require("crypto");
 const fs = require("fs");
-if (fs.existsSync("server_ed25519.key")) { console.log("already exists"); process.exit(0); }
+const path = require("path");
+const SECRETS = process.env.JP_SECRETS_DIR || path.join(__dirname, "..", "typet-secrets");
+const KEY = path.join(SECRETS, "server_ed25519.key");
+fs.mkdirSync(SECRETS, { recursive: true });
+if (fs.existsSync(KEY)) { console.log("already exists"); process.exit(0); }
 const { privateKey, publicKey } = c.generateKeyPairSync("ed25519");
-fs.writeFileSync("server_ed25519.key", privateKey.export({ format: "pem", type: "pkcs8" }), { mode: 0o600 });
+fs.writeFileSync(KEY, privateKey.export({ format: "pem", type: "pkcs8" }), { mode: 0o600 });
 const raw = publicKey.export({ format: "der", type: "spki" }).slice(-32);
 console.log("pubkey hex for lib.rs SERVER_PUBKEY:");
 console.log(raw.toString("hex").toUpperCase().match(/.{1,2}/g).map((h) => "0x" + h).join(", "));

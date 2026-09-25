@@ -108,7 +108,9 @@ async function redeem(req, env) {
   if (!v) return J({ error: "bad code" });
   const cKey = `code:${await sha(code.toUpperCase().trim())}`;
   const bound = await env.DB.get(cKey);
-  if (bound) return J({ error: "code already claimed" });
+  // a code is bound to one uid — that uid may re-redeem (reinstall/reset
+  // restores their purchase); any OTHER uid is stealing it
+  if (bound && bound !== uh) return J({ error: "code already claimed" });
   await env.DB.put(cKey, uh);
   const uKey = `user:${uh}`;
   const u = (await env.DB.get(uKey, "json")) || { created: Date.now(), codes: 0, granted: 0 };

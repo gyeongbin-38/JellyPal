@@ -21,7 +21,10 @@ const fs = require("fs");
 const path = require("path");
 
 const GEM_PACKS = { A: 250, B: 500, C: 1000, D: 2500 };
-const KEY_FILE = path.join(__dirname, "seller_ed25519.key");
+// secrets live OUTSIDE the repo — sibling dir typet-secrets/ (or
+// JP_SECRETS_DIR). the repo itself stays publishable.
+const SECRETS_DIR = process.env.JP_SECRETS_DIR || path.join(__dirname, "..", "typet-secrets");
+const KEY_FILE = path.join(SECRETS_DIR, "seller_ed25519.key");
 const B32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
 function b32(buf) {

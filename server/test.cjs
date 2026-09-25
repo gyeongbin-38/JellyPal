@@ -44,8 +44,9 @@ async function main() {
 
   // in-memory KV stub
   const store = new Map();
+  const SECRETS = process.env.JP_SECRETS_DIR || path.join(__dirname, "..", "..", "typet-secrets");
   const skDer = crypto.createPrivateKey(
-    fs.readFileSync(path.join(__dirname, "..", "server_ed25519.key"))
+    fs.readFileSync(path.join(SECRETS, "server_ed25519.key"))
   ).export({ format: "der", type: "pkcs8" });
   const env = {
     DB: {
@@ -79,7 +80,7 @@ async function main() {
   const uidB = "JP" + b32(crypto.randomBytes(15));
 
   // mint a real code with the seller key
-  const sellerPriv = crypto.createPrivateKey(fs.readFileSync(path.join(__dirname, "..", "seller_ed25519.key")));
+  const sellerPriv = crypto.createPrivateKey(fs.readFileSync(path.join(SECRETS, "seller_ed25519.key")));
   const nonce = b32(crypto.randomBytes(5));
   const sig = crypto.sign(null, Buffer.from(`JP2:B:${nonce}`), sellerPriv);
   const code = `JELLYPAL-B-${nonce}-${b32(sig)}`;
