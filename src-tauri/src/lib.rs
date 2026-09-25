@@ -20,6 +20,9 @@ static DRAGGING: AtomicBool = AtomicBool::new(false);
 // replacement for GetAsyncKeyState; a missed release only delays a
 // click-through toggle until the next press cycle, never wedges it
 static MOUSE_HELD: AtomicI32 = AtomicI32::new(0);
+// set while reset_save is wiping — an in-flight save_state landing after the
+// deletes would resurrect the very save the user asked to destroy
+static RESETTING: AtomicBool = AtomicBool::new(false);
 // per-monitor rects in window-logical px [x, y, w, h] — filled at setup
 // when the overlay spans more than one display
 static MON_LIST: Mutex<Vec<[f64; 4]>> = Mutex::new(Vec::new());
@@ -41,6 +44,9 @@ fn set_dragging(on: bool) {
 
 #[tauri::command]
 fn save_state(app: tauri::AppHandle, json: String) -> Result<(), String> {
+    if RESETTING.load(Ordering::Relaxed) {
+        return Ok(());
+    }
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let state = dir.join("state.json");
@@ -77,6 +83,9 @@ fn quit_app(app: tauri::AppHandle) {
 
 #[tauri::command]
 fn reset_save(app: tauri::AppHandle) {
+    // block any in-flight/queued save first — without this, a persist() that
+    // was already on its way could land after the deletes and undo the reset
+    RESETTING.store(true, Ordering::Relaxed);
     // wipe every save artifact, then relaunch so the next boot is a true
     // first run. the .bak matters: load_state falls back to it, so leaving
     // it behind would resurrect the wiped save.
