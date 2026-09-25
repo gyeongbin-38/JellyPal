@@ -1,18 +1,13 @@
-harden save/gacha edges from bug audit
+wire update probe + fix stale APP_VER; itch.io now live
 
-- hybSeq now clamps past every loaded hybrid id — a pre-hybSeq or
-  hand-edited save could mint a duplicate "hybN" on the next breed
-- owned list is deduped on load for the same reason
-- rollSpecies falls back to wider pools instead of returning undefined
-  into doPull if a rarity tier ever ends up empty
-- stale comment: breeding no longer mentions the removed 25% adult roll
-
-Audit results (verified clean): all sfx.* -> SFX_DEFS, all drawSpr ids
--> SPR, all TREATS ids -> SPR, every random-index site length-guarded,
-drag states covered by pointercancel + a 20s watchdog, _sim.cjs
-600 frames clean.
-
-Binaries rebuilt (0.2.1) with the audit guards + site hashes updated.
+- APP_VER was still "0.2.0" — the settings footer showed the wrong
+  version and the update probe would compare against it
+- UPDATE_URL -> jellypal.fun/version.txt (new static file); the app
+  now detects newer releases at boot
+- binaries rebuilt (0.2.1) and pushed to itch.io channels
+  windows-installer + windows-portable via butler
+- NEXT.md: itch page live, butler/channel conventions, Stripe links
+  still pending dashboard setup
 
 Generated with [Devin](https://devin.ai)
 

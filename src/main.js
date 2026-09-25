@@ -397,7 +397,7 @@ const FLAVOR = {
   hyb: "BORN RIGHT ON THIS DESKTOP|ONE OF A KIND",
 };
 
-const APP_VER = "0.2.0";
+const APP_VER = "0.2.1"; // keep in sync with tauri.conf.json version
 
 // species -> personality assignment (hybrids inherit one parent's)
 const PSY_ASSIGN = {
@@ -1782,7 +1782,7 @@ const packUrl = (id) => {
 };
 // update probe: a tiny text file hosting the newest version string
 // (e.g. "0.2.1") — any static host works; leave empty to disable
-const UPDATE_URL = "";
+const UPDATE_URL = "https://jellypal.fun/version.txt";
 let newVer = ""; // set when the probe reports a newer version
 // local weather — cosmetic only: umbrella in rain, snowflakes in snow.
 // polled every 30min; the Rust side resolves coarse ip geo -> open-meteo

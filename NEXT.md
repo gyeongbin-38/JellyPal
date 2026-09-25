@@ -201,18 +201,22 @@ Size: S < half day, M = 1-2 days, L = multi-day.
 
 ## Next up (F2P + gem packs — Steam deferred)
 
-0. **itch.io page + account** — FREE download, upload `assets/*.png` +
-   `promo.gif`, write the description; sell gem packs as itch
-   "rewards"/Gumroad listings with codes from `codes.cjs`. [S]
-1. **Code delivery flow** — pick how buyers get codes: Gumroad
-   auto-email (easiest), itch reward tiers, or manual messages. [S]
+0. ~~itch.io page + account~~ — LIVE: https://gyeongbin.itch.io/jellypal
+   (account user = gyeongbin, gmail login). butler at `C:\dev\tools\butler.exe`;
+   push with `BUTLER_API_KEY` env or the creds file. Channels:
+   `windows-installer` (setup exe) + `windows-portable` (zip contents,
+   itch-app installable). Manual web uploads must be deleted on the edit
+   page by hand — no API for that.
+1. **Code delivery flow** — NOW: Stripe Payment Links + webhook → KV grant
+   → app /claim. Links still need creating in the Stripe dashboard, then
+   paste into `GEM_PACK_URLS` (app) + `PAY_LINKS` (site).
 2. **Real gameplay capture** — promo.gif is synthetic; a real recorded
    clip of dangling/ranch still sells better. [S]
 3. ~~In-game shop surface~~ — DONE: GEMS row in settings, pack prices,
-   store-link slot + redeem door. Set `GEM_SHOP_URL` once the itch
-   page exists.
-4. ~~Update checker~~ — DONE: `check_update` polls `UPDATE_URL` at
-   boot; set the const once the itch page ships.
+   store-link slot + redeem door. `GEM_SHOP_URL` = jellypal.fun#jelly.
+4. ~~Update checker~~ — DONE + WIRED: `UPDATE_URL` = jellypal.fun/version.txt;
+   bump the file when shipping a new build. `APP_VER` must match
+   tauri.conf.json version.
 5. ~~Settings panel growth~~ — DONE: panel height now fits the viewport
    (min 220px), the 14 rows scroll inside a clipped viewport on a wheel
    turn, footer stats stay pinned, offscreen rows take no clicks.
