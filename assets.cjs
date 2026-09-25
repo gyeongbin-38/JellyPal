@@ -253,7 +253,6 @@ if (require.main === module) {
   cv.line(480, 390 - 26 * 5 + 6, 520, 210, [238, 242, 246], 200);
   bitmap(cv, CURSOR, 520, 200, 3, { "#": hexRgb("#f4f0e8") });
   bitmap(cv, HEART, 205, 250, 4, { "#": PINK });
-  text(cv, "V0.2.0", 8, 484, 1, LBROWN);
   savePng(cv, out("cover.png"));
 }
 
