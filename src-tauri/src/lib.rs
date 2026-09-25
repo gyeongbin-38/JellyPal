@@ -84,6 +84,15 @@ fn reset_save(app: tauri::AppHandle) {
         for name in ["state.json", "state.json.bak", "state.json.tmp"] {
             let _ = std::fs::remove_file(dir.join(name));
         }
+        let _ = std::fs::remove_dir_all(dir.join("photos"));
+        // kill legacy identifier dirs too — boot-time migration copies an old
+        // com.jellypal.app/com.typet.app save into the new dir whenever the new
+        // one has no state.json, which would silently undo the reset
+        if let Some(roaming) = dir.parent() {
+            for legacy in ["com.jellypal.app", "com.typet.app"] {
+                let _ = std::fs::remove_dir_all(roaming.join(legacy));
+            }
+        }
     }
     tauri::process::restart(&app.env());
 }

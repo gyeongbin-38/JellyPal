@@ -1,0 +1,15 @@
+0.2.4: make RESET actually reset — kill legacy identifier saves
+
+Boot-time migration copies com.jellypal.app/com.typet.app saves into
+com.jellypal.desktop whenever the new dir has no state.json, so wiping
+only the new dir resurrected the old save on next launch (props, jelly,
+pals all came back after RESET).
+
+reset_save now also removes the legacy dirs and photos/, verified via a
+clean-boot QA harness: pals 0, props 0, jelly base 100 (+first-day
+bonuses), owned=[sprout], no legacy resurrection, inside:true hover flip
+confirmed on live build.
+
+Generated with [Devin](https://devin.ai)
+
+Co-Authored-By: Devin <158243242+devin-ai-integration[bot]@users.noreply.github.com>
