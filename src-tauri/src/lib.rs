@@ -75,6 +75,19 @@ fn quit_app(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+#[tauri::command]
+fn reset_save(app: tauri::AppHandle) {
+    // wipe every save artifact, then relaunch so the next boot is a true
+    // first run. the .bak matters: load_state falls back to it, so leaving
+    // it behind would resurrect the wiped save.
+    if let Ok(dir) = app.path().app_data_dir() {
+        for name in ["state.json", "state.json.bak", "state.json.tmp"] {
+            let _ = std::fs::remove_file(dir.join(name));
+        }
+    }
+    tauri::process::restart(&app.env());
+}
+
 // forensic log: frontend frame errors + a heartbeat so a frozen app can
 // tell us afterwards whether JS was still alive and what threw
 #[tauri::command]
@@ -741,6 +754,7 @@ pub fn run() {
             set_clickable,
             set_dragging,
             quit_app,
+            reset_save,
             log_crash,
             save_png,
             is_demo,

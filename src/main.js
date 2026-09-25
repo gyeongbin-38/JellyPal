@@ -397,7 +397,7 @@ const FLAVOR = {
   hyb: "BORN RIGHT ON THIS DESKTOP|ONE OF A KIND",
 };
 
-const APP_VER = "0.2.1"; // keep in sync with tauri.conf.json version
+const APP_VER = "0.2.2"; // keep in sync with tauri.conf.json version
 
 // species -> personality assignment (hybrids inherit one parent's)
 const PSY_ASSIGN = {
@@ -1749,17 +1749,17 @@ function settingsRect() {
   return [Math.round(winW / 2 - 95), Math.round(winH / 2 - ph / 2), 190, ph];
 }
 const SET_VIEW_TOP = 26, SET_VIEW_BOT = 34; // title gap + footer reserve
-// 414 = last row's bottom edge (30 + 14*26 + 20) relative to panel top
-function setMaxScroll() { return Math.max(0, 414 - (settingsRect()[3] - SET_VIEW_BOT)); }
+// 440 = last row's bottom edge (30 + 15*26 + 20) relative to panel top
+function setMaxScroll() { return Math.max(0, 440 - (settingsRect()[3] - SET_VIEW_BOT)); }
 function settingsRows() {
   const [px, py] = settingsRect();
   // self-clamp: a window shrink mid-scroll can't leave the list overscrolled
   setScroll = Math.max(0, Math.min(setMaxScroll(), setScroll));
   const rows = [];
-  for (let i = 0; i < 15; i++) rows.push([px + 16, py + 30 + i * 26 - Math.round(setScroll), 158, 20]);
+  for (let i = 0; i < 16; i++) rows.push([px + 16, py + 30 + i * 26 - Math.round(setScroll), 158, 20]);
   return rows;
   // 0 VOL 1 SIZE 2 MOTION 3 PHOTO 4 ALBUM 5 POMO 6 FOCUS 7 BREAK
-  // 8 SHARE 9 WEATHER 10 BOOT 11 JELLY 12 REDEEM 13 ID 14 QUIT
+  // 8 SHARE 9 WEATHER 10 BOOT 11 JELLY 12 REDEEM 13 ID 14 RESET 15 QUIT
 }
 
 // gem shop: the paid-gem surface. packs are bought through Stripe Payment
@@ -1784,6 +1784,7 @@ const packUrl = (id) => {
 // (e.g. "0.2.1") — any static host works; leave empty to disable
 const UPDATE_URL = "https://jellypal.fun/version.txt";
 let newVer = ""; // set when the probe reports a newer version
+let resetArm = 0; // settings RESET arms for 3s — second tap wipes the save
 // local weather — cosmetic only: umbrella in rain, snowflakes in snow.
 // polled every 30min; the Rust side resolves coarse ip geo -> open-meteo
 let weatherOn = true;
@@ -3375,7 +3376,18 @@ cv.addEventListener("pointerdown", (e) => {
       bangs.push({ x: winW / 2, y: rows[13][1], life: 1.2, t: "ID COPIED" });
       sfx.pop();
     }
-    else if (inRow(rows[14])) { persist(); invoke("quit_app"); }
+    else if (inRow(rows[14])) {
+      // wipe save — two-tap confirm, then rust deletes state.json and
+      // restarts the process so the next boot is a true first run
+      if (Date.now() < resetArm) {
+        resetArm = 0;
+        try { invoke("reset_save"); } catch {}
+      } else {
+        resetArm = Date.now() + 3000;
+        sfx.pop();
+      }
+    }
+    else if (inRow(rows[15])) { persist(); invoke("quit_app"); }
     else if (mx < px || mx > px + pw || my < py || my > py + ph) settingsOpen = false;
     return;
   }
@@ -8403,6 +8415,8 @@ function frameBody(now) {
         // chain must not already pass through p
         const chainHas = (q2, who) => { let s = 0; while (q2) { if (q2 === who) return true; if (++s > pals.length) return true; q2 = q2.stackOn; } return false; };
         const q = pals.find((q2) => q2 !== p && q2 !== palHeld && !q2.fly &&
+          !isBaby(SPECIES[q2.sp]) && // babies are never mounts — a grown
+          // slime clambering onto a newborn reads wrong, not cute
           now > (q2.restUntil || 0) && // no climbing onto a sleeping pal
           depth(q2) < 2 &&
           !chainHas(q2, p) &&
@@ -9114,6 +9128,21 @@ function frameBody(now) {
   ctx.drawImage(sprite("idle", active, false), fbx - 11, fby - 8, 22, 16);
   ctx.globalAlpha = 1;
   drawText(ctx, fabOpen ? "-" : "+", fbx + 9, fby - 20, 1, "#8a6b4a", null, true);
+  // jelly chip: the wallet balance pinned left of the fab — until now the
+  // count only existed inside the ranch, so it felt like jelly was hidden
+  {
+    const jt = String(jelly), jw = textW(jt, 1) + 30;
+    const jx = Math.max(4, fbx - 24 - jw);
+    ctx.globalAlpha = hovF || fabOpen || fabDrag ? 0.95 : 0.6;
+    ctx.fillStyle = "#f3e6cd";
+    ctx.fillRect(jx, fby - 11, jw, 22);
+    ctx.strokeStyle = "#8a6b4a";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(jx + 0.5, fby - 11 + 0.5, jw - 1, 21);
+    bubbleIcon(ctx, jx + 11, fby);
+    drawText(ctx, jt, jx + 21, fby - 6, 1, "#5c4632");
+    ctx.globalAlpha = 1;
+  }
   // pet parked at the ranch: badge the menu and hint how to wake it
   if (petHome) {
     ctx.globalAlpha = 0.9;
@@ -9221,6 +9250,7 @@ function frameBody(now) {
       "JELLY",
       "REDEEM",
       `ID ${uid}`,
+      Date.now() < resetArm ? "SURE?" : "RESET",
       "QUIT",
     ];
     // rows paint inside a clipped viewport — the title and the footer
@@ -9234,12 +9264,13 @@ function frameBody(now) {
       const R = rows[i];
       if (R[1] + R[3] < vy0 || R[1] > vy1) continue; // fully scrolled out
       const hov2 = curX >= R[0] && curX <= R[0] + R[2] && curY >= R[1] && curY <= R[1] + R[3] && curY >= vy0 && curY <= vy1;
-      ctx.fillStyle = i === rows.length - 1 ? "#e05a6e" : hov2 ? "#efe0c2" : "#e3d0aa";
+      const danger = i === rows.length - 1 || (i === 14 && Date.now() < resetArm);
+      ctx.fillStyle = danger ? "#e05a6e" : hov2 ? "#efe0c2" : "#e3d0aa";
       ctx.fillRect(R[0], R[1], R[2], R[3]);
       ctx.strokeStyle = "#8a6b4a";
       ctx.lineWidth = 1;
       ctx.strokeRect(R[0] + 0.5, R[1] + 0.5, R[2] - 1, R[3] - 1);
-      drawText(ctx, lbls[i], px + pw / 2 - textW(lbls[i], 1) / 2, R[1] + 6, 1, i === rows.length - 1 ? "#fff6e8" : "#5c4632");
+      drawText(ctx, lbls[i], px + pw / 2 - textW(lbls[i], 1) / 2, R[1] + 6, 1, danger ? "#fff6e8" : "#5c4632");
       if (i === 0) {
         // volume slider: the row's bottom strip is a progress bar —
         // click/drag anywhere on the row sets the level

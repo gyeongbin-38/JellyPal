@@ -1,10 +1,14 @@
-drop version watermark from itch cover art
+0.2.2: baby-mount guard, save RESET, desktop jelly counter
 
-V0.2.0 was baked into cover.png's corner — version text on cover art
-goes stale every release. Regenerated without it and re-uploaded the
-image on itch (new image id 30243700). itch page now shows only the
-0.2.1 installer + portable channels; old 0.2.0 manual uploads deleted
-and the description bumped to 0.2.1.
+- totem stacking no longer targets babies — an adult slime climbing
+  onto a newborn read wrong; mounts now require a grown species
+- settings gains a RESET row (two-tap "SURE?" confirm) wired to a new
+  reset_save command that deletes state.json/.bak/.tmp and restarts —
+  testers can verify a true first run without hunting %APPDATA%
+- jelly balance chip pinned left of the fab — the counter previously
+  only existed inside the ranch window, so the wallet felt hidden
+- version bump 0.2.2 across app/site/binaries (itch channels pushed,
+  update probe now notifies 0.2.1 installs)
 
 Generated with [Devin](https://devin.ai)
 
