@@ -1768,17 +1768,22 @@ function settingsRows() {
 // a fallback path (gift codes, support fixes).
 let gemShop = false;
 const GEM_SHOP_URL = "https://jellypal.fun#jelly"; // pack store = the site
-// per-pack Stripe Payment Links. the app appends
-// ?client_reference_id=<MY ID> so the /stripe webhook on the backend can
-// grant jelly straight to this install — no codes to type. empty = falls
-// back to GEM_SHOP_URL.
+// per-pack checkout links (Paddle, Stripe, whatever provider lands). the
+// app appends MY ID in the provider's passthrough param so the backend
+// webhook can grant jelly straight to this install — no codes to type.
+// empty = falls back to GEM_SHOP_URL.
 const GEM_PACK_URLS = { A: "", B: "", C: "", D: "" };
+const withUid = (u) => {
+  // each provider carries the buyer reference under a different name —
+  // the webhook reads it back to find which install to credit
+  const p = /buy\.stripe\.com/.test(u) ? "client_reference_id"
+    : /paddle\.com/.test(u) ? "custom_data[uid]"
+    : "uid"; // generic links just get ?uid= — ignored params are harmless
+  return `${u}${u.includes("?") ? "&" : "?"}${p}=${encodeURIComponent(uid)}`;
+};
 const packUrl = (id) => {
   const u = GEM_PACK_URLS[id] || GEM_SHOP_URL;
-  if (!u) return "";
-  return /buy\.stripe\.com/.test(u)
-    ? `${u}${u.includes("?") ? "&" : "?"}client_reference_id=${uid}`
-    : u;
+  return u ? withUid(u) : "";
 };
 // update probe: a tiny text file hosting the newest version string
 // (e.g. "0.2.1") — any static host works; leave empty to disable

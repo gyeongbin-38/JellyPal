@@ -409,11 +409,11 @@
 <script src="pals.js"></script>
 <script src="ranch.js"></script>
 <script>
-/* ---------- Stripe checkout wiring ----------
-   One Stripe Payment Link per pack. The buyer's MY ID rides along as
-   ?client_reference_id= so the /stripe webhook on api.jellypal.fun can
-   grant jelly to that install automatically. Create the 4 links in the
-   Stripe dashboard and paste them here. */
+/* ---------- checkout wiring ----------
+   One hosted checkout link per pack (Paddle Payment Links, or any
+   provider). The buyer's MY ID rides along in the provider's passthrough
+   param so the webhook on api.jellypal.fun can grant jelly to that
+   install automatically. Paste the 4 links here. */
 const PAY_LINKS = { A: "", B: "", C: "", D: "" };
 (function () {
   const input = document.getElementById("myid");
@@ -423,6 +423,15 @@ const PAY_LINKS = { A: "", B: "", C: "", D: "" };
   const myId = () => input.value.trim().toUpperCase();
   const defaultNote = note.innerHTML;
   btns.forEach((b) => (b.dataset.lbl = b.textContent));
+  /* any provider's checkout link works — MY ID rides in whichever
+     passthrough param that provider echoes back to our webhook */
+  const liveLink = (l) => /^https:\/\/\S+\.\S+/.test(l || "");
+  const withUid = (u, v) => {
+    const p = /buy\.stripe\.com/.test(u) ? "client_reference_id"
+      : /paddle\.com/.test(u) ? "custom_data%5Buid%5D"
+      : "uid";
+    return `${u}${u.includes("?") ? "&" : "?"}${p}=${encodeURIComponent(v)}`;
+  };
 
   function refresh() {
     const v = myId();
@@ -430,10 +439,10 @@ const PAY_LINKS = { A: "", B: "", C: "", D: "" };
     input.classList.remove("bad");
     btns.forEach((b) => {
       const link = PAY_LINKS[b.dataset.pack];
-      const live = /^https:\/\/buy\.stripe\.com\//.test(link || "");
+      const live = liveLink(link);
       if (live && okId(v)) {
         /* a real href makes it a real link: tabbable, Enter-activates */
-        b.href = `${link}${link.includes("?") ? "&" : "?"}client_reference_id=${encodeURIComponent(v)}`;
+        b.href = withUid(link, v);
         b.target = "_blank"; b.rel = "noopener";
         b.textContent = b.dataset.lbl;
         b.removeAttribute("aria-disabled");
@@ -450,7 +459,7 @@ const PAY_LINKS = { A: "", B: "", C: "", D: "" };
   btns.forEach((b) => b.addEventListener("click", (e) => {
     if (b.href) return; /* valid link — let it navigate */
     e.preventDefault();
-    if (!/^https:\/\/buy\.stripe\.com\//.test(PAY_LINKS[b.dataset.pack] || "")) return;
+    if (!liveLink(PAY_LINKS[b.dataset.pack])) return;
     input.classList.add("bad"); input.focus();
     note.classList.add("bad");
     note.innerHTML = "paste your <b>MY&nbsp;ID</b> first — it's how the jelly finds your app. (in the app: settings → MY&nbsp;ID → tap to copy)";

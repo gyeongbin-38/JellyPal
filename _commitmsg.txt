@@ -1,14 +1,10 @@
-0.2.2: baby-mount guard, save RESET, desktop jelly counter
+make pack checkout links provider-agnostic
 
-- totem stacking no longer targets babies — an adult slime climbing
-  onto a newborn read wrong; mounts now require a grown species
-- settings gains a RESET row (two-tap "SURE?" confirm) wired to a new
-  reset_save command that deletes state.json/.bak/.tmp and restarts —
-  testers can verify a true first run without hunting %APPDATA%
-- jelly balance chip pinned left of the fab — the counter previously
-  only existed inside the ranch window, so the wallet felt hidden
-- version bump 0.2.2 across app/site/binaries (itch channels pushed,
-  update probe now notifies 0.2.1 installs)
+BUY buttons already link out to hosted checkout, but the uid passthrough
+was Stripe-only (client_reference_id on buy.stripe.com). Now any https
+checkout link works: stripe keeps client_reference_id, paddle links get
+custom_data[uid], anything else gets a harmless ?uid=. Site pack buttons
+accept any provider's link too instead of requiring the stripe domain.
 
 Generated with [Devin](https://devin.ai)
 
