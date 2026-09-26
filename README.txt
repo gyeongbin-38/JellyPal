@@ -1,4 +1,4 @@
-JELLYPAL v0.2.0 - a tiny slime ranch that lives on your desktop
+JELLYPAL v0.2.5 - a tiny slime ranch that lives on your desktop
 ================================================================
 
 A small pixel slime lives on your screen while you work.
@@ -50,7 +50,7 @@ Codes are one-shot and stored in your save.
 
 SAVE DATA
 ---------
-%APPDATA%\com.jellypal.app\state.json
+%APPDATA%\com.jellypal.desktop\state.json
 (photos from photo mode save next to it in /photos)
 
 Thanks for playing! - Cognition/Devin project
