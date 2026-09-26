@@ -1,4 +1,4 @@
-JELLYPAL v0.2.8 - a tiny slime ranch that lives on your desktop
+JELLYPAL v0.2.9 - a tiny slime ranch that lives on your desktop
 ================================================================
 
 A small pixel slime lives on your screen while you work.

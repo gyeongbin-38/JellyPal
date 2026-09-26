@@ -397,7 +397,7 @@ const FLAVOR = {
   hyb: "BORN RIGHT ON THIS DESKTOP|ONE OF A KIND",
 };
 
-const APP_VER = "0.2.8"; // keep in sync with tauri.conf.json version
+const APP_VER = "0.2.9"; // keep in sync with tauri.conf.json version
 
 // species -> personality assignment (hybrids inherit one parent's)
 const PSY_ASSIGN = {
@@ -1361,7 +1361,7 @@ let dirty = false;
 let pityRare = 0;
 let pityLeg = 0;
 let hybSeq = 0;
-let accOwned = [];
+let accOwned = ["cap"]; // starter freebie + cosmetics the player owns (ACCS ids)
 let accEquip = {};
 
 let state = "idle";
@@ -2124,31 +2124,39 @@ invoke("load_state").then((txt) => {
   }
   // pay any milestones the collection already earned (pre-feature saves)
   checkDex();
-  // daily login: a gem stipend that grows with consecutive-day streaks
+  // daily login: a gem stipend that grows with consecutive-day streaks.
+  // a brand-new save (no savedAt) skips both stipends so day one is a flat 100
+  const isFresh = !s.savedAt;
   const dayKey = (d) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
   const today = dayKey(new Date());
-  if (s.lastDaily !== today) {
-    const yd = new Date();
-    yd.setDate(yd.getDate() - 1);
-    dailyStreak = s.lastDaily === dayKey(yd) ? (s.dailyStreak | 0) + 1 : 1;
+  const wk = weekKey();
+  if (isFresh) {
     lastDaily = today;
-    const gift = 10 + Math.min(6, dailyStreak - 1) * 3;
-    jelly += gift;
-    bangs.push({ x: petX, y: petY - 110, life: 2.4, t: `DAY ${dailyStreak}! +${gift}` });
-    setTimeout(() => sfx.reveal(), 400);
+    lastWeekly = wk;
     dirty = true;
   } else {
-    dailyStreak = s.dailyStreak | 0;
-    lastDaily = s.lastDaily || "";
+    if (s.lastDaily !== today) {
+      const yd = new Date();
+      yd.setDate(yd.getDate() - 1);
+      dailyStreak = s.lastDaily === dayKey(yd) ? (s.dailyStreak | 0) + 1 : 1;
+      lastDaily = today;
+      const gift = 10 + Math.min(6, dailyStreak - 1) * 3;
+      jelly += gift;
+      bangs.push({ x: petX, y: petY - 110, life: 2.4, t: `DAY ${dailyStreak}! +${gift}` });
+      setTimeout(() => sfx.reveal(), 400);
+      dirty = true;
+    } else {
+      dailyStreak = s.dailyStreak | 0;
+      lastDaily = s.lastDaily || "";
+    }
+    // weekly bonus + spotlight species rotation
+    if (s.lastWeekly !== wk) {
+      lastWeekly = wk;
+      jelly += 30;
+      bangs.push({ x: petX, y: petY - 130, life: 2.6, t: `WEEK +30` });
+      dirty = true;
+    } else lastWeekly = s.lastWeekly || wk;
   }
-  // weekly bonus + spotlight species rotation
-  const wk = weekKey();
-  if (s.lastWeekly !== wk) {
-    lastWeekly = wk;
-    jelly += 30;
-    bangs.push({ x: petX, y: petY - 130, life: 2.6, t: `WEEK +30` });
-    dirty = true;
-  } else lastWeekly = s.lastWeekly || wk;
 });
 
 // pays the next collection milestone whenever the dex count crosses it
@@ -3502,6 +3510,15 @@ cv.addEventListener("pointerdown", (e) => {
       vy: (my - (petY - 40)) / T - 700 * T,
       kind: treatKind,
     };
+    // dinner bell: every pal notices the throw instantly — the race and
+    // the wistful onlookers kick in on their very next decision tick
+    for (const p of pals) {
+      if (p === palHeld) continue;
+      p.lookDir = Math.sign(mx - p.x) || 1;
+      p.lookUntil = performance.now() + 900;
+      if (Math.random() < 0.6) { p.faceId = "happy"; p.faceT = performance.now() + 900; }
+      p.nextT = 0;
+    }
     sfx.boing();
     return;
   }
@@ -7966,21 +7983,8 @@ function frameBody(now) {
       if (now < (p.hideUntil || 0) && box) p.x = box.x; // hidden pals ride a dragged box too
       // soft-snap to the deck: small gaps ease in instead of teleporting
       if (!p.fly) p.y = Math.abs(pl.y - p.y) < 3 ? pl.y : p.y + (pl.y - p.y) * Math.min(1, dt * 18);
-      // treat race: the first slime to actually reach the snack eats it —
-      // pals used to just crowd around while the main pet got every bite
-      if (treat && !p.tag && !p.stackOn && !nappingP && Math.abs(treat.y - p.y) < 30 && Math.abs(treat.x - p.x) < 16) {
-        treat = null;
-        p.faceId = Math.random() < 0.35 ? "love" : "happy";
-        p.faceT = now + 1500;
-        p.squashV += 6;
-        bondGain(SPECIES[p.sp].id, 2);
-        p.walkT = null;
-        p.nextT = now + 2200; // savor it before wandering off
-        hearts.push({ x: p.x + 8, y: p.y - 58, life: 1 });
-        bangs.push({ x: p.x, y: p.y - 66, life: 1.2, t: "YUM" });
-        for (let k = 0; k < 5; k++) fx.push({ x: p.x + Math.random() * 16 - 8, y: p.y - 16, vx: Math.random() * 70 - 35, vy: -Math.random() * 70, life: 0.55, c: "#c4905a" });
-        sfx.munch();
-      }
+      // treat race is decided in the propGoal arrival handler below —
+      // a single eat path so every winner pays the same xp/gem/bond
       // cursor play on pals too — the same boop/scritch the main pet
       // gets, so summoned companions aren't background statues
       if (!p.tag && !p.stackOn && p !== palHeld && !nappingP) {
@@ -8155,7 +8159,42 @@ function frameBody(now) {
           if (p.propGoal) {
             const pg = p.propGoal;
             p.propGoal = null;
-            if (pg.kind === "bowl" && bowl && Math.abs(bowl.x - p.x) < 50) {
+            if (pg.kind === "treat") {
+              // the race ends: first pal there snatches the snack, losers sulk
+              if (treat && Math.abs(treat.x - p.x) < 60 && Math.abs(treat.y - p.y) < 40) {
+                const tk = TREATS[treat.kind || 0];
+                treat = null;
+                stats.treats++;
+                const prevXp2 = xp;
+                xp += tk.xp;
+                const every = SPECIES[active].r >= 3 ? JELLY_EVERY / 2 : JELLY_EVERY;
+                if (Math.floor(xp / every) > Math.floor(prevXp2 / every)) {
+                  jelly += 1;
+                  bangs.push({ x: p.x + 14, y: p.y - 92, life: 1, t: "💎" });
+                  starUntil = now + 900;
+                }
+                level = Math.min(3, Math.floor(xp / KEYS_PER_LEVEL));
+                bondGain(SPECIES[p.sp].id, 3);
+                // the snack's magic applies no matter who snatched it
+                if (tk.id === "chili") { hyperUntil = now + 60000; bangs.push({ x: p.x + 34, y: p.y - 96, life: 1.6, t: "HOT!" }); }
+                else if (tk.id === "coffee") { noSleepUntil = Date.now() + 300000; bangs.push({ x: p.x + 34, y: p.y - 96, life: 1.6, t: "WIRED" }); }
+                else if (tk.id === "cake") p.squashV += 8;
+                p.faceId = "munch";
+                p.faceT = now + 1500;
+                p.squashV += 5;
+                bangs.push({ x: p.x, y: p.y - 72, life: 1.4, t: "YUM" });
+                if (Math.random() < 0.6) hearts.push({ x: p.x + 8, y: p.y - 58, life: 0.9 });
+                sfx.munch();
+                dirty = true;
+              } else if (now - (pg.at || 0) < 8000) {
+                // someone beat them to it — only sulk over a race they
+                // actually just lost, not a stale errand
+                p.faceId = "pout";
+                p.faceT = now + 1100;
+                p.squashV += 1.5;
+                bangs.push({ x: p.x, y: p.y - 64, life: 0.9, t: "?" });
+              }
+            } else if (pg.kind === "bowl" && bowl && Math.abs(bowl.x - p.x) < 50) {
               p.bowlCd = now + 45000 + Math.random() * 30000;
               p.lookDir = Math.sign(bowl.x - p.x) || 1;
               if ((bowl.fill ?? 2) <= 0) {
@@ -8297,9 +8336,16 @@ function frameBody(now) {
           }
         }
       } else if (now > p.nextT && now > (p.restUntil || 0)) {
-        // treat FOMO: a snack draws a crowd — pals converge hoping to
-        // snatch it first, even hopping off their platform for a lower one
-        if (treat && !p.tag && !p.stackOn && !p.fly && Math.abs(treat.x - p.x) < 480 && treat.y > p.y - 40) {
+        // snack inbound: every pal in sight turns to watch the throw arc
+        if (treatFly && !p.fly && Math.abs(treatFly.x - p.x) < 460) {
+          p.lookDir = Math.sign(treatFly.x - p.x) || 1;
+          p.lookUntil = now + 700;
+          if (Math.random() < 0.4) { p.faceId = "happy"; p.faceT = now + 800; p.squashV += 1; }
+        }
+        // treat FOMO: a landed snack draws a crowd — every mobile pal races
+        // for it (propGoal "treat") and whoever arrives first gets the munch,
+        // even hopping off their platform for a lower one
+        if (treat && !p.tag && !p.stackOn && !p.fly && Math.abs(treat.x - p.x) < 640 && treat.y > p.y - 60) {
           if (treat.y - p.y > 44) {
             // snack sits on a lower platform — hop off the edge toward it
             p.fly = true;
@@ -8308,8 +8354,16 @@ function frameBody(now) {
             p.walkT = null;
           } else {
             p.walkT = Math.max(plo, Math.min(phi, treat.x + (p.x < treat.x ? -12 : 12)));
+            p.propGoal = { kind: "treat", at: now };
           }
-          p.nextT = now + 900;
+          p.nextT = now + 700;
+        }
+        // can't join the race (too far, too high, busy) — still react:
+        // turn toward the snack with a wistful look instead of ignoring it
+        else if (treat && !p.fly && !p.stackOn) {
+          p.lookDir = Math.sign(treat.x - p.x) || 1;
+          p.lookUntil = now + 1200;
+          if (Math.random() < 0.5) { p.faceId = "happy"; p.faceT = now + 900; }
         }
         // dance-along: the main pet's groove is contagious — pals on the
         // same platform bounce in time instead of their own routine
