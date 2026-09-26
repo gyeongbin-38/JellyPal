@@ -1,6 +1,6 @@
 [package]
 name = "jellypal"
-version = "0.2.10"
+version = "0.2.11"
 description = "A tiny slime ranch that lives on your desktop"
 authors = ["you"]
 edition = "2021"

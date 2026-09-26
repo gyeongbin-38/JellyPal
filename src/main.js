@@ -397,7 +397,7 @@ const FLAVOR = {
   hyb: "BORN RIGHT ON THIS DESKTOP|ONE OF A KIND",
 };
 
-const APP_VER = "0.2.10"; // keep in sync with tauri.conf.json version
+const APP_VER = "0.2.11"; // keep in sync with tauri.conf.json version
 
 // species -> personality assignment (hybrids inherit one parent's)
 const PSY_ASSIGN = {
@@ -1451,6 +1451,7 @@ let climbUntil = 0;
 let snack = null;
 let treatAim = false;
 let treatFly = null;
+let treatFlySeen = false; // rising-edge flag for the dinner-bell broadcast
 let treat = null;
 let treatKind = 0;
 let hyperUntil = 0;     // chili rush (perf clock)
@@ -2920,6 +2921,10 @@ function eat() {
   }
   level = Math.min(3, Math.floor(xp / KEYS_PER_LEVEL));
   dirty = true;
+  // typing wakes every species instantly — non-kr slimes used to keep
+  // the sleeping face (and the zzz trail) for up to a second after the
+  // first keystroke because only the mood tick flipped state back
+  if (state !== "idle") state = "idle";
   if (!kr) return;
   munchUntil = performance.now() + 150;
   // companions nibble along — only species that also eat keys
@@ -3531,15 +3536,6 @@ cv.addEventListener("pointerdown", (e) => {
       vy: (my - (petY - 40)) / T - 700 * T,
       kind: treatKind,
     };
-    // dinner bell: every pal notices the throw instantly — the race and
-    // the wistful onlookers kick in on their very next decision tick
-    for (const p of pals) {
-      if (p === palHeld) continue;
-      p.lookDir = Math.sign(mx - p.x) || 1;
-      p.lookUntil = performance.now() + 900;
-      if (Math.random() < 0.6) { p.faceId = "happy"; p.faceT = performance.now() + 900; }
-      p.nextT = 0;
-    }
     sfx.boing();
     return;
   }
@@ -3592,6 +3588,8 @@ cv.addEventListener("pointerdown", (e) => {
     grabPal.accAct = null;
     grabPal.restUntil = 0; // grabbing wakes a cushion napper
     grabPal.hideUntil = 0; // and drags a hider out of its box
+    grabPal.chatMate = null; grabPal.chatUntil = 0; // and hangs up the gossip
+    grabPal.follow = null;
     for (const r of pals) if (r.stackOn === grabPal) r.stackOn = null;
     palDX = mx - grabPal.x;
     palDY = my - grabPal.y;
@@ -3619,6 +3617,7 @@ cv.addEventListener("pointerdown", (e) => {
   danceT0 = 0;
   cushionNap = 0; cushionNapW = 0; // being picked up wakes a cushion nap
   boxHide = 0; // and yanks it out of a hidey-box too
+  awakeAt = Date.now(); state = "idle"; // a grabbed sleeper is a woken sleeper
   huntT0 = 0;
   huntPounce = false;
   walkTarget = null;
@@ -6046,6 +6045,10 @@ function faceName(now) {
   if (now < splatUntil || now < dizzyUntil) return "dizzy";
   if (climbing) return now % 160 < 80 ? "held1" : "held2";
   if (held) return now < cuddleUntil ? "content" : now < petUntil ? "happy" : now < tickleUntil ? "laugh" : now % 160 < 80 ? "held1" : "held2";
+  // asleep outranks every cosmetic timer — open-eyed faces used to leak
+  // through a doze whenever a reaction timer fired (pal bumps, gems,
+  // cursor brushes). a real wake sets awakeAt/state, not just a face
+  if (state === "sleeping" || now < cushionNap) return "sleeping";
   if (now < shockUntil) return "shock";
   if (now < tickleUntil) return "laugh";
   if (now < annoyedUntil) return "grumpy";
@@ -6057,8 +6060,6 @@ function faceName(now) {
   if (now < blepUntil) return "blep";
   if (now < contentUntil) return "content";
   if (state === "grumpy") return "grumpy";
-  if (state === "sleeping") return "sleeping";
-  if (now < cushionNap) return "sleeping"; // dozing on the cushion
   if (now < munchUntil) return now % 180 < 90 ? "munch" : "chew";
   if (now < blinkUntil) return "blink";
   if (lookDir < 0 && now < lookUntil) return "lookL";
@@ -6237,7 +6238,7 @@ function frameBody(now) {
       // a sliding ride jolts a sleeper awake — otherwise it surfed the
       // title bar with its eyes closed, which read as sleepwalking
       if (Math.abs(wdx) > 10 && (state === "sleeping" || now < cushionNap)) {
-        awakeAt = Date.now(); cushionNap = 0; cushionNapW = 0;
+        awakeAt = Date.now(); state = "idle"; cushionNap = 0; cushionNapW = 0;
         shockUntil = now + 600;
         bangs.push({ x: petX, y: petY - bh - 14, life: 0.9, t: "!" });
       }
@@ -6283,7 +6284,7 @@ function frameBody(now) {
   if (state === "sleeping" && cdist < 150 && now > stirT) {
     stirT = now + 2400;
     // waking to a friendly face: a beat of surprise, then content
-    if (cdist < 85) { awakeAt = Date.now(); contentUntil = now + 1700; bangs.push({ x: petX, y: petY - bh - 14, life: 0.9, t: "!?" }); }
+    if (cdist < 85) { awakeAt = Date.now(); state = "idle"; contentUntil = now + 1700; bangs.push({ x: petX, y: petY - bh - 14, life: 0.9, t: "!?" }); }
     else { squashV += 2; fx.push({ x: petX + (Math.random() * 20 - 10), y: petY - 10, vx: 0, vy: -14, life: 0.6, c: "#b8c4d4" }); }
   }
 
@@ -6325,6 +6326,9 @@ function frameBody(now) {
     }
     // startle: fast cursor rush near the pet -> hop away
     if (!sigT0 && curV > 1400 / (psy.startle || 1) && cdist < 180 && now > shockUntil - 300) {
+      // a whip-fast cursor jolts a sleeper awake mid-hop — otherwise it
+      // used to fly with its eyes closed and a live zzz trail
+      if (state === "sleeping" || now < cushionNap) { awakeAt = Date.now(); state = "idle"; cushionNap = 0; cushionNapW = 0; }
       flying = true;
       petVX = (petX < curX ? -1 : 1) * (110 + Math.random() * 70);
       petVY = -(190 + Math.random() * 90);
@@ -6335,7 +6339,7 @@ function frameBody(now) {
     // cursor hunt: a swishing cursor reads as prey. prey-drive builds
     // while it whips around nearby, then the pet stalks and pounces.
     // follow-hungry personalities hunt the most; lazy phases just watch
-    if (!sigT0 && !huntT0 && !huntPounce && now > huntCd && now > begUntil && now > shockUntil && cdist < 500 && curV > 400) {
+    if (!sigT0 && !huntT0 && !huntPounce && state === "idle" && !petBusy && now > huntCd && now > begUntil && now > shockUntil && cdist < 500 && curV > 400) {
       huntScore += dt * (psy.follow || 1) * (energy > 0.45 ? 1 : 0.35);
       if (huntScore > 0.35) {
         huntScore = 0;
@@ -6383,7 +6387,7 @@ function frameBody(now) {
     }
     // attention-seek: ignored too long while you hover nearby — it
     // walks over and begs under your cursor. the loneliness payoff
-    if (!sigT0 && ignoreT > 75 && cdist < 700 && cdist > 60 && walkTarget === null &&
+    if (!sigT0 && state === "idle" && !petBusy && ignoreT > 75 && cdist < 700 && cdist > 60 && walkTarget === null &&
         hopTarget === null && !psy.flee && Math.random() < dt * 0.5 * (psy.follow || 1)) {
       walkTarget = Math.max(lo, Math.min(hi, curX));
       walkSpd = 55 * (psy.spd || 1) * (isBaby(sp) ? 0.8 : 1) * (now < hyperUntil ? 1.5 : 1);
@@ -6415,7 +6419,7 @@ function frameBody(now) {
     }
     // begging under the cursor: sits, looks up, waves a little paw —
     // a heart if you finally pet it (the reward loop)
-    if (!sigT0 && now < begUntil && cdist < 90) {
+    if (!sigT0 && state === "idle" && now < begUntil && cdist < 90) {
       walkTarget = null;
       sitUntil = now + 400;
       lookDir = Math.sign(curX - petX) || lookDir;
@@ -6436,7 +6440,7 @@ function frameBody(now) {
     }
     // boop: a cursor slowly pressing INTO the body is a shove — it
     // squirms, then hops back a step with a pout. personal space!
-    if (cdist < 55 && curV > 30 && curV < 400) {
+    if (cdist < 55 && curV > 30 && curV < 400 && state === "idle" && !petBusy) {
       boopT += dt;
       squashV += Math.sin(now / 60) * 0.06; // uncomfortable wriggle
       lookDir = Math.sign(curX - petX) || lookDir;
@@ -6453,7 +6457,7 @@ function frameBody(now) {
     } else boopT = Math.max(0, boopT - dt * 2);
     // scritch: sweeping the cursor back and forth over the body without
     // clicking is petting — three direction flips and it melts
-    if (cdist < 65 && curV > 150 && curV < 1400 && now > rubCd) {
+    if (cdist < 65 && curV > 150 && curV < 1400 && now > rubCd && state === "idle" && !petBusy) {
       const rd = Math.sign(curVX);
       if (rd && rd !== rubDir) { rubDir = rd; rubCount++; }
       if (rubCount >= 3) {
@@ -7215,6 +7219,19 @@ function frameBody(now) {
   }
 
   // thrown cookie: arcs, then rests on whatever platform it lands on
+  // (the dinner bell lives HERE, at treatFly's first appearance, so any
+  // spawn path — click, drop, future code — wakes every pal at once
+  // instead of waiting out their 2-6s decision timers)
+  if (treatFly && !treatFlySeen) {
+    treatFlySeen = true;
+    for (const p of pals) {
+      if (p === palHeld || now < (p.restUntil || 0)) continue;
+      p.lookDir = Math.sign(treatFly.x - p.x) || 1;
+      p.lookUntil = now + 900;
+      if (Math.random() < 0.6) { p.faceId = "happy"; p.faceT = now + 900; }
+      p.nextT = 0; // re-decide next frame so the race starts NOW
+    }
+  } else if (!treatFly) treatFlySeen = false;
   if (treatFly) {
     treatFly.vy += 1400 * dt;
     const prevTy = treatFly.y;
@@ -7234,6 +7251,14 @@ function frameBody(now) {
         touch(); // the thunk of a landing cookie wakes it up
         if (state !== "idle") state = "idle";
         sfx.pop();
+        // landed! every awake pal re-decides this frame — racers sprint,
+        // onlookers glance over, nobody waits out a stale decision timer.
+        // dinner even breaks up a gossip circle — a dropped cookie wins
+        for (const p of pals) {
+          if (p === palHeld || now < (p.restUntil || 0) || p.fly) continue;
+          p.nextT = 0;
+          if (p.chatMate) { p.chatMate.chatUntil = 0; p.chatMate.chatMate = null; p.chatMate = null; p.chatUntil = 0; }
+        }
       }
       if (treatFly && treatFly.y > winH + 40) treatFly = null;
     }
@@ -8000,7 +8025,7 @@ function frameBody(now) {
       // pal actually stays put. before this, restUntil only gated the
       // wander roll and a napping pal could be launched, dragged into tag,
       // or wander off mid-doze
-      if (nappingP) { p.walkT = null; p.follow = null; p.tag = null; p.accAct = null; p.propGoal = null; p.hopWind = 0; }
+      if (nappingP) { p.walkT = null; p.follow = null; p.tag = null; p.accAct = null; p.propGoal = null; p.hopWind = 0; p.chatMate = null; p.chatUntil = 0; }
       if (now < (p.hideUntil || 0) && box) p.x = box.x; // hidden pals ride a dragged box too
       // soft-snap to the deck: small gaps ease in instead of teleporting
       if (!p.fly) p.y = Math.abs(pl.y - p.y) < 3 ? pl.y : p.y + (pl.y - p.y) * Math.min(1, dt * 18);
@@ -8104,17 +8129,24 @@ function frameBody(now) {
           sfx.pop();
         }
         // follow-the-leader: occasionally picks a buddy to trail
-        if (!p.follow && !p.fly && p.walkT === null && pals.length > 1 && Math.random() < dt * 0.05 * (ppsy.follow || 1)) {
-          const cand = pals.filter(q2 => q2 !== p && !q2.fly && !q2.stackOn && !q2.tag);
+        if (!p.follow && !p.fly && !p.chatMate && p.walkT === null && pals.length > 1 && Math.random() < dt * 0.05 * (ppsy.follow || 1)) {
+          const cand = pals.filter(q2 => q2 !== p && !q2.fly && !q2.stackOn && !q2.tag && !q2.chatMate &&
+            !q2.follow && now > (q2.restUntil || 0) && !(now < (q2.hideUntil || 0)));
           if (cand.length) {
             p.follow = cand[(Math.random() * cand.length) | 0];
             p.followT = now + 4000 + Math.random() * 5000;
+            // the leader notices its duckling — glances back once
+            p.follow.lookDir = Math.sign(p.x - p.follow.x) || 1;
+            p.follow.lookUntil = now + 700;
           }
         }
       }
       // trailing a picked buddy — expires fast, drops if the leader flies
-      if (p.follow && (now > p.followT || p.follow.fly || p.follow === p || p.follow.stackOn)) p.follow = null;
-      if (p.follow && !p.fly && !nappingP) p.walkT = p.follow.x - (p.follow.lookDir || 1) * 46;
+      // off, dozes off, gets grabbed, or stops existing (despawned)
+      if (p.follow && (now > p.followT || !pals.includes(p.follow) || p.follow.fly || p.follow === p ||
+          p.follow.stackOn || p.follow.chatMate || p.follow === palHeld ||
+          now < (p.follow.restUntil || 0) || now < (p.follow.hideUntil || 0))) p.follow = null;
+      if (p.follow && !p.fly && !nappingP && !p.chatMate) p.walkT = p.follow.x - (p.follow.lookDir || 1) * 46;
       // TAG: a bump can start a chase — "it" hunts the fleer across the
       // platform while the fleer keeps darting away. ends on a catch
       // (both burst laughing + the caught one pops a hop) or on timeout
@@ -8167,8 +8199,39 @@ function frameBody(now) {
           if (Math.random() < dt * 0.55) { p.walkT = null; p.squashV += 2; }
         }
       }
+      // gossip session in progress: both pals hold still facing each
+      // other and take turns popping little chirps — whoever's chatUntil
+      // lapses first wraps it up; flying/napping/tagging breaks it early
+      if (p.chatMate) {
+        const q = p.chatMate;
+        if (!pals.includes(q) || q.chatMate !== p || now > p.chatUntil ||
+            q.fly || q === palHeld || now < (q.restUntil || 0) || now < (q.hideUntil || 0) ||
+            p.fly || p === palHeld || nappingP || p.tag || p.stackOn ||
+            Math.abs(q.y - p.y) > 24 || Math.abs(q.x - p.x) > 130) {
+          if (now > p.chatUntil && q && q.chatMate === p) { p.faceId = "happy"; p.faceT = now + 800; }
+          p.chatMate = null; p.chatUntil = 0;
+          p.chatCd = now + 16000 + Math.random() * 12000;
+        } else {
+          p.walkT = null; p.propGoal = null; p.follow = null;
+          p.lookDir = Math.sign(q.x - p.x) || 1;
+          p.lookUntil = now + 320;
+          if (now > (p.chatNext || 0)) {
+            p.chatNext = now + 430 + Math.random() * 320;
+            p.squashV += 1.4;
+            bangs.push({ x: p.x, y: p.y - 62, life: 0.9, t: ["♪", "♥", "...", "!", "HEH"][(Math.random() * 5) | 0] });
+          }
+        }
+      }
       if (p.x < plo - 6 || p.x > phi + 6) { p.fly = true; p.vy = 80; p.walkT = null; }
       else if (p.walkT !== null && !nappingP) {
+        // a landed snack trumps a casual stroll — a mid-walk pal banks the
+        // errand it was on and joins the race instead of arriving at a
+        // random spot while the cookie disappears behind it
+        if (treat && (!p.propGoal || p.propGoal.kind !== "treat") && !p.tag && !p.stackOn && !p.fly &&
+            Math.abs(treat.x - p.x) < 640 && Math.abs(treat.y - p.y) < 44) {
+          p.walkT = Math.max(plo, Math.min(phi, treat.x + (p.x < treat.x ? -12 : 12)));
+          p.propGoal = { kind: "treat", at: now };
+        }
         // re-clamp every frame — platform bounds shift, and play-bumps set
         // unclamped targets that used to shove pals off the edge forever
         p.walkT = Math.max(plo, Math.min(phi, p.walkT));
@@ -8192,7 +8255,6 @@ function frameBody(now) {
                 if (Math.floor(xp / every) > Math.floor(prevXp2 / every)) {
                   jelly += 1;
                   bangs.push({ x: p.x + 14, y: p.y - 92, life: 1, t: "💎" });
-                  starUntil = now + 900;
                 }
                 level = Math.min(3, Math.floor(xp / KEYS_PER_LEVEL));
                 bondGain(SPECIES[p.sp].id, 3);
@@ -8208,12 +8270,19 @@ function frameBody(now) {
                 sfx.munch();
                 dirty = true;
               } else if (now - (pg.at || 0) < 8000) {
-                // someone beat them to it — only sulk over a race they
-                // actually just lost, not a stale errand
-                p.faceId = "pout";
-                p.faceT = now + 1100;
-                p.squashV += 1.5;
-                bangs.push({ x: p.x, y: p.y - 64, life: 0.9, t: "?" });
+                // someone beat them to it — only react to a race they
+                // actually just lost, not a stale errand. mostly sulks,
+                // but good sports sometimes cheer the winner instead
+                if (Math.random() < 0.4) {
+                  p.faceId = "happy"; p.faceT = now + 1000;
+                  p.fly = true; p.vy = -150; p.vx = (Math.random() - 0.5) * 70; p.hopT = now;
+                  bangs.push({ x: p.x, y: p.y - 64, life: 0.9, t: "♪" });
+                } else {
+                  p.faceId = "pout";
+                  p.faceT = now + 1100;
+                  p.squashV += 1.5;
+                  bangs.push({ x: p.x, y: p.y - 64, life: 0.9, t: "?" });
+                }
               }
             } else if (pg.kind === "bowl" && bowl && Math.abs(bowl.x - p.x) < 50) {
               p.bowlCd = now + 45000 + Math.random() * 30000;
@@ -8229,6 +8298,18 @@ function frameBody(now) {
                 p.faceId = "munch"; p.faceT = now + 2200;
                 for (let k = 0; k < 4; k++) fx.push({ x: bowl.x + (Math.random() - 0.5) * 14, y: bowl.y - 10, vx: (Math.random() - 0.5) * 40, vy: -30 - Math.random() * 40, life: 0.5, c: "#d9a05b" });
                 if (Math.random() < 0.4) hearts.push({ x: p.x, y: p.y - 60, life: 1 });
+              }
+            } else if (pg.kind === "cuddle") {
+              // joined the doze: flop down beside the napping buddy —
+              // a shared nap pile is peak cozy. if the host already woke
+              // up or wandered off, the visitor just stands there a beat
+              const q = pg.mate;
+              if (q && pals.includes(q) && now < (q.restUntil || 0) && Math.abs(q.x - p.x) < 70 && Math.abs(q.y - p.y) < 24) {
+                p.restUntil = Math.min(q.restUntil, now + 5000 + Math.random() * 4000);
+                p.restCd = p.restUntil + 25000 * (ppsy.sleep || 1);
+                p.walkT = null;
+                p.squashV += 3;
+                if (Math.random() < 0.5) hearts.push({ x: (p.x + q.x) / 2, y: p.y - 58, life: 1 });
               }
             } else if (pg.kind === "cushion" && cushion && Math.abs(cushion.x - p.x) < 50) {
               if (cushionBusy(p, now)) {
@@ -8356,7 +8437,7 @@ function frameBody(now) {
             if (pgs !== (p.gaitStep || 0)) { p.gaitStep = pgs; p.squashV += 0.32; }
           }
         }
-      } else if (now > p.nextT && now > (p.restUntil || 0)) {
+      } else if (now > p.nextT && now > (p.restUntil || 0) && !(now < (p.chatUntil || 0))) {
         // snack inbound: every pal in sight turns to watch the throw arc
         if (treatFly && !p.fly && Math.abs(treatFly.x - p.x) < 460) {
           p.lookDir = Math.sign(treatFly.x - p.x) || 1;
@@ -8400,6 +8481,11 @@ function frameBody(now) {
         }
         else {
         const r = Math.random();
+        // a dozing buddy makes the floor beside it look like the best
+        // seat on the desktop — scanned once per decision (≤3 pals)
+        const napper = pals.find((q2) => q2 !== p && q2 !== palHeld && !q2.fly && !q2.stackOn &&
+          now < (q2.restUntil || 0) && Math.abs(q2.y - p.y) < 24 &&
+          Math.abs(q2.x - p.x) > 34 && Math.abs(q2.x - p.x) < 240);
         // mini signature flourish: pals show off a themed ~1s version
         // of their species' act — they used to be skill-less statues
         if (psp.sig && !isBaby(psp) && !p.tag && !p.fly && Math.random() < 0.12) {
@@ -8408,6 +8494,12 @@ function frameBody(now) {
           p.sigDid = 0;
           p.walkT = null;
           p.tag = null;
+        }
+        // a dozing buddy gets a real slice of the decision pie — sleeping
+        // together is a featured moment, not a rounding error
+        else if (napper && now > (p.restCd || 0) && r < 0.22) {
+          p.walkT = Math.max(plo, Math.min(phi, napper.x + (p.x < napper.x ? -42 : 42)));
+          p.propGoal = { kind: "cuddle", mate: napper, at: now };
         }
         else if (r < 0.5) p.walkT = Math.max(plo, Math.min(phi, p.x + (Math.random() - 0.5) * 220));
         else if (r < 0.6) { p.fly = true; p.vy = -230 * animProf(p.sp).hop; p.vx = (Math.random() - 0.5) * 140; p.hopT = now; }
@@ -8537,6 +8629,7 @@ function frameBody(now) {
           !isBaby(SPECIES[q2.sp]) && // babies are never mounts — a grown
           // slime clambering onto a newborn reads wrong, not cute
           now > (q2.restUntil || 0) && // no climbing onto a sleeping pal
+          now > (q2.chatUntil || 0) && // or mid-gossip — rude
           depth(q2) < 2 &&
           !chainHas(q2, p) &&
           !pals.some((r) => r.stackOn === q2) &&
@@ -8624,8 +8717,10 @@ function frameBody(now) {
       }
     }
 
-    // play: proximity with the main pet — face each other, hearts, bump apart
-    if (!p.fly && p !== palHeld && !held && !flying && !petHome && !nappingP && Math.abs(p.y - petY) < 20 && Math.abs(p.x - petX) < 74 &&
+    // play: proximity with the main pet — face each other, hearts, bump apart.
+    // sleep is sacred: a pal never bumps a dozing pet (that bump used to
+    // pop open-eyed content faces over a still-sleeping slime)
+    if (!p.fly && p !== palHeld && !held && !flying && !petHome && !nappingP && state !== "sleeping" && !petBusy && Math.abs(p.y - petY) < 20 && Math.abs(p.x - petX) < 74 &&
         now > p.playCd && now > mainPlayCd) {
       // hyper pals want to play again soon; calm/lazy take a long breather
       p.playCd = mainPlayCd = now + 6000 * (ppsy.pace || 1);
@@ -8716,6 +8811,26 @@ function frameBody(now) {
       }
     }
 
+    // gossip: two idle pals standing close strike up a chat — they stop,
+    // face each other and trade little bubbles until one drifts off.
+    // needs no contact: pals that just happen to idle side by side get
+    // a social beat instead of only colliding into one
+    if (!p.chatMate && !p.fly && !p.stackOn && p !== palHeld && !nappingP && !p.tag &&
+        p.walkT === null && !p.propGoal && now > (p.chatCd || 0) && Math.random() < dt * 0.4) {
+      const q = pals.find((q2) => q2 !== p && q2 !== palHeld && !q2.fly && !q2.stackOn && !q2.tag &&
+        !q2.chatMate && q2.walkT === null && !q2.propGoal && now > (q2.chatCd || 0) &&
+        now > (q2.restUntil || 0) && !(now < (q2.hideUntil || 0)) &&
+        Math.abs(q2.y - p.y) < 20 && Math.abs(q2.x - p.x) > 30 && Math.abs(q2.x - p.x) < 96);
+      if (q) {
+        p.chatMate = q; q.chatMate = p;
+        p.chatUntil = q.chatUntil = now + 1900 + Math.random() * 1300;
+        p.chatNext = now + 260; q.chatNext = now + 700;
+        p.lookDir = Math.sign(q.x - p.x) || 1; q.lookDir = -p.lookDir;
+        p.lookUntil = q.lookUntil = now + 500;
+        if (Math.random() < 0.4) { p.faceId = "happy"; p.faceT = now + 700; }
+      }
+    }
+
     // copycat hop: a pal that just leapt is contagious — nearby grounded
     // pals sometimes bounce along (play contagion, Slime Rancher-style)
     if (!p.fly && p !== palHeld && !p.stackOn && !nappingP) {
@@ -8727,6 +8842,23 @@ function frameBody(now) {
           p.vx = (Math.random() - 0.5) * 90;
           p.hopT = now; // the bounce can chain
           p.squashV += 2;
+        }
+      }
+    }
+
+    // mood contagion: a laugh or heart-eyes in the crowd is catching —
+    // a nearby pal glances over and smiles along instead of ignoring it
+    if (!p.fly && p !== palHeld && !nappingP && now > (p.faceT || 0) && now > (p.echoCd || 0)) {
+      for (const q of pals) {
+        if (q === p || q.fly || now < (q.restUntil || 0) || !(q.faceT > now + 200) ||
+            !(q.faceId === "laugh" || q.faceId === "love" || q.faceId === "star")) continue;
+        if (Math.abs(q.x - p.x) < 130 && Math.abs(q.y - p.y) < 24 && Math.random() < dt * 1.6) {
+          p.echoCd = now + 7000;
+          p.lookDir = Math.sign(q.x - p.x) || 1;
+          p.lookUntil = now + 600;
+          p.faceId = q.faceId === "star" ? "star" : "happy";
+          p.faceT = now + 800;
+          if (Math.random() < 0.4) bangs.push({ x: p.x, y: p.y - 60, life: 0.8, t: "♪" });
         }
       }
     }
@@ -8953,7 +9085,7 @@ function frameBody(now) {
   }
   ctx.globalAlpha = 1;
 
-  if (state === "sleeping" && !held) {
+  if (state === "sleeping" && !held && !flying) {
     if (now > bubblePop) bubble += dt * 14;
     const br = Math.min(7, bubble);
     if (br > 0.5) {
