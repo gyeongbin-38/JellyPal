@@ -1,4 +1,4 @@
-JELLYPAL v0.2.7 - a tiny slime ranch that lives on your desktop
+JELLYPAL v0.2.8 - a tiny slime ranch that lives on your desktop
 ================================================================
 
 A small pixel slime lives on your screen while you work.
@@ -52,5 +52,10 @@ SAVE DATA
 ---------
 %APPDATA%\com.jellypal.desktop\state.json
 (photos from photo mode save next to it in /photos)
+
+On Windows the save is sealed to your account (DPAPI) plus a rollback
+checkpoint — editing or swapping it won't parse, and pasting an old copy
+back resets to a clean ranch. Back up by exporting before a reinstall,
+then drop the file into a fresh install's folder to adopt it.
 
 Thanks for playing! - Cognition/Devin project

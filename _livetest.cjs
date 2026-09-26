@@ -67,7 +67,10 @@ const t = (name, ok, extra = "") => {
   t("redeem grant is pack A", g1 && g1.pack === "A");
 
   r = await post("/redeem", { code, uid });
-  t("same code same uid re-redeem rejected", r.status !== 200 || (r.json && r.json.error));
+  // same uid re-redeem is the restore path: returns the grant again so a
+  // reinstalled/reset buyer gets their pack back (client dedupes via the
+  // local redeemed list, so it can't double-pay on the same save)
+  t("same code same uid re-redeem restores grant", r.status === 200 && r.json && r.json.grant && r.json.grant.pack === "A");
 
   r = await post("/redeem", { code, uid: uidB });
   t("same code different uid rejected", r.status !== 200 || (r.json && r.json.error));

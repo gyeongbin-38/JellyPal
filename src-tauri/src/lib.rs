@@ -135,6 +135,122 @@ fn unseal_save(txt: &str) -> Option<String> {
     Some(txt.to_string()) // legacy plaintext save — loads, re-seals on write
 }
 
+// ---- rollback checkpoint ----
+// DPAPI stops edits, but not save-scumming: copy the folder, pull gacha,
+// paste back on a bad pull. So each save also writes state.chk, a sealed
+// {seq, cur, prev} where cur/prev are hashes of the two newest plaintext
+// generations (state.json and its .bak), plus a registry watermark at
+// HKCU\Software\JellyPal\sv. A loaded file must hash to a chk-listed
+// generation and not lag the watermark: a single-file restore fails the
+// hash match, a whole-folder restore lags sv, and deleting chk first trips
+// the "sealed save but sv>0" rule. Still not DRM — someone who reseals all
+// three beats it — but the casual copy-paste loop collapses to a clean
+// start instead of a free retry.
+static LAST_SAVE: Mutex<Option<String>> = Mutex::new(None);
+
+// FNV-1a — the hash only binds a file to its sealed chk entry, so it needs
+// to be stable, not cryptographic (a forged chk is a DPAPI problem, not a
+// hashing one)
+fn fnv64(s: &str) -> u64 {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in s.as_bytes() {
+        h = (h ^ *b as u64).wrapping_mul(0x100000001b3);
+    }
+    h
+}
+
+fn read_chk(dir: &std::path::Path) -> Option<(u64, u64, Option<u64>)> {
+    let txt = std::fs::read_to_string(dir.join("state.chk")).ok()?;
+    let raw = unseal_save(&txt)?;
+    let v: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    let seq = v.get("seq")?.as_u64()?;
+    let cur = v.get("cur")?.as_u64()?;
+    let prev = v.get("prev").and_then(|x| x.as_u64());
+    Some((seq, cur, prev))
+}
+
+// written after the state.json rename succeeds, so chk never advertises a
+// generation that didn't land. order matters: a chk write that fails leaves
+// chk one generation back, which still verifies .bak on the next load
+fn write_chk(dir: &std::path::Path, cur_plain: &str, prev_plain: Option<&str>) {
+    let seq = read_chk(dir).map(|c| c.0).unwrap_or(0) + 1;
+    let body = serde_json::json!({
+        "seq": seq,
+        "cur": fnv64(cur_plain),
+        "prev": prev_plain.map(fnv64),
+    })
+    .to_string();
+    let tmp = dir.join("state.chk.tmp");
+    if std::fs::write(&tmp, seal_save(&body)).is_ok() {
+        let _ = std::fs::rename(&tmp, dir.join("state.chk"));
+    }
+    reg_write_seq(seq);
+}
+
+#[cfg(windows)]
+fn reg_key(create: bool) -> Option<windows_sys::Win32::System::Registry::HKEY> {
+    use windows_sys::Win32::System::Registry::{RegCreateKeyExW, RegOpenKeyExW, KEY_WRITE, HKEY_CURRENT_USER};
+    let sub: Vec<u16> = "Software\\JellyPal".encode_utf16().chain(std::iter::once(0)).collect();
+    unsafe {
+        let mut key = std::ptr::null_mut();
+        let rc = if create {
+            RegCreateKeyExW(HKEY_CURRENT_USER, sub.as_ptr(), 0, std::ptr::null(), 0, KEY_WRITE, std::ptr::null_mut(), &mut key, std::ptr::null_mut())
+        } else {
+            RegOpenKeyExW(HKEY_CURRENT_USER, sub.as_ptr(), 0, KEY_WRITE | windows_sys::Win32::System::Registry::KEY_READ, &mut key)
+        };
+        if rc == 0 { Some(key) } else { None }
+    }
+}
+
+#[cfg(windows)]
+fn reg_write_seq(seq: u64) {
+    use windows_sys::Win32::System::Registry::{RegCloseKey, RegSetValueExW, REG_SZ};
+    let Some(key) = reg_key(true) else { return };
+    unsafe {
+        let name: Vec<u16> = "sv".encode_utf16().chain(std::iter::once(0)).collect();
+        let data: Vec<u16> = seq.to_string().encode_utf16().chain(std::iter::once(0)).collect();
+        RegSetValueExW(key, name.as_ptr(), 0, REG_SZ, data.as_ptr() as _, (data.len() * 2) as u32);
+        RegCloseKey(key);
+    }
+}
+
+#[cfg(windows)]
+fn reg_read_seq() -> u64 {
+    use windows_sys::Win32::System::Registry::{RegCloseKey, RegQueryValueExW};
+    let Some(key) = reg_key(false) else { return 0 };
+    unsafe {
+        let name: Vec<u16> = "sv".encode_utf16().chain(std::iter::once(0)).collect();
+        let mut buf = [0u16; 32];
+        let mut len = (buf.len() * 2) as u32;
+        let mut ty = 0u32;
+        let rc = RegQueryValueExW(key, name.as_ptr(), std::ptr::null(), &mut ty, buf.as_mut_ptr() as _, &mut len);
+        RegCloseKey(key);
+        if rc != 0 {
+            return 0;
+        }
+        let n = (len as usize / 2).saturating_sub(1);
+        String::from_utf16_lossy(&buf[..n]).trim().parse().unwrap_or(0)
+    }
+}
+
+#[cfg(windows)]
+fn reg_clear() {
+    use windows_sys::Win32::System::Registry::{RegDeleteKeyW, HKEY_CURRENT_USER};
+    unsafe {
+        let sub: Vec<u16> = "Software\\JellyPal".encode_utf16().chain(std::iter::once(0)).collect();
+        let _ = RegDeleteKeyW(HKEY_CURRENT_USER, sub.as_ptr());
+    }
+}
+
+#[cfg(not(windows))]
+fn reg_write_seq(_: u64) {}
+#[cfg(not(windows))]
+fn reg_read_seq() -> u64 {
+    0
+}
+#[cfg(not(windows))]
+fn reg_clear() {}
+
 #[tauri::command]
 fn save_state(app: tauri::AppHandle, json: String) -> Result<(), String> {
     if RESETTING.load(Ordering::Relaxed) {
@@ -147,10 +263,22 @@ fn save_state(app: tauri::AppHandle, json: String) -> Result<(), String> {
     // write to a temp file first so a crash mid-write can't corrupt the save;
     // keep the previous good state as .bak for load_state to fall back on
     std::fs::write(&tmp, seal_save(&json)).map_err(|e| e.to_string())?;
-    if state.exists() {
+    let had_state = state.exists();
+    if had_state {
         let _ = std::fs::copy(&state, dir.join("state.json.bak"));
     }
-    std::fs::rename(&tmp, &state).map_err(|e| e.to_string())
+    std::fs::rename(&tmp, &state).map_err(|e| e.to_string())?;
+    // advance the rollback checkpoint last — chk.reg only attest generations
+    // that actually landed, so a crash here just leaves chk one gen behind
+    // and the next load falls back to .bak instead of wiping
+    let prev = if had_state {
+        LAST_SAVE.lock().unwrap().clone()
+    } else {
+        None
+    };
+    write_chk(&dir, &json, prev.as_deref());
+    *LAST_SAVE.lock().unwrap() = Some(json);
+    Ok(())
 }
 
 #[tauri::command]
@@ -160,12 +288,46 @@ fn load_state(app: tauri::AppHandle) -> String {
     };
     // fall back to the last-good backup if the main save won't parse (or an
     // edited blob won't decrypt — tampering looks exactly like corruption)
+    let chk = read_chk(&dir);
+    let reg_seq = reg_read_seq();
     for name in ["state.json", "state.json.bak"] {
         if let Ok(txt) = std::fs::read_to_string(dir.join(name)) {
-            if let Some(raw) = unseal_save(&txt) {
-                if serde_json::from_str::<serde_json::Value>(&raw).is_ok() {
-                    return raw;
+            let Some(raw) = unseal_save(&txt) else {
+                continue;
+            };
+            if serde_json::from_str::<serde_json::Value>(&raw).is_err() {
+                continue;
+            }
+            let ok = match chk {
+                // the file must be one of the two newest generations and not
+                // lag the registry watermark — a restored older pair fails
+                // the seq check even though its hashes are self-consistent
+                Some((seq, cur, prev)) => {
+                    let h = fnv64(&raw);
+                    let gen = if h == cur {
+                        Some(seq)
+                    } else if prev == Some(h) {
+                        Some(seq.saturating_sub(1))
+                    } else {
+                        None
+                    };
+                    match gen {
+                        Some(g) => g + 1 >= reg_seq,
+                        // unknown generation on a barely-started ranch is a
+                        // reinstalled user dropping their own backup back in
+                        // — adopt it rather than wipe it. scummers could use
+                        // the same hole, but only by wiping their ranch first
+                        None => seq <= 2,
+                    }
                 }
+                // no chk: first boot or a legacy save — but a sealed save
+                // with an sv watermark means someone deleted the chk to
+                // sneak a restore past us
+                None => !(reg_seq > 0 && txt.starts_with(SAVE_MAGIC)),
+            };
+            if ok {
+                *LAST_SAVE.lock().unwrap() = Some(raw.clone());
+                return raw;
             }
         }
     }
@@ -186,9 +348,11 @@ fn reset_save(app: tauri::AppHandle) {
     // first run. the .bak matters: load_state falls back to it, so leaving
     // it behind would resurrect the wiped save.
     if let Ok(dir) = app.path().app_data_dir() {
-        for name in ["state.json", "state.json.bak", "state.json.tmp"] {
+        for name in ["state.json", "state.json.bak", "state.json.tmp", "state.chk", "state.chk.tmp"] {
             let _ = std::fs::remove_file(dir.join(name));
         }
+        reg_clear();
+        *LAST_SAVE.lock().unwrap() = None;
         let _ = std::fs::remove_dir_all(dir.join("photos"));
         // kill legacy identifier dirs too — boot-time migration copies an old
         // com.jellypal.app/com.typet.app save into the new dir whenever the new
