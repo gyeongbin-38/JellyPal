@@ -397,7 +397,7 @@ const FLAVOR = {
   hyb: "BORN RIGHT ON THIS DESKTOP|ONE OF A KIND",
 };
 
-const APP_VER = "0.2.12"; // keep in sync with tauri.conf.json version
+const APP_VER = "0.2.13"; // keep in sync with tauri.conf.json version
 
 // species -> personality assignment (hybrids inherit one parent's)
 const PSY_ASSIGN = {
@@ -2317,7 +2317,7 @@ function propArrive(g, now) {
     for (let i = 0; i < 5; i++) bangs.push({ x: music.x - 14 + i * 9, y: music.y - 28 - i * 7, life: 1.1 + i * 0.14, t: "♪" });
     // the tune carries — nearby pals bounce too
     for (const p of pals) {
-      if (Math.abs(p.x - music.x) < 320 && Math.abs(p.y - music.y) < 40 && !p.fly && p !== palHeld && now > (p.restUntil || 0)) {
+      if (Math.abs(p.x - music.x) < 320 && Math.abs(p.y - music.y) < 40 && !p.fly && p !== palHeld && now > (p.restUntil || 0) && !(now < (p.hideUntil || 0))) {
         p.fly = true; p.vy = -170 - Math.random() * 60; p.vx = (Math.random() - 0.5) * 80; p.hopT = now;
         p.faceId = "happy"; p.faceT = now + 1000;
       }
@@ -2401,7 +2401,7 @@ function propTap(kind, q) {
     for (let i = 0; i < 4; i++) bangs.push({ x: q.x - 12 + i * 10, y: q.y - 30 - i * 7, life: 1 + i * 0.15, t: "♪" });
     const mnow = performance.now();
     for (const p of pals) {
-      if (Math.abs(p.x - q.x) < 300 && Math.abs(p.y - q.y) < 40 && !p.fly && p !== palHeld && mnow > (p.restUntil || 0)) {
+      if (Math.abs(p.x - q.x) < 300 && Math.abs(p.y - q.y) < 40 && !p.fly && p !== palHeld && mnow > (p.restUntil || 0) && !(mnow < (p.hideUntil || 0))) {
         p.fly = true; p.vy = -160 - Math.random() * 60; p.vx = (Math.random() - 0.5) * 70; p.hopT = mnow;
         p.faceId = "happy"; p.faceT = mnow + 900;
       }
@@ -2498,16 +2498,32 @@ function spawnPal(i) {
   });
   return true;
 }
+// splice a pal out of the world — clears the live drag ref plus every
+// social tie other pals hold on it, so a send-home or species-cull can't
+// leave a ghost chat partner, follow leader, tag target, or totem mount
+function removePal(p) {
+  const i = pals.indexOf(p);
+  if (i < 0) return false;
+  pals.splice(i, 1);
+  if (p === palHeld) { palHeld = null; invoke("set_dragging", { on: false }); }
+  for (const q of pals) {
+    if (q.chatMate === p) { q.chatMate = null; q.chatUntil = 0; }
+    if (q.follow === p) q.follow = null;
+    if (q.tag && q.tag.on === p) q.tag = null;
+    if (q.stackOn === p) { q.stackOn = null; q.fly = true; q.vy = 60; }
+    if (q.propGoal && q.propGoal.mate === p) { q.propGoal = null; q.walkT = null; }
+  }
+  return true;
+}
 // drop a pal into the HOME slot (or right-click it) to send it back to
 // the ranch — it stays owned and can be re-summoned any time
 function sendPalHome(p) {
-  const i = pals.indexOf(p);
-  if (i < 0) return;
+  if (!pals.includes(p)) return;
   for (let k = 0; k < 12; k++) {
     fx.push({ x: p.x + Math.random() * 34 - 17, y: p.y - Math.random() * 44 - 8, vx: Math.random() * 80 - 40, vy: -Math.random() * 70 - 10, life: 0.8, c: "#e8e0c8" });
   }
   bangs.push({ x: p.x, y: p.y - 72, life: 1.4, t: "BYE!" });
-  pals.splice(i, 1);
+  removePal(p);
   // the main pet wells up a little when a friend leaves
   if (Math.abs(p.x - petX) < 400) cryUntil = performance.now() + 1100;
   sfx.drop();
@@ -3588,9 +3604,13 @@ cv.addEventListener("pointerdown", (e) => {
     grabPal.accAct = null;
     grabPal.restUntil = 0; // grabbing wakes a cushion napper
     grabPal.hideUntil = 0; // and drags a hider out of its box
+    if (grabPal.chatMate) { grabPal.chatMate.chatMate = null; grabPal.chatMate.chatUntil = 0; }
     grabPal.chatMate = null; grabPal.chatUntil = 0; // and hangs up the gossip
     grabPal.follow = null;
+    grabPal.propGoal = null; // a held pal drops its errand claim too
     for (const r of pals) if (r.stackOn === grabPal) r.stackOn = null;
+    for (const r of pals) if (r.follow === grabPal) r.follow = null;
+    for (const r of pals) if (r.tag && r.tag.on === grabPal) r.tag = null;
     palDX = mx - grabPal.x;
     palDY = my - grabPal.y;
     palDownX = mx; palDownY = my; palDownT = e.timeStamp;
@@ -5151,7 +5171,7 @@ nc.addEventListener("pointerdown", (e) => {
       }
       if (mx >= x + 4 && mx <= x + 20 && my >= y + 78 && my <= y + 90) {
         const pi = pals.findIndex((p) => p.sp === bi);
-        if (pi >= 0) { pals.splice(pi, 1); sfx.pop(); }
+        if (pi >= 0) { removePal(pals[pi]); sfx.pop(); }
         else if (spawnPal(bi)) sfx.reveal();
         else sfx.pop();
         return;
@@ -5721,7 +5741,7 @@ rc.addEventListener("pointerdown", (e) => {
       if (!breedMode && mx >= x + 4 && mx <= x + 20 && my >= y + 78 && my <= y + 90) {
         if (i === active && petHome) { bringPetHome(); return; }
         const pi = pals.findIndex((p) => p.sp === i);
-        if (pi >= 0) { pals.splice(pi, 1); sfx.pop(); }
+        if (pi >= 0) { removePal(pals[pi]); sfx.pop(); }
         else if (spawnPal(i)) sfx.reveal();
         else sfx.pop();
         return;
@@ -8027,7 +8047,7 @@ function frameBody(now) {
   for (let i = pals.length - 1; i >= 0; i--) {
     const p = pals[i];
     const psp = SPECIES[p.sp];
-    if (!psp || !owned.includes(psp.id)) { pals.splice(i, 1); continue; }
+    if (!psp || !owned.includes(psp.id)) { removePal(p); continue; }
     const ppsy = PSYCH[psp.ps] || {};
     // a cushion nap is a real nap: no walks, no games, no errands.
     // declared at loop scope — every branch below (web/fly/grounded)
@@ -8218,8 +8238,8 @@ function frameBody(now) {
         // greeting: an idle neighbor on the same deck → both stop, face
         // each other, trade a chirp. rare roll + mutual cooldown keeps
         // it a chance encounter, not a loop
-        if (now > (p.socCd || 0) && !p.fly && p.walkT === null && Math.random() < dt * 0.09) {
-          const q = pals.find(q2 => q2 !== p && !q2.fly && !q2.stackOn && !q2.tag &&
+        if (now > (p.socCd || 0) && !p.fly && !p.chatMate && p.walkT === null && Math.random() < dt * 0.09) {
+          const q = pals.find(q2 => q2 !== p && q2 !== palHeld && !q2.chatMate && !q2.propGoal && !q2.fly && !q2.stackOn && !q2.tag &&
             now > (q2.socCd || 0) && Math.abs(q2.y - p.y) < 18 &&
             Math.abs(q2.x - p.x) < 62 && Math.abs(q2.x - p.x) > 10);
           if (q) {
@@ -8273,6 +8293,7 @@ function frameBody(now) {
       // off, dozes off, gets grabbed, or stops existing (despawned)
       if (p.follow && (now > p.followT || !pals.includes(p.follow) || p.follow.fly || p.follow === p ||
           p.follow.stackOn || p.follow.chatMate || p.follow === palHeld ||
+          Math.abs(p.follow.y - p.y) > 40 ||
           now < (p.follow.restUntil || 0) || now < (p.follow.hideUntil || 0))) p.follow = null;
       if (p.follow && !p.fly && !nappingP && !p.chatMate) p.walkT = p.follow.x - (p.follow.lookDir || 1) * 46;
       // TAG: a bump can start a chase — "it" hunts the fleer across the
@@ -8285,6 +8306,7 @@ function frameBody(now) {
         // the fleer keeps playing. real departures are caught by the
         // y-gap, grab, and web checks either way
         if (now > p.tag.until || !o || !pals.includes(o) || o === palHeld || now < o.web ||
+            now < (o.restUntil || 0) || now < (o.hideUntil || 0) ||
             Math.abs(o.y - p.y) > 30 || (p.tag.it && o.fly)) {
           // a clean timeout ends with a shared beat — both stop, trade a
           // tired laugh, then wander off. without this the chase just
@@ -8565,7 +8587,7 @@ function frameBody(now) {
             if (pgs !== (p.gaitStep || 0)) { p.gaitStep = pgs; p.squashV += 0.32; }
           }
         }
-      } else if (now > p.nextT && now > (p.restUntil || 0) && !(now < (p.chatUntil || 0))) {
+      } else if (now > p.nextT && now > (p.restUntil || 0) && !(now < (p.hideUntil || 0)) && !(now < (p.chatUntil || 0))) {
         // snack inbound: every pal in sight turns to watch the throw arc
         if (treatFly && !p.fly && Math.abs(treatFly.x - p.x) < 460) {
           p.lookDir = Math.sign(treatFly.x - p.x) || 1;
@@ -8870,7 +8892,10 @@ function frameBody(now) {
     }
     // pal-vs-pal play
     for (const q of pals) {
-      if (q === p || q === palHeld || p === palHeld || q.fly || p.fly || nappingP || now < (q.restUntil || 0) || Math.abs(q.y - p.y) > 20) continue;
+      if (q === p || q === palHeld || p === palHeld || q.fly || p.fly || nappingP ||
+          now < (q.restUntil || 0) || now < (q.hideUntil || 0) ||
+          p.tag || q.tag || p.stackOn || q.stackOn ||
+          Math.abs(q.y - p.y) > 20) continue;
       if (Math.abs(q.x - p.x) < 60 && now > p.playCd && now > q.playCd) {
         const qpsy = PSYCH[(SPECIES[q.sp] || {}).ps] || {};
         p.playCd = q.playCd = now + 6000 * Math.max(ppsy.pace || 1, qpsy.pace || 1);
@@ -8961,7 +8986,7 @@ function frameBody(now) {
 
     // copycat hop: a pal that just leapt is contagious — nearby grounded
     // pals sometimes bounce along (play contagion, Slime Rancher-style)
-    if (!p.fly && p !== palHeld && !p.stackOn && !nappingP) {
+    if (!p.fly && p !== palHeld && !p.stackOn && !nappingP && !p.chatMate) {
       for (const q of pals) {
         if (q === p || !q.hopT || now - q.hopT > 380 || q.fly || Math.abs(q.y - p.y) > 20 || Math.abs(q.x - p.x) > 130) continue;
         if (Math.random() < dt * 4) {
@@ -8978,7 +9003,7 @@ function frameBody(now) {
     // a nearby pal glances over and smiles along instead of ignoring it
     if (!p.fly && p !== palHeld && !nappingP && now > (p.faceT || 0) && now > (p.echoCd || 0)) {
       for (const q of pals) {
-        if (q === p || q.fly || now < (q.restUntil || 0) || !(q.faceT > now + 200) ||
+        if (q === p || q.fly || now < (q.restUntil || 0) || now < (q.hideUntil || 0) || !(q.faceT > now + 200) ||
             !(q.faceId === "laugh" || q.faceId === "love" || q.faceId === "star")) continue;
         if (Math.abs(q.x - p.x) < 130 && Math.abs(q.y - p.y) < 24 && Math.random() < dt * 1.6) {
           p.echoCd = now + 7000;
