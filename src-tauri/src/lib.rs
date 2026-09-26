@@ -42,6 +42,99 @@ fn set_dragging(on: bool) {
     DRAGGING.store(on, Ordering::Relaxed);
 }
 
+// ---- save at-rest protection ----
+// state.json carries the wallet and the install uid, so it can't stay
+// plaintext: a notepad edit is free jelly, and a copied uid lets a stranger
+// scoop pending purchase grants first. On Windows the file is DPAPI-sealed
+// (CryptProtectData) — keyed to this Windows account, so tampering fails
+// decryption and a copied blob won't open on another machine or profile.
+// This kills casual save editing; it is not DRM — someone who can call
+// CryptProtectData under their own account can still forge a blob.
+const SAVE_MAGIC: &str = "JPENC1:";
+
+#[cfg(windows)]
+fn dpapi_protect(data: &[u8]) -> Option<Vec<u8>> {
+    use windows_sys::Win32::Security::Cryptography::{CryptProtectData, CRYPT_INTEGER_BLOB};
+    let input = CRYPT_INTEGER_BLOB {
+        cbData: data.len() as u32,
+        pbData: data.as_ptr() as *mut u8,
+    };
+    let mut out = CRYPT_INTEGER_BLOB { cbData: 0, pbData: std::ptr::null_mut() };
+    unsafe {
+        if CryptProtectData(
+            &input,
+            std::ptr::null(),
+            std::ptr::null(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            0,
+            &mut out,
+        ) == 0
+        {
+            return None;
+        }
+        let v = std::slice::from_raw_parts(out.pbData, out.cbData as usize).to_vec();
+        windows_sys::Win32::Foundation::LocalFree(out.pbData as _);
+        Some(v)
+    }
+}
+
+#[cfg(windows)]
+fn dpapi_unprotect(blob: &[u8]) -> Option<Vec<u8>> {
+    use windows_sys::Win32::Security::Cryptography::{CRYPT_INTEGER_BLOB, CryptUnprotectData};
+    let input = CRYPT_INTEGER_BLOB {
+        cbData: blob.len() as u32,
+        pbData: blob.as_ptr() as *mut u8,
+    };
+    let mut out = CRYPT_INTEGER_BLOB { cbData: 0, pbData: std::ptr::null_mut() };
+    unsafe {
+        if CryptUnprotectData(
+            &input,
+            std::ptr::null_mut(),
+            std::ptr::null(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            0,
+            &mut out,
+        ) == 0
+        {
+            return None;
+        }
+        let v = std::slice::from_raw_parts(out.pbData, out.cbData as usize).to_vec();
+        windows_sys::Win32::Foundation::LocalFree(out.pbData as _);
+        Some(v)
+    }
+}
+
+fn seal_save(json: &str) -> String {
+    #[cfg(windows)]
+    {
+        if let Some(blob) = dpapi_protect(json.as_bytes()) {
+            return format!("{}{}", SAVE_MAGIC, b64encode(&blob));
+        }
+    }
+    json.to_string()
+}
+
+// returns None when the file is sealed and undecryptable — the caller falls
+// through to .bak or a clean start, same as any other corruption
+fn unseal_save(txt: &str) -> Option<String> {
+    if let Some(rest) = txt.strip_prefix(SAVE_MAGIC) {
+        #[cfg(windows)]
+        {
+            let blob = b64decode(rest.trim()).ok()?;
+            let raw = dpapi_unprotect(&blob)?;
+            return String::from_utf8(raw).ok();
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = rest;
+            return None; // windows-sealed blob on a mac — can't open it here
+        }
+    }
+    Some(txt.to_string()) // legacy plaintext save — loads, re-seals on write
+}
+
 #[tauri::command]
 fn save_state(app: tauri::AppHandle, json: String) -> Result<(), String> {
     if RESETTING.load(Ordering::Relaxed) {
@@ -53,7 +146,7 @@ fn save_state(app: tauri::AppHandle, json: String) -> Result<(), String> {
     let tmp = dir.join("state.json.tmp");
     // write to a temp file first so a crash mid-write can't corrupt the save;
     // keep the previous good state as .bak for load_state to fall back on
-    std::fs::write(&tmp, &json).map_err(|e| e.to_string())?;
+    std::fs::write(&tmp, seal_save(&json)).map_err(|e| e.to_string())?;
     if state.exists() {
         let _ = std::fs::copy(&state, dir.join("state.json.bak"));
     }
@@ -65,11 +158,14 @@ fn load_state(app: tauri::AppHandle) -> String {
     let Ok(dir) = app.path().app_data_dir() else {
         return "{}".into();
     };
-    // fall back to the last-good backup if the main save won't parse
+    // fall back to the last-good backup if the main save won't parse (or an
+    // edited blob won't decrypt — tampering looks exactly like corruption)
     for name in ["state.json", "state.json.bak"] {
         if let Ok(txt) = std::fs::read_to_string(dir.join(name)) {
-            if serde_json::from_str::<serde_json::Value>(&txt).is_ok() {
-                return txt;
+            if let Some(raw) = unseal_save(&txt) {
+                if serde_json::from_str::<serde_json::Value>(&raw).is_ok() {
+                    return raw;
+                }
             }
         }
     }
