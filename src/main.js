@@ -397,7 +397,7 @@ const FLAVOR = {
   hyb: "BORN RIGHT ON THIS DESKTOP|ONE OF A KIND",
 };
 
-const APP_VER = "0.2.9"; // keep in sync with tauri.conf.json version
+const APP_VER = "0.2.10"; // keep in sync with tauri.conf.json version
 
 // species -> personality assignment (hybrids inherit one parent's)
 const PSY_ASSIGN = {
@@ -2893,16 +2893,16 @@ function hitTest(mx, my) {
 function eat() {
   const now = Date.now();
   // typing feeds the wallet, not the pet: xp/gems always tick, but only
-  // key-eating species react — everyone else sleeps through your work
+  // key-eating species react visibly — everyone else just stays awake.
+  // typing IS waking activity for all species though: a slime that nods
+  // off mid-workday reads as dead, not peaceful
   const kr = SPECIES[active].kr;
-  if (kr) {
+  awakeAt = now;
+  if (kr && now - lastKey > 360000 && !petHome) {
     // welcome back: first keystroke after 6+ idle minutes gets a heart
-    if (now - lastKey > 360000) {
-      contentUntil = performance.now() + 1500;
-      hearts.push({ x: petX, y: petY - 70, life: 1 });
-      sfx.heart();
-    }
-    awakeAt = now; // typing counts as waking activity for key-eaters
+    contentUntil = performance.now() + 1500;
+    hearts.push({ x: petX, y: petY - 70, life: 1 });
+    sfx.heart();
   }
   lastKey = now;
   xp += 1;
@@ -2910,9 +2910,13 @@ function eat() {
   const every = SPECIES[active].r >= 3 ? JELLY_EVERY / 2 : JELLY_EVERY;
   if (xp % every === 0) {
     jelly += 1;
-    bangs.push({ x: petX + 20, y: petY - 80, life: 1, t: "💎" });
-    starUntil = performance.now() + 900; // starry-eyed over the gem
-    sfx.heart();
+    // parked at the ranch = invisible pet: skip spot-anchored effects so
+    // nothing rains where the pet used to stand
+    if (!petHome) {
+      bangs.push({ x: petX + 20, y: petY - 80, life: 1, t: "💎" });
+      starUntil = performance.now() + 900; // starry-eyed over the gem
+      sfx.heart();
+    }
   }
   level = Math.min(3, Math.floor(xp / KEYS_PER_LEVEL));
   dirty = true;
@@ -2924,8 +2928,10 @@ function eat() {
   }
   if (now > lastMunchSfx + 600) { lastMunchSfx = now; sfx.munch(); }
   if (state !== "idle") state = "idle";
-  if (Math.random() < 0.35 && crumbs.length < 12) {
-    crumbs.push({ x: petX + (Math.random() * 60 - 30), y: petY - 80, vy: 0, life: 1 });
+  if (!petHome && Math.random() < 0.35 && crumbs.length < 12) {
+    // anchor each crumb's landing floor at spawn — the old live-petY
+    // check let crumbs sink mid-air if the pet moved off mid-fall
+    crumbs.push({ x: petX + (Math.random() * 60 - 30), y: petY - 80, vy: 0, life: 1, floor: petY });
   }
 }
 
@@ -3472,6 +3478,21 @@ cv.addEventListener("pointerdown", (e) => {
           const cur = { bowl, cushion, box, plant, music, mirror, mat, jar }[kind];
           if (cur) {
             for (let i = 0; i < 8; i++) fx.push({ x: cur.x + Math.random() * 20 - 10, y: cur.y - Math.random() * 10, vx: Math.random() * 50 - 25, vy: -Math.random() * 40, life: 0.5, c: "#e8dcc8" });
+            // evict squatters first: a napping pal used to keep snoozing
+            // mid-air where the cushion was, and a box-hider stayed
+            // invisible for seconds after the box vanished
+            const nw = performance.now();
+            for (const q of pals) {
+              if (Math.abs(q.x - cur.x) < 60 && Math.abs(q.y - cur.y) < 40) {
+                if (nw < (q.restUntil || 0) || nw < (q.hideUntil || 0) || (q.propGoal && q.propGoal.kind === kind)) {
+                  q.restUntil = 0; q.hideUntil = 0; q.propGoal = null;
+                  q.faceId = "shock"; q.faceT = nw + 700;
+                  bangs.push({ x: q.x, y: q.y - 58, life: 0.9, t: "!" });
+                }
+              }
+            }
+            if (kind === "cushion" && nw < cushionNap) { cushionNap = 0; cushionNapW = 0; sitUntil = 0; }
+            if (kind === "box" && nw < boxHide) boxHide = 0;
             if (kind === "bowl") bowl = null; else if (kind === "cushion") cushion = null;
             else if (kind === "box") box = null; else if (kind === "plant") plant = null;
             else if (kind === "music") music = null; else if (kind === "mirror") mirror = null;
@@ -7842,7 +7863,7 @@ function frameBody(now) {
     c.vy += 700 * dt;
     c.y += c.vy * dt;
     c.life -= dt * 1.6;
-    if (c.life <= 0 || c.y > petY - 10) { crumbs.splice(i, 1); continue; }
+    if (c.life <= 0 || c.y > (c.floor ?? petY) - 10) { crumbs.splice(i, 1); continue; }
     ctx.globalAlpha = Math.max(0, c.life);
     ctx.fillStyle = "#ffd27f";
     ctx.fillRect(c.x, c.y, 4, 4);
