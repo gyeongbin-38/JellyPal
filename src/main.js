@@ -397,7 +397,7 @@ const FLAVOR = {
   hyb: "BORN RIGHT ON THIS DESKTOP|ONE OF A KIND",
 };
 
-const APP_VER = "0.2.11"; // keep in sync with tauri.conf.json version
+const APP_VER = "0.2.12"; // keep in sync with tauri.conf.json version
 
 // species -> personality assignment (hybrids inherit one parent's)
 const PSY_ASSIGN = {
@@ -7895,6 +7895,134 @@ function frameBody(now) {
   }
   ctx.globalAlpha = 1;
 
+  // placed props: bowl sits flat, cushion gets a soft squish pulse
+  if (bowl) {
+    // lift floor-sitting props fully on-screen — center-anchored sprites
+    // would otherwise spill a few px past the bottom edge
+    const lift = Math.min(0, winH - (bowl.y + 9));
+    ctx.save();
+    ctx.translate(0, lift);
+    drawSpr(ctx, "bowl", bowl.x, bowl.y - 5, 3);
+    const fill = bowl.fill ?? 2; // saves from before fill-tracking: half
+    if (fill <= 1) { // mask the baked-in kibble with the dark interior
+      ctx.fillStyle = "#5c4632";
+      ctx.fillRect(Math.round(bowl.x - 16), Math.round(bowl.y - 12), 30, 6);
+    }
+    if (fill === 1) { // scraps left
+      ctx.fillStyle = "#eec23f";
+      ctx.fillRect(Math.round(bowl.x - 4), Math.round(bowl.y - 11), 3, 3);
+      ctx.fillRect(Math.round(bowl.x + 3), Math.round(bowl.y - 10), 3, 3);
+      ctx.fillRect(Math.round(bowl.x - 9), Math.round(bowl.y - 10), 3, 3);
+    } else if (fill === 0) { // empty — just a rim shine
+      ctx.fillStyle = "#a8855c";
+      ctx.fillRect(Math.round(bowl.x - 8), Math.round(bowl.y - 11), 6, 2);
+      ctx.fillRect(Math.round(bowl.x + 5), Math.round(bowl.y - 9), 3, 2);
+    } else if (fill === 3) { // heaped above the rim
+      ctx.fillStyle = "#eec23f";
+      ctx.fillRect(Math.round(bowl.x - 10), Math.round(bowl.y - 17), 4, 3);
+      ctx.fillRect(Math.round(bowl.x - 4), Math.round(bowl.y - 19), 4, 4);
+      ctx.fillRect(Math.round(bowl.x + 3), Math.round(bowl.y - 18), 4, 3);
+      ctx.fillRect(Math.round(bowl.x + 8), Math.round(bowl.y - 16), 3, 3);
+      ctx.fillStyle = "#d9a05b";
+      ctx.fillRect(Math.round(bowl.x - 1), Math.round(bowl.y - 21), 3, 3);
+      ctx.fillRect(Math.round(bowl.x - 7), Math.round(bowl.y - 19), 3, 3);
+    }
+    ctx.restore();
+  }
+  if (cushion) {
+    // the puff squashes under whoever's napping on it — scale dips while
+    // the main pet dozes or a pal is resting there
+    const occupied = (now < cushionNap && Math.abs(petX - cushion.x) < 34) ||
+      pals.some((p) => now < (p.restUntil || 0) && Math.abs(p.x - cushion.x) < 34);
+    // a tap fluffs it — a quick over-inflate that settles back
+    const poof = now < cushionPoof ? 1 + Math.sin((cushionPoof - now) / 700 * Math.PI) * 0.12 : 1;
+    const csq = occupied ? 0.82 : (1 + Math.sin(t * 1.4) * 0.03) * poof;
+    ctx.save();
+    ctx.translate(cushion.x, cushion.y + Math.min(0, winH - (cushion.y + 6)));
+    ctx.scale(1 / csq * (2 - csq) * 0.5 + 0.5, csq); // widen a touch as it flattens
+    drawSpr(ctx, "cushion", 0, -8 / csq + (occupied ? 1 : Math.sin(t * 1.4) * 0.8), 3);
+    ctx.restore();
+  }
+  if (box) {
+    // the lid shivers when a slime just dove in or is rustling inside
+    const rustle = now < boxHide || pals.some((p) => now < (p.hideUntil || 0) && Math.abs(p.x - box.x) < 30);
+    ctx.save();
+    ctx.translate(box.x + (rustle ? Math.sin(t * 23) * 1.4 : 0), box.y - 5 + Math.min(0, winH - (box.y + 9)));
+    drawSpr(ctx, "box", 0, 0, 3);
+    ctx.restore();
+    if (rustle && Math.random() < dt * 3) fx.push({ x: box.x + (Math.random() - 0.5) * 26, y: box.y - 12, vx: (Math.random() - 0.5) * 20, vy: -12, life: 0.5, c: "#d8c49a" });
+  }
+  if (plant) {
+    // leaves sway; a watering makes them perk and sparkle for a bit
+    const perk = Date.now() < (plant.steamUntil || 0);
+    ctx.save();
+    ctx.translate(plant.x, plant.y - 5 + Math.min(0, winH - (plant.y + 12)));
+    ctx.rotate(Math.sin(t * (perk ? 5 : 1.6)) * (perk ? 0.1 : 0.04));
+    drawSpr(ctx, "plant", 0, 0, 3);
+    ctx.restore();
+    if (perk && Math.random() < dt * 6) fx.push({ x: plant.x + (Math.random() - 0.5) * 18, y: plant.y - 30 - Math.random() * 8, vx: 0, vy: -14, life: 0.6, c: "#8ad4f0" });
+  }
+  if (music) {
+    // the key turns while the tune plays — a small wobble sells it
+    const spinning = Date.now() < (music.spinUntil || 0);
+    ctx.save();
+    ctx.translate(music.x + (spinning ? Math.sin(t * 31) * 0.8 : 0), music.y - 4 + Math.min(0, winH - (music.y + 8)));
+    drawSpr(ctx, "music", 0, 0, 3);
+    ctx.restore();
+    if (spinning && Math.random() < dt * 7) bangs.push({ x: music.x + (Math.random() - 0.5) * 30, y: music.y - 30 - Math.random() * 12, life: 0.9, t: "♪" });
+  }
+  if (mirror) {
+    // the glass gleams once in a while — a slow shine sweep across the pane
+    const gleam = (Math.sin(t * 0.9) + 1) / 2;
+    ctx.save();
+    ctx.translate(mirror.x, mirror.y - 5 + Math.min(0, winH - (mirror.y + 13)));
+    drawSpr(ctx, "mirror", 0, 0, 3);
+    if (gleam > 0.86) {
+      ctx.globalAlpha = (gleam - 0.86) / 0.14 * 0.7;
+      ctx.fillStyle = "#ffffff";
+      const gx = Math.round((gleam - 0.86) / 0.14 * 26 - 13);
+      ctx.fillRect(gx, -46, 3, 26);
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+  }
+  if (mat) {
+    // the pad breathes a little; a tap or a landing bloats it briefly
+    const poof = now < matPoof ? 1 + Math.sin((matPoof - now) / 800 * Math.PI) * 0.16 : 1;
+    const msq = (1 + Math.sin(t * 1.8) * 0.025) * poof;
+    ctx.save();
+    ctx.translate(mat.x, mat.y + Math.min(0, winH - (mat.y + 6)));
+    ctx.scale(1 + (1 - msq) * 0.6, msq);
+    drawSpr(ctx, "mat", 0, -8 / msq, 3);
+    ctx.restore();
+  }
+  if (jar) {
+    // cookie jar: the glass wobbles when someone just raided it; the lid
+    // lifts a crack while the spill-cooldown is fresh
+    const raid = Date.now() < (jar.raidUntil || 0);
+    ctx.save();
+    ctx.translate(jar.x + (raid ? Math.sin(t * 27) * 1.2 : 0), jar.y - 5 + Math.min(0, winH - (jar.y + 10)));
+    drawSpr(ctx, "jar", 0, 0, 3);
+    if ((jar.fill ?? 2) <= 0) { // empty — dim the cookie lumps
+      ctx.fillStyle = "rgba(92,70,50,0.55)";
+      ctx.fillRect(Math.round(-13), Math.round(-26), 26, 16);
+    }
+    ctx.restore();
+    if (raid && Math.random() < dt * 5) fx.push({ x: jar.x + (Math.random() - 0.5) * 16, y: jar.y - 24 - Math.random() * 8, vx: (Math.random() - 0.5) * 30, vy: -16, life: 0.5, c: "#d9a05b" });
+  }
+  // the daily egg: sits with a faint wobble, like something's inside —
+  // hairline cracks creep in as hatch time nears
+  if (egg) {
+    ctx.save();
+    ctx.translate(egg.x, egg.y - 7 + Math.min(0, winH - (egg.y + 8)));
+    const wob = Math.min(0.22, 0.09 + (now - egg.t0) / 150000 * 0.2);
+    ctx.rotate(Math.sin(t * (3 + (now - egg.t0) / 50000) + egg.wob) * wob);
+    drawSpr(ctx, "egg", 0, 0, 3);
+    const age = now - egg.t0;
+    if (age > 130000) drawSpr(ctx, "crack2", 0, -4, 3);
+    else if (age > 70000) drawSpr(ctx, "crack1", 0, -4, 3);
+    ctx.restore();
+  }
   // --- companion slimes: update physics/AI, then draw (behind the main pet) ---
   for (let i = pals.length - 1; i >= 0; i--) {
     const p = pals[i];
@@ -9168,134 +9296,6 @@ function frameBody(now) {
   };
   if (treatFly) drawTreat(treatFly.x, treatFly.y, t * 6, treatFly.kind);
   if (treat) drawTreat(treat.x, treat.y - 6 + Math.sin(t * 5) * 1.5, 0, treat.kind);
-  // placed props: bowl sits flat, cushion gets a soft squish pulse
-  if (bowl) {
-    // lift floor-sitting props fully on-screen — center-anchored sprites
-    // would otherwise spill a few px past the bottom edge
-    const lift = Math.min(0, winH - (bowl.y + 9));
-    ctx.save();
-    ctx.translate(0, lift);
-    drawSpr(ctx, "bowl", bowl.x, bowl.y - 5, 3);
-    const fill = bowl.fill ?? 2; // saves from before fill-tracking: half
-    if (fill <= 1) { // mask the baked-in kibble with the dark interior
-      ctx.fillStyle = "#5c4632";
-      ctx.fillRect(Math.round(bowl.x - 16), Math.round(bowl.y - 12), 30, 6);
-    }
-    if (fill === 1) { // scraps left
-      ctx.fillStyle = "#eec23f";
-      ctx.fillRect(Math.round(bowl.x - 4), Math.round(bowl.y - 11), 3, 3);
-      ctx.fillRect(Math.round(bowl.x + 3), Math.round(bowl.y - 10), 3, 3);
-      ctx.fillRect(Math.round(bowl.x - 9), Math.round(bowl.y - 10), 3, 3);
-    } else if (fill === 0) { // empty — just a rim shine
-      ctx.fillStyle = "#a8855c";
-      ctx.fillRect(Math.round(bowl.x - 8), Math.round(bowl.y - 11), 6, 2);
-      ctx.fillRect(Math.round(bowl.x + 5), Math.round(bowl.y - 9), 3, 2);
-    } else if (fill === 3) { // heaped above the rim
-      ctx.fillStyle = "#eec23f";
-      ctx.fillRect(Math.round(bowl.x - 10), Math.round(bowl.y - 17), 4, 3);
-      ctx.fillRect(Math.round(bowl.x - 4), Math.round(bowl.y - 19), 4, 4);
-      ctx.fillRect(Math.round(bowl.x + 3), Math.round(bowl.y - 18), 4, 3);
-      ctx.fillRect(Math.round(bowl.x + 8), Math.round(bowl.y - 16), 3, 3);
-      ctx.fillStyle = "#d9a05b";
-      ctx.fillRect(Math.round(bowl.x - 1), Math.round(bowl.y - 21), 3, 3);
-      ctx.fillRect(Math.round(bowl.x - 7), Math.round(bowl.y - 19), 3, 3);
-    }
-    ctx.restore();
-  }
-  if (cushion) {
-    // the puff squashes under whoever's napping on it — scale dips while
-    // the main pet dozes or a pal is resting there
-    const occupied = (now < cushionNap && Math.abs(petX - cushion.x) < 34) ||
-      pals.some((p) => now < (p.restUntil || 0) && Math.abs(p.x - cushion.x) < 34);
-    // a tap fluffs it — a quick over-inflate that settles back
-    const poof = now < cushionPoof ? 1 + Math.sin((cushionPoof - now) / 700 * Math.PI) * 0.12 : 1;
-    const csq = occupied ? 0.82 : (1 + Math.sin(t * 1.4) * 0.03) * poof;
-    ctx.save();
-    ctx.translate(cushion.x, cushion.y + Math.min(0, winH - (cushion.y + 6)));
-    ctx.scale(1 / csq * (2 - csq) * 0.5 + 0.5, csq); // widen a touch as it flattens
-    drawSpr(ctx, "cushion", 0, -8 / csq + (occupied ? 1 : Math.sin(t * 1.4) * 0.8), 3);
-    ctx.restore();
-  }
-  if (box) {
-    // the lid shivers when a slime just dove in or is rustling inside
-    const rustle = now < boxHide || pals.some((p) => now < (p.hideUntil || 0) && Math.abs(p.x - box.x) < 30);
-    ctx.save();
-    ctx.translate(box.x + (rustle ? Math.sin(t * 23) * 1.4 : 0), box.y - 5 + Math.min(0, winH - (box.y + 9)));
-    drawSpr(ctx, "box", 0, 0, 3);
-    ctx.restore();
-    if (rustle && Math.random() < dt * 3) fx.push({ x: box.x + (Math.random() - 0.5) * 26, y: box.y - 12, vx: (Math.random() - 0.5) * 20, vy: -12, life: 0.5, c: "#d8c49a" });
-  }
-  if (plant) {
-    // leaves sway; a watering makes them perk and sparkle for a bit
-    const perk = Date.now() < (plant.steamUntil || 0);
-    ctx.save();
-    ctx.translate(plant.x, plant.y - 5 + Math.min(0, winH - (plant.y + 12)));
-    ctx.rotate(Math.sin(t * (perk ? 5 : 1.6)) * (perk ? 0.1 : 0.04));
-    drawSpr(ctx, "plant", 0, 0, 3);
-    ctx.restore();
-    if (perk && Math.random() < dt * 6) fx.push({ x: plant.x + (Math.random() - 0.5) * 18, y: plant.y - 30 - Math.random() * 8, vx: 0, vy: -14, life: 0.6, c: "#8ad4f0" });
-  }
-  if (music) {
-    // the key turns while the tune plays — a small wobble sells it
-    const spinning = Date.now() < (music.spinUntil || 0);
-    ctx.save();
-    ctx.translate(music.x + (spinning ? Math.sin(t * 31) * 0.8 : 0), music.y - 4 + Math.min(0, winH - (music.y + 8)));
-    drawSpr(ctx, "music", 0, 0, 3);
-    ctx.restore();
-    if (spinning && Math.random() < dt * 7) bangs.push({ x: music.x + (Math.random() - 0.5) * 30, y: music.y - 30 - Math.random() * 12, life: 0.9, t: "♪" });
-  }
-  if (mirror) {
-    // the glass gleams once in a while — a slow shine sweep across the pane
-    const gleam = (Math.sin(t * 0.9) + 1) / 2;
-    ctx.save();
-    ctx.translate(mirror.x, mirror.y - 5 + Math.min(0, winH - (mirror.y + 13)));
-    drawSpr(ctx, "mirror", 0, 0, 3);
-    if (gleam > 0.86) {
-      ctx.globalAlpha = (gleam - 0.86) / 0.14 * 0.7;
-      ctx.fillStyle = "#ffffff";
-      const gx = Math.round((gleam - 0.86) / 0.14 * 26 - 13);
-      ctx.fillRect(gx, -46, 3, 26);
-      ctx.globalAlpha = 1;
-    }
-    ctx.restore();
-  }
-  if (mat) {
-    // the pad breathes a little; a tap or a landing bloats it briefly
-    const poof = now < matPoof ? 1 + Math.sin((matPoof - now) / 800 * Math.PI) * 0.16 : 1;
-    const msq = (1 + Math.sin(t * 1.8) * 0.025) * poof;
-    ctx.save();
-    ctx.translate(mat.x, mat.y + Math.min(0, winH - (mat.y + 6)));
-    ctx.scale(1 + (1 - msq) * 0.6, msq);
-    drawSpr(ctx, "mat", 0, -8 / msq, 3);
-    ctx.restore();
-  }
-  if (jar) {
-    // cookie jar: the glass wobbles when someone just raided it; the lid
-    // lifts a crack while the spill-cooldown is fresh
-    const raid = Date.now() < (jar.raidUntil || 0);
-    ctx.save();
-    ctx.translate(jar.x + (raid ? Math.sin(t * 27) * 1.2 : 0), jar.y - 5 + Math.min(0, winH - (jar.y + 10)));
-    drawSpr(ctx, "jar", 0, 0, 3);
-    if ((jar.fill ?? 2) <= 0) { // empty — dim the cookie lumps
-      ctx.fillStyle = "rgba(92,70,50,0.55)";
-      ctx.fillRect(Math.round(-13), Math.round(-26), 26, 16);
-    }
-    ctx.restore();
-    if (raid && Math.random() < dt * 5) fx.push({ x: jar.x + (Math.random() - 0.5) * 16, y: jar.y - 24 - Math.random() * 8, vx: (Math.random() - 0.5) * 30, vy: -16, life: 0.5, c: "#d9a05b" });
-  }
-  // the daily egg: sits with a faint wobble, like something's inside —
-  // hairline cracks creep in as hatch time nears
-  if (egg) {
-    ctx.save();
-    ctx.translate(egg.x, egg.y - 7 + Math.min(0, winH - (egg.y + 8)));
-    const wob = Math.min(0.22, 0.09 + (now - egg.t0) / 150000 * 0.2);
-    ctx.rotate(Math.sin(t * (3 + (now - egg.t0) / 50000) + egg.wob) * wob);
-    drawSpr(ctx, "egg", 0, 0, 3);
-    const age = now - egg.t0;
-    if (age > 130000) drawSpr(ctx, "crack2", 0, -4, 3);
-    else if (age > 70000) drawSpr(ctx, "crack1", 0, -4, 3);
-    ctx.restore();
-  }
   // the ball: spins while rolling, squashed flat a touch on the deck
   if (ball) {
     const bimg = sprImg("ball");
