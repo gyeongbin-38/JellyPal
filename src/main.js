@@ -397,7 +397,7 @@ const FLAVOR = {
   hyb: "BORN RIGHT ON THIS DESKTOP|ONE OF A KIND",
 };
 
-const APP_VER = "0.2.5"; // keep in sync with tauri.conf.json version
+const APP_VER = "0.2.6"; // keep in sync with tauri.conf.json version
 
 // species -> personality assignment (hybrids inherit one parent's)
 const PSY_ASSIGN = {
@@ -1660,6 +1660,7 @@ async function tryRedeem(raw) {
   try {
     const gems = await invoke("redeem_bound", { uid, code: fmt });
     redeemed.push(fmt);
+    redeemedBound.push(fmt);
     jelly += gems;
     dirty = true;
     return `+${gems} JELLY!`;
@@ -1679,9 +1680,33 @@ async function tryRedeem(raw) {
     return "BAD CODE";
   }
 }
+// an offline-redeemed code never reached the server, so it paid out without
+// being bound to this uid — leaving it free to pay out AGAIN to whoever
+// redeems it online first. sweep: once the network is back, re-post each
+// unbound code through /redeem just to claim the binding; the grant it
+// returns is discarded (the gems were already credited locally).
+async function bindRedeemed() {
+  if (!uid) return;
+  for (const code of redeemed) {
+    if (redeemedBound.includes(code)) continue;
+    try {
+      await invoke("redeem_bound", { uid, code });
+      redeemedBound.push(code);
+      dirty = true;
+    } catch (e) {
+      // a real refusal means another uid holds it now — stop retrying.
+      // offline-ish errors just wait for the next sweep
+      if (!["offline", "bad response", "server busy"].includes(e)) {
+        redeemedBound.push(code);
+        dirty = true;
+      }
+    }
+  }
+}
 let redeemMode = false;
 let redeemBuf = "";
 let redeemed = [];
+let redeemedBound = []; // codes confirmed bound to this uid on the server
 // per-install user id — generated once, kept in the save, shown under
 // MY ID in settings. the shop backend stores only sha256(uid) and binds
 // grants to a tag taken from it, so a leaked grant is useless to strangers
@@ -1709,6 +1734,9 @@ function ensureUid() {
 // (grants resend; claimedNonces keeps them from crediting twice)
 async function claimGrants() {
   if (!uid) return;
+  // first sweep any offline-redeemed codes into server bindings — runs before
+  // the early return below so an empty grant queue can't starve it
+  bindRedeemed();
   try {
     const res = await invoke("claim_grants", { uid });
     const grants = JSON.parse(res);
@@ -2024,6 +2052,11 @@ invoke("load_state").then((txt) => {
   seen = !!s.seen;
   hintsSeen = s.hints || {};
   if (Array.isArray(s.redeemed)) redeemed = s.redeemed;
+  if (Array.isArray(s.redeemedBound)) redeemedBound = s.redeemedBound.filter((c) => redeemed.includes(c));
+  // older saves can't prove a code was server-bound (the offline fallback
+  // already shipped) — leave them unbound so the sweep re-posts once; an
+  // already-bound code just returns a grant we discard
+  else redeemedBound = [];
   if (typeof s.uid === "string" && /^JP[A-Z2-7]{24}$/.test(s.uid)) uid = s.uid;
   if (Array.isArray(s.claimed)) claimedNonces = s.claimed.slice(-300);
   ensureUid();
@@ -2139,7 +2172,7 @@ function persist() {
       muted, vol, sizeMul, seen, savedAt: Date.now(),
       reduceMotion, treatKind, stats, volStep, pomo, dexMile,
       lastDaily, dailyStreak, lastWeekly, pomoFocusMin, pomoBreakMin,
-      redeemed, uid, claimed: claimedNonces,
+      redeemed, redeemedBound, uid, claimed: claimedNonces,
       panelPos, petHome, weatherOn, bootOn, lastSelfie, hints: hintsSeen,
       props: { bowl: bowl ? { x: bowl.x, y: bowl.y, fill: bowl.fill ?? 2 } : null, cushion: cushion ? { x: cushion.x, y: cushion.y } : null, box: box ? { x: box.x, y: box.y } : null, plant: plant ? { x: plant.x, y: plant.y } : null, music: music ? { x: music.x, y: music.y } : null, mirror: mirror ? { x: mirror.x, y: mirror.y } : null, mat: mat ? { x: mat.x, y: mat.y } : null, jar: jar ? { x: jar.x, y: jar.y, fill: jar.fill ?? 2 } : null },
       bond, lastEgg, fab: [fabX, fabY],
@@ -5943,7 +5976,7 @@ setInterval(() => {
   // pomodoro phases flip on wall-clock time
   if (pomo && Date.now() > pomoUntil) {
     pomoPhase = pomoPhase === "focus" ? "break" : "focus";
-    pomoLen = (pomoPhase === "focus" ? 25 : 5) * 60000;
+    pomoLen = (pomoPhase === "focus" ? pomoFocusMin : pomoBreakMin) * 60000;
     pomoUntil = Date.now() + pomoLen;
     bangs.push({ x: petX, y: petY - 100, life: 2, t: pomoPhase === "focus" ? "FOCUS!" : "BREAK!" });
     if (pomoPhase === "focus") sfx.heart(); else sfx.reveal();

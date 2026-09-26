@@ -389,8 +389,11 @@ fn verify_grant(v: &serde_json::Value, uid: &str) -> Result<(String, u64), Strin
 // Err("offline") means the server never answered — the caller may fall back
 // to offline verification; any other Err is a real refusal (e.g. a code
 // already claimed by a different uid) and must NOT fall back.
+// async so curl's up-to-8s block lands on a runtime worker, not the event
+// loop — a sync command here froze set_clickable/set_dragging dispatch and
+// made the overlay briefly eat clicks on a slow/flaky network
 #[tauri::command]
-fn redeem_bound(uid: String, code: String) -> Result<u64, String> {
+async fn redeem_bound(uid: String, code: String) -> Result<u64, String> {
     if SERVER_URL.is_empty() {
         return Err("offline".into());
     }
@@ -408,7 +411,7 @@ fn redeem_bound(uid: String, code: String) -> Result<u64, String> {
 // frontend to credit then ack (ack loss is safe: grants resend, and the
 // client dedupes by nonce)
 #[tauri::command]
-fn claim_grants(uid: String) -> Result<String, String> {
+async fn claim_grants(uid: String) -> Result<String, String> {
     if SERVER_URL.is_empty() {
         return Ok("[]".into());
     }
@@ -427,7 +430,7 @@ fn claim_grants(uid: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn ack_grants(uid: String, nonces: Vec<String>) -> Result<(), String> {
+async fn ack_grants(uid: String, nonces: Vec<String>) -> Result<(), String> {
     if SERVER_URL.is_empty() {
         return Ok(());
     }
@@ -437,7 +440,7 @@ fn ack_grants(uid: String, nonces: Vec<String>) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn check_update(url: String) -> Result<String, String> {
+async fn check_update(url: String) -> Result<String, String> {
     // version probe — fetches a tiny text file (e.g. "0.2.1") hosted next to
     // the itch page. curl.exe ships with Windows 10+, so no http crate needed
     if !url.starts_with("https://") {
@@ -469,7 +472,7 @@ fn curl_get(url: &str, max_secs: &str) -> Option<String> {
 }
 
 #[tauri::command]
-fn get_weather() -> Option<i64> {
+async fn get_weather() -> Option<i64> {
     // local weather for cosmetic reactions (umbrella, snowflakes).
     // ipapi.co gives coarse lat/lon over https; open-meteo needs no key.
     let geo = curl_get("https://ipapi.co/json/", "5")?;
