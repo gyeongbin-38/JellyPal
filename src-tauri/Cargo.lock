@@ -2074,7 +2074,7 @@ dependencies = [
 
 [[package]]
 name = "jellypal"
-version = "0.2.15"
+version = "0.2.16"
 dependencies = [
  "active-win-pos-rs",
  "core-foundation 0.10.1",

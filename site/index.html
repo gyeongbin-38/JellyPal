@@ -248,7 +248,7 @@
       <a href="#jelly">Jelly</a>
       <a href="#qa">Questions</a>
       <a href="https://github.com/gyeongbin-38/JellyPal">GitHub</a>
-      <a class="navdl jp-button jp-button--small jp-button--secondary" href="dl/Jellypal_0.2.15_x64-setup.exe">Download</a>
+      <a class="navdl jp-button jp-button--small jp-button--secondary" href="dl/Jellypal_0.2.16_x64-setup.exe">Download</a>
     </nav>
   </div>
 
@@ -260,9 +260,9 @@
       then spend it on new species, hybrids and accessories.
       That one on the right is the real sprite — go on, boop it.</p>
       <div class="cta">
-        <a class="jp-button jp-button--primary" href="dl/Jellypal_0.2.15_x64-setup.exe">Download for Windows</a>
-        <a class="jp-button jp-button--quiet" href="dl/jellypal-0.2.15-win.zip">portable zip</a>
-        <a class="jp-button jp-button--quiet" href="dl/Jellypal_0.2.15_aarch64.dmg">macOS (Apple Silicon)</a>
+        <a class="jp-button jp-button--primary" href="dl/Jellypal_0.2.16_x64-setup.exe">Download for Windows</a>
+        <a class="jp-button jp-button--quiet" href="dl/jellypal-0.2.16-win.zip">portable zip</a>
+        <a class="jp-button jp-button--quiet" href="dl/Jellypal_0.2.16_aarch64.dmg">macOS (Apple Silicon)</a>
       </div>
       <div class="jp-meta" role="list" aria-label="Download details">
         <span class="jp-chip" role="listitem">Windows 10/11</span>
@@ -364,6 +364,10 @@
         <div class="jp-info-card__body">Jellypal isn't code-signed (a certificate costs ~$300/yr — hard to justify
         for a $3 slime). Choose <b>More info → Run anyway</b>, and only download from
         <b>jellypal.fun</b>.</div></div>
+      <div class="jp-info-card"><div class="jp-info-card__title">Mac says "damaged"?</div>
+        <div class="jp-info-card__body">It isn't — Apple Silicon blocks unsigned apps. Copy to Applications,
+        then once in Terminal: <code>xattr -cr /Applications/Jellypal.app</code> — or install via the
+        itch app, which skips quarantine entirely.</div></div>
       <div class="jp-info-card"><div class="jp-info-card__title">Verify your download</div>
         <div class="jp-info-card__body">SHA-256, checkable with <code>certutil -hashfile</code>:<br>
         <code class="hash">setup.exe&nbsp; 3a78582152184c6fad8ed2efb9b2a37caa0f8752a871445bbb7d9fdc0e606cc0</code><br>
@@ -391,17 +395,20 @@
   <section class="recta">
     <h2 class="big"><canvas class="hico" data-ico="cushion" width="34" height="24"></canvas>Ready for a ranch of your own?</h2>
     <div class="cta" style="justify-content:center">
-      <a class="jp-button jp-button--primary" href="dl/Jellypal_0.2.15_x64-setup.exe">Download for Windows</a>
-      <a class="jp-button jp-button--quiet" href="dl/jellypal-0.2.15-win.zip">portable zip</a>
-      <a class="jp-button jp-button--quiet" href="dl/Jellypal_0.2.15_aarch64.dmg">macOS dmg</a>
+      <a class="jp-button jp-button--primary" href="dl/Jellypal_0.2.16_x64-setup.exe">Download for Windows</a>
+      <a class="jp-button jp-button--quiet" href="dl/jellypal-0.2.16-win.zip">portable zip</a>
+      <a class="jp-button jp-button--quiet" href="dl/Jellypal_0.2.16_aarch64.dmg">macOS dmg</a>
     </div>
     <div class="trust">Free to start · 1.6 MB · no account, no ads, no tracking.<br>
-    If Windows says <b>"unrecognized app"</b>, choose <b>More info → Run anyway</b> — that's normal for a small unsigned app.</div>
+    If Windows says <b>"unrecognized app"</b>, choose <b>More info → Run anyway</b> — that's normal for a small unsigned app.<br>
+    If macOS says <b>"damaged"</b>, it isn't — copy to Applications, then run once in Terminal:
+    <code style="user-select:all">xattr -cr /Applications/Jellypal.app</code> — or use the
+    <b>Fix-Jellypal.command</b> included in the dmg.</div>
   </section>
   </main>
 
   <footer>
-    <div>made with 🫠 for small computers — v0.2.15 · early release</div>
+    <div>made with 🫠 for small computers — v0.2.16 · early release</div>
     <div>
       <a href="https://github.com/gyeongbin-38/JellyPal">github</a> ·
       <a href="https://github.com/gyeongbin-38/JellyPal/releases">release notes</a> ·

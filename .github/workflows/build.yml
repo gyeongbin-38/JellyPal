@@ -30,9 +30,51 @@ jobs:
       - run: npm ci
       - uses: tauri-apps/tauri-action@v0
         with:
-          args: --bundles app,dmg
+          args: --bundles app
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # The app is unsigned, so Apple Silicon flags it "damaged" once the
+      # browser quarantine bit lands. Rebuild the dmg ourselves with a
+      # fixer script + README inside so the cure sits next to the app.
+      - name: Repack dmg with quarantine fixer
+        run: |
+          VER=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          ROOT="$RUNNER_TEMP/dmgroot"
+          OUT="src-tauri/target/release/bundle/dmg"
+          mkdir -p "$ROOT" "$OUT"
+          tar -xzf "src-tauri/target/release/bundle/macos/Jellypal.app.tar.gz" -C "$ROOT"
+          ln -s /Applications "$ROOT/Applications"
+          cat > "$ROOT/Fix-Jellypal.command" <<'EOF'
+          #!/bin/sh
+          # Jellypal is unsigned — macOS quarantines browser downloads and
+          # reports the app "damaged". This strips the quarantine flag.
+          APP="/Applications/Jellypal.app"
+          [ -d "$APP" ] || APP="$HOME/Applications/Jellypal.app"
+          if [ -d "$APP" ]; then
+            xattr -dr com.apple.quarantine "$APP" 2>/dev/null
+            echo "Fixed — opening Jellypal."
+            open "$APP"
+          else
+            echo "Drag Jellypal.app to Applications first, then run me again."
+          fi
+          read -n1 -s -r -p "Press any key to close"
+          EOF
+          chmod +x "$ROOT/Fix-Jellypal.command"
+          cat > "$ROOT/README FIRST.txt" <<'EOF'
+          Jellypal — macOS install
+
+          1. Drag Jellypal.app onto the Applications shortcut.
+          2. macOS may say the app is "damaged" — it isn't; the app is
+             unsigned and Apple Silicon refuses quarantined unsigned apps.
+             Either double-click "Fix-Jellypal.command" (right-click ->
+             Open if needed), or run this once in Terminal:
+
+               xattr -cr /Applications/Jellypal.app
+
+          3. Open Jellypal. It lives on your desktop.
+          EOF
+          hdiutil create -volname Jellypal -srcfolder "$ROOT" -ov -format UDZO \
+            "$OUT/Jellypal_${VER}_aarch64.dmg"
       - uses: actions/upload-artifact@v4
         with:
           name: jellypal-macos
