@@ -1,11 +1,11 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Jellypal ??a tiny slime that lives on your screen</title>
+<title>Jellypal — a tiny slime that lives on your screen</title>
 <meta name="description" content="A cute pixel-art slime companion for your Windows desktop. It naps on your windows, eats keystrokes, and squirts out jelly you spend on new species.">
-<meta property="og:title" content="Jellypal ??a tiny slime that lives on your screen">
+<meta property="og:title" content="Jellypal — a tiny slime that lives on your screen">
 <meta property="og:description" content="A cute pixel-art slime companion for your Windows desktop. Feed it keystrokes, collect 48+ species, breed hybrids.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://jellypal.fun">
@@ -48,7 +48,7 @@
   .bar nav a:hover { text-decoration: none; box-shadow: 0 2px 0 var(--jelly), 0 4px 0 var(--jelly-shadow); }
 
   /* ---------- pixel world ---------- */
-  /* pixel divider ??stepped pixel row between sections */
+  /* pixel divider — stepped pixel row between sections */
   .pxsep { display: flex; gap: 6px; align-items: center; padding: 10px 0 0; }
   .pxsep i { width: 8px; height: 8px; background: var(--edge); }
   .pxsep i:nth-child(3n+1) { background: var(--jelly-shadow); }
@@ -258,7 +258,7 @@
       <h1>A tiny <span class="squish">slime</span> that lives on your Windows desktop.</h1>
       <p class="sub">Jellypal is a desktop pet that snacks on your typing. Earn jelly,
       then spend it on new species, hybrids and accessories.
-      That one on the right is the real sprite ??go on, boop it.</p>
+      That one on the right is the real sprite — go on, boop it.</p>
       <div class="cta">
         <a class="jp-button jp-button--primary" href="dl/Jellypal_0.2.14_x64-setup.exe">Download for Windows</a>
         <a class="jp-button jp-button--quiet" href="dl/jellypal-0.2.14-win.zip">portable zip</a>
@@ -270,15 +270,15 @@
         <span class="jp-chip" role="listitem">Only 1.7 MB</span>
         <span class="jp-chip" role="listitem">No account</span>
       </div>
-      <div class="sys">First run? Windows may warn ??<b style="color:var(--ink)">More info ??Run anyway</b>. It's a plain local app.</div>
+      <div class="sys">First run? Windows may warn — <b style="color:var(--ink)">More info → Run anyway</b>. It's a plain local app.</div>
     </div>
     <div class="stage">
       <div class="frame jp-window pxframe">
         <div class="titlebar jp-window__bar"><i class="dot jp-window__dot"></i><i class="dot jp-window__dot"></i><i class="dot jp-window__dot"></i><span class="jp-window__title">ranch</span><span class="jp-window__status">live</span></div>
-        <canvas id="ranch" width="640" height="300" role="button" tabindex="0" aria-label="A live jelly slime on a night ranch. It watches your cursor ??press Enter or click to boop it, drag to pick it up, or just type anywhere."></canvas>
+        <canvas id="ranch" width="640" height="300" role="button" tabindex="0" aria-label="A live jelly slime on a night ranch. It watches your cursor — press Enter or click to boop it, drag to pick it up, or just type anywhere."></canvas>
       </div>
-      <div class="cap">browser preview ??same sprite and behavior as the app.<br>
-      boop it, pick it up, or just type: it snacks on keystrokes <i>(counted, never read ??nothing leaves this page)</i>.
+      <div class="cap">browser preview — same sprite and behavior as the app.<br>
+      boop it, pick it up, or just type: it snacks on keystrokes <i>(counted, never read — nothing leaves this page)</i>.
       <button id="mot" type="button" aria-pressed="false">pause motion</button></div>
     </div>
   </section>
@@ -289,14 +289,14 @@
       <h2 class="jp-heading"><canvas class="hico" data-ico="jelly" width="24" height="24"></canvas>You type. It eats.<br>Out pops jelly.</h2>
     </div>
     <p class="jp-lede">
-      The thing you were doing anyway is the gameplay loop ??no grind, no ads.
+      The thing you were doing anyway is the gameplay loop — no grind, no ads.
       Try it above: type anywhere on this page and watch the counter.
     </p>
     <div class="loop">
-      <div class="lstep jp-card jp-card--lift"><div class="keycap">A</div><div class="lt">you type</div><div class="ld">work, chat, game ??every key counts</div></div>
-      <div class="larrow">??/div>
-      <div class="lstep jp-card jp-card--lift"><canvas class="lico" width="52" height="40" data-lico="jelly"></canvas><div class="lt">600 keys = 1 jelly</div><div class="ld">a few minutes of typing 쨌 active legendary? every 300</div></div>
-      <div class="larrow">??/div>
+      <div class="lstep jp-card jp-card--lift"><div class="keycap">A</div><div class="lt">you type</div><div class="ld">work, chat, game — every key counts</div></div>
+      <div class="larrow">▶</div>
+      <div class="lstep jp-card jp-card--lift"><canvas class="lico" width="52" height="40" data-lico="jelly"></canvas><div class="lt">600 keys = 1 jelly</div><div class="ld">a few minutes of typing · active legendary? every 300</div></div>
+      <div class="larrow">▶</div>
       <div class="lstep jp-card jp-card--lift"><canvas class="lico" width="52" height="40" data-lico="pal"></canvas><div class="lt">jelly = new friends</div><div class="ld">pull species, breed hybrids, dress them up</div></div>
     </div>
   </section>
@@ -314,7 +314,7 @@
       <button data-r="3" type="button">LEGEND</button>
     </div>
     <div class="dex" id="dex" role="region" aria-label="Species catalog"></div>
-    <button id="dexmore" type="button">show all 48 species ??/button>
+    <button id="dexmore" type="button">show all 48 species ▾</button>
   </section>
 
   <div class="pxsep" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
@@ -325,27 +325,27 @@
       <h2 class="jp-heading"><canvas class="hico" data-ico="jar" width="26" height="24"></canvas>Jelly, for the impatient collector.</h2>
     </div>
     <p class="jp-lede">
-      Everything is earnable free by typing ??packs just skip the wait.
+      Everything is earnable free by typing — packs just skip the wait.
       Pay once on Stripe and the jelly lands in your app automatically.
       No codes to type, no account to make.
     </p>
     <div class="myid jp-card">
       <div class="myidl">
         <label class="myidt" for="myid">your MY&nbsp;ID</label>
-        <div class="myidh">in the app: settings ??MY&nbsp;ID ??tap to copy</div>
+        <div class="myidh">in the app: settings → MY&nbsp;ID → tap to copy</div>
       </div>
       <input id="myid" name="myid" type="text" inputmode="latin" autocomplete="off" spellcheck="false"
         maxlength="26" placeholder="JPXXXXXXXXXXXXXXXXXXXXXXXX" aria-describedby="myidhint">
     </div>
     <div class="pack-row" style="margin-top:22px">
-      <div class="pack jp-card jp-card--lift dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">250 <small>JELLY</small></div><div class="usd">$1.00 쨌 ?? pulls</div><a class="packbuy jp-button jp-button--small jp-button--secondary" data-pack="A">buy 쨌 $1.00</a></div>
-      <div class="pack jp-card jp-card--lift dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">500 <small>JELLY</small></div><div class="usd">$1.79 쨌 ??0 pulls</div><a class="packbuy jp-button jp-button--small jp-button--secondary" data-pack="B">buy 쨌 $1.79</a></div>
-      <div class="pack best jp-card jp-card--lift dither"><div class="jp-badge jp-badge--gold flag">best value</div><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">1000 <small>JELLY</small></div><div class="usd">$2.99 쨌 ??0 pulls</div><a class="packbuy jp-button jp-button--small jp-button--primary" data-pack="C">buy 쨌 $2.99</a></div>
-      <div class="pack jp-card jp-card--lift dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">2500 <small>JELLY</small></div><div class="usd">$5.99 쨌 ??0 pulls</div><a class="packbuy jp-button jp-button--small jp-button--secondary" data-pack="D">buy 쨌 $5.99</a></div>
+      <div class="pack jp-card jp-card--lift dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">250 <small>JELLY</small></div><div class="usd">$1.00 · ≈5 pulls</div><a class="packbuy jp-button jp-button--small jp-button--secondary" data-pack="A">buy · $1.00</a></div>
+      <div class="pack jp-card jp-card--lift dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">500 <small>JELLY</small></div><div class="usd">$1.79 · ≈10 pulls</div><a class="packbuy jp-button jp-button--small jp-button--secondary" data-pack="B">buy · $1.79</a></div>
+      <div class="pack best jp-card jp-card--lift dither"><div class="jp-badge jp-badge--gold flag">best value</div><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">1000 <small>JELLY</small></div><div class="usd">$2.99 · ≈20 pulls</div><a class="packbuy jp-button jp-button--small jp-button--primary" data-pack="C">buy · $2.99</a></div>
+      <div class="pack jp-card jp-card--lift dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">2500 <small>JELLY</small></div><div class="usd">$5.99 · ≈50 pulls</div><a class="packbuy jp-button jp-button--small jp-button--secondary" data-pack="D">buy · $5.99</a></div>
     </div>
     <div class="note" id="myidhint">One-time purchase, not a subscription. Paste your <b>MY&nbsp;ID</b> above,
-    then check out ??Stripe sends the jelly to that install (usually within a minute; open the app and it arrives).
-    Pulls cost 50 jelly 쨌 breeds cost 20 쨌 premium accessories 800??400 ??and every drop is earnable free by typing.</div>
+    then check out — Stripe sends the jelly to that install (usually within a minute; open the app and it arrives).
+    Pulls cost 50 jelly · breeds cost 20 · premium accessories 800–1400 — and every drop is earnable free by typing.</div>
   </section>
 
   <section class="safe" id="safe">
@@ -355,14 +355,14 @@
     </div>
     <div class="qa-grid" style="margin-top:26px">
       <div class="jp-info-card"><div class="jp-info-card__title">Tiny by design</div>
-        <div class="jp-info-card__body">1.6 MB installer 쨌 2.1 MB zip. It sips CPU and sleeps when you do ??
+        <div class="jp-info-card__body">1.6 MB installer · 2.1 MB zip. It sips CPU and sleeps when you do —
         built for small laptops.</div></div>
       <div class="jp-info-card"><div class="jp-info-card__title">Your typing stays yours</div>
-        <div class="jp-info-card__body">Keystrokes are <b>counted, never read</b> ??the app can't see what you type.
+        <div class="jp-info-card__body">Keystrokes are <b>counted, never read</b> — the app can't see what you type.
         The only network call is redeeming a jelly code. No account, no ads, no tracking.</div></div>
       <div class="jp-info-card"><div class="jp-info-card__title">Why does Windows warn?</div>
-        <div class="jp-info-card__body">Jellypal isn't code-signed (a certificate costs ~$300/yr ??hard to justify
-        for a $3 slime). Choose <b>More info ??Run anyway</b>, and only download from
+        <div class="jp-info-card__body">Jellypal isn't code-signed (a certificate costs ~$300/yr — hard to justify
+        for a $3 slime). Choose <b>More info → Run anyway</b>, and only download from
         <b>jellypal.fun</b>.</div></div>
       <div class="jp-info-card"><div class="jp-info-card__title">Verify your download</div>
         <div class="jp-info-card__body">SHA-256, checkable with <code>certutil -hashfile</code>:<br>
@@ -378,12 +378,12 @@
       <h2 class="jp-heading"><canvas class="hico" data-ico="mirror" width="22" height="26"></canvas>Quick questions</h2>
     </div>
     <div class="qa-grid" style="margin-top:26px">
-      <details class="jp-disclosure" open><summary>Windows says "unrecognized app"?</summary><div class="jp-disclosure__body">Normal for a small unsigned app ??choose <b>More info ??Run anyway</b>. Jellypal is a plain local app. No ads, no tracking, no account.</div></details>
+      <details class="jp-disclosure" open><summary>Windows says "unrecognized app"?</summary><div class="jp-disclosure__body">Normal for a small unsigned app — choose <b>More info → Run anyway</b>. Jellypal is a plain local app. No ads, no tracking, no account.</div></details>
       <details class="jp-disclosure"><summary>Installer or zip?</summary><div class="jp-disclosure__body">The installer puts it in C:\Jellypal and bundles WebView2. The zip runs from anywhere but needs Edge WebView2 already installed (most Windows 11 PCs have it).</div></details>
-      <details class="jp-disclosure"><summary>Will it slow my laptop?</summary><div class="jp-disclosure__body">It's a ~2 MB app built for small machines ??it sips CPU and sleeps when you do.</div></details>
-      <details class="jp-disclosure"><summary>Does it record what I type?</summary><div class="jp-disclosure__body">No ??it counts keystrokes, it can't read them. What you type never leaves your PC.</div></details>
+      <details class="jp-disclosure"><summary>Will it slow my laptop?</summary><div class="jp-disclosure__body">It's a ~2 MB app built for small machines — it sips CPU and sleeps when you do.</div></details>
+      <details class="jp-disclosure"><summary>Does it record what I type?</summary><div class="jp-disclosure__body">No — it counts keystrokes, it can't read them. What you type never leaves your PC.</div></details>
       <details class="jp-disclosure"><summary>Does it need internet?</summary><div class="jp-disclosure__body">Only when you redeem a jelly code. Everything else runs fully offline.</div></details>
-      <details class="jp-disclosure"><summary>How do I uninstall?</summary><div class="jp-disclosure__body">Installer: remove it from Windows Settings ??Apps. Zip: delete the folder. Your save lives in the app's data folder and goes with it.</div></details>
+      <details class="jp-disclosure"><summary>How do I uninstall?</summary><div class="jp-disclosure__body">Installer: remove it from Windows Settings → Apps. Zip: delete the folder. Your save lives in the app's data folder and goes with it.</div></details>
       <details class="jp-disclosure"><summary>Mac version?</summary><div class="jp-disclosure__body">In the works. Windows first.</div></details>
     </div>
   </section>
@@ -395,16 +395,16 @@
       <a class="jp-button jp-button--quiet" href="dl/jellypal-0.2.14-win.zip">portable zip</a>
       <a class="jp-button jp-button--quiet" href="dl/Jellypal_0.2.14_aarch64.dmg">macOS dmg</a>
     </div>
-    <div class="trust">Free to start 쨌 1.6 MB 쨌 no account, no ads, no tracking.<br>
-    If Windows says <b>"unrecognized app"</b>, choose <b>More info ??Run anyway</b> ??that's normal for a small unsigned app.</div>
+    <div class="trust">Free to start · 1.6 MB · no account, no ads, no tracking.<br>
+    If Windows says <b>"unrecognized app"</b>, choose <b>More info → Run anyway</b> — that's normal for a small unsigned app.</div>
   </section>
   </main>
 
   <footer>
-    <div>made with ?쳽 for small computers ??v0.2.14 쨌 early release</div>
+    <div>made with 🫠 for small computers — v0.2.14 · early release</div>
     <div>
-      <a href="https://github.com/gyeongbin-38/JellyPal">github</a> 쨌
-      <a href="https://github.com/gyeongbin-38/JellyPal/releases">release notes</a> 쨌
+      <a href="https://github.com/gyeongbin-38/JellyPal">github</a> ·
+      <a href="https://github.com/gyeongbin-38/JellyPal/releases">release notes</a> ·
       <a href="https://github.com/gyeongbin-38/JellyPal/issues">report a bug</a>
     </div>
   </footer>
@@ -427,7 +427,7 @@ const PAY_LINKS = { A: "", B: "", C: "", D: "" };
   const myId = () => input.value.trim().toUpperCase();
   const defaultNote = note.innerHTML;
   btns.forEach((b) => (b.dataset.lbl = b.textContent));
-  /* any provider's checkout link works ??MY ID rides in whichever
+  /* any provider's checkout link works — MY ID rides in whichever
      passthrough param that provider echoes back to our webhook */
   const liveLink = (l) => /^https:\/\/\S+\.\S+/.test(l || "");
   const withUid = (u, v) => {
@@ -452,7 +452,7 @@ const PAY_LINKS = { A: "", B: "", C: "", D: "" };
         b.removeAttribute("aria-disabled");
       } else {
         b.removeAttribute("href");
-        b.textContent = live ? b.dataset.lbl : "checkout ??soon";
+        b.textContent = live ? b.dataset.lbl : "checkout — soon";
         b.setAttribute("aria-disabled", "true");
       }
     });
@@ -461,12 +461,12 @@ const PAY_LINKS = { A: "", B: "", C: "", D: "" };
   input.addEventListener("paste", () => setTimeout(refresh));
 
   btns.forEach((b) => b.addEventListener("click", (e) => {
-    if (b.href) return; /* valid link ??let it navigate */
+    if (b.href) return; /* valid link — let it navigate */
     e.preventDefault();
     if (!liveLink(PAY_LINKS[b.dataset.pack])) return;
     input.classList.add("bad"); input.focus();
     note.classList.add("bad");
-    note.innerHTML = "paste your <b>MY&nbsp;ID</b> first ??it's how the jelly finds your app. (in the app: settings ??MY&nbsp;ID ??tap to copy)";
+    note.innerHTML = "paste your <b>MY&nbsp;ID</b> first — it's how the jelly finds your app. (in the app: settings → MY&nbsp;ID → tap to copy)";
     setTimeout(() => { note.classList.remove("bad"); note.innerHTML = defaultNote; }, 6000);
   }));
   refresh();
