@@ -397,7 +397,7 @@ const FLAVOR = {
   hyb: "BORN RIGHT ON THIS DESKTOP|ONE OF A KIND",
 };
 
-const APP_VER = "0.2.13"; // keep in sync with tauri.conf.json version
+const APP_VER = "0.2.14"; // keep in sync with tauri.conf.json version
 
 // species -> personality assignment (hybrids inherit one parent's)
 const PSY_ASSIGN = {
@@ -2174,7 +2174,7 @@ function checkDex() {
 
 function persist() {
   dirty = false;
-  invoke("save_state", {
+  return invoke("save_state", {
     json: JSON.stringify({
       ver: 2, xp, x: petX, jelly, owned, active: SPECIES[active].id,
       pityRare, pityLeg, hybSeq, accOwned, accEquip, breedReadyAt,
@@ -3182,6 +3182,49 @@ listen("platforms", (e) => {
       }
     }
   }
+  // furniture and eggs ride the same scan: a prop anchored to a window
+  // that closed or moved would hover at its old height forever — and a
+  // pointercancel mid-drag leaves the prop parked at the cursor with a
+  // stale plat ref. re-seat anything whose deck is gone or whose y no
+  // longer matches its deck onto whatever platform is underneath it now
+  const propMap = { bowl, cushion, box, plant, music, mirror, mat, jar };
+  for (const k in propMap) {
+    const p = propMap[k];
+    if (!p || k === propHeld) continue;
+    const dead = !p.plat || (!plats.includes(p.plat) && !monPlats.includes(p.plat));
+    if (!dead && Math.abs(p.plat.y - p.y) < 6) continue;
+    // platUnder's last-ditch fallback is a fresh literal each call — park
+    // the prop on plats[0] (a monitor bottom = the floor) instead so the
+    // stored ref stays live across scans
+    const u0 = platUnder(p.x, p.y);
+    const live = plats.includes(u0) || monPlats.includes(u0) ? u0 : (plats[0] || u0);
+    p.plat = live;
+    p.y = live.y;
+    p.x = Math.max(live.x + 30, Math.min(live.x + live.w - 30, p.x));
+    dirty = true;
+  }
+  if (egg && egg.plat && !plats.includes(egg.plat) && !monPlats.includes(egg.plat)) {
+    const u0 = platUnder(egg.x, egg.y);
+    const live = plats.includes(u0) || monPlats.includes(u0) ? u0 : (plats[0] || u0);
+    egg.plat = live;
+    egg.y = live.y;
+    egg.x = Math.max(live.x + 40, Math.min(live.x + live.w - 40, egg.x));
+    dirty = true;
+  }
+  // landed snacks/treats keep only a y coordinate, no plat ref — if the
+  // shelf under them vanished, slide them down to the live surface too
+  for (const p of [snack, treat]) {
+    if (!p) continue;
+    if (!plats.some((q) => Math.abs(q.y - p.y) < 8 && p.x > q.x - 8 && p.x < q.x + q.w + 8))
+      p.y = platUnder(p.x, p.y).y;
+  }
+});
+
+// tray Quit asks us to flush first — persist, then quit_app. a wedged
+// save is capped so the exit can't hang (rust force-exits at 2s anyway)
+listen("quit-request", () => {
+  Promise.race([persist().catch(() => {}), new Promise((r) => setTimeout(r, 1500))])
+    .then(() => invoke("quit_app"));
 });
 
 // ---------- cursor tracking (from backend) ----------
@@ -3460,7 +3503,12 @@ cv.addEventListener("pointerdown", (e) => {
         sfx.pop();
       }
     }
-    else if (inRow(rows[15])) { persist(); invoke("quit_app"); }
+    else if (inRow(rows[15])) {
+      // land the save before exit — a bare invoke races the write; but a
+      // wedged save must not hold the quit hostage either, hence the cap
+      Promise.race([persist().catch(() => {}), new Promise((r) => setTimeout(r, 1500))])
+        .then(() => invoke("quit_app"));
+    }
     else if (mx < px || mx > px + pw || my < py || my > py + ph) settingsOpen = false;
     return;
   }
@@ -4043,10 +4091,14 @@ cv.addEventListener("pointercancel", () => {
   if (propHeld) { propHeld = null; invoke("set_dragging", { on: false }); }
   if (ballHeld) { ballHeld = false; invoke("set_dragging", { on: false }); }
   if (palHeld) { palHeld = null; invoke("set_dragging", { on: false }); }
-  if (!held) return;
+  if (!held) { cv.style.cursor = "default"; return; } // a cancelled pal/prop grab still lets go of the grabbing cursor
   held = false;
   heldStretch = 0;
   if (webHeld) { webHeld = false; webbing = false; }
+  // a cancelled grab drops the pet where it is — without this it hovered
+  // mid-air until the next platform scan noticed the missing floor
+  flying = true;
+  petVY = 0;
   cv.style.cursor = "default";
   invoke("set_dragging", { on: false });
 });
@@ -6012,9 +6064,10 @@ function sendClickable() {
   if (egg) rects.push([egg.x - 16, egg.y - 36, 32, 52]);      // egg is a promise, not a wall
   if (fabOpen && toyboxOpen) rects.push(toyboxStripRect()); // chooser strip
   if (awayReport) rects.push([Math.round(winW / 2 - 95), 54, 190, 78]);
-  if (treatAim || infoPick !== null || albumOpen || redeemMode) rects.push([0, 0, winW, winH]);
-  if (settingsOpen) rects.push(settingsRect());
-  if (gemShop) rects.push(gemShopRect());
+  // canvas modals capture the whole window — outside clicks must reach the
+  // dismiss handlers below instead of falling through to the desktop (where
+  // they'd silently click whatever app sits underneath)
+  if (treatAim || infoPick !== null || albumOpen || redeemMode || settingsOpen || gemShop) rects.push([0, 0, winW, winH]);
   if (ranchOpen) rects.push([ranch.offsetLeft, ranch.offsetTop, ranch.offsetWidth, ranch.offsetHeight]);
   if (nurseryOpen) rects.push([nursery.offsetLeft, nursery.offsetTop, nursery.offsetWidth, nursery.offsetHeight]);
   if (cardTarget) rects.push([cardEl.offsetLeft, cardEl.offsetTop, cardEl.offsetWidth, cardEl.offsetHeight]);
@@ -6150,6 +6203,7 @@ function frame(now) {
     // 20s of uninterrupted hold is longer than any real gesture here
     if ((held || palHeld || ballHeld || propHeld || fabDrag || volDrag) && grabT0 && now - grabT0 > 20000) {
       try { invoke("log_crash", { msg: `GRAB-STUCK held=${held} pal=${!!palHeld} ball=${ballHeld} prop=${propHeld} fab=${!!fabDrag} vol=${!!volDrag}` }); } catch {}
+      if (held) { flying = true; petVY = 0; } // a force-released pet falls, not hovers
       held = false; palHeld = null; ballHeld = false; propHeld = null; fabDrag = null; volDrag = null;
       cv.style.cursor = "default";
       try { invoke("set_dragging", { on: false }); } catch {}

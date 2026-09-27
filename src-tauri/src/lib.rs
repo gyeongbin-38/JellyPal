@@ -1152,7 +1152,18 @@ pub fn run() {
                     "summon" => {
                         app.emit("summon", ()).ok();
                     }
-                    "quit" => app.exit(0),
+                    // ask the frontend to flush its save first — the JS
+                    // listener persists then invokes quit_app. the watchdog
+                    // still force-exits so a wedged webview can't make Quit
+                    // look broken
+                    "quit" => {
+                        app.emit("quit-request", ()).ok();
+                        let app2 = app.clone();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(std::time::Duration::from_millis(2000));
+                            app2.exit(0);
+                        });
+                    }
                     _ => {}
                 })
                 .build(app)?;
