@@ -365,14 +365,16 @@
         for a $3 slime). Choose <b>More info → Run anyway</b>, and only download from
         <b>jellypal.fun</b>.</div></div>
       <div class="jp-info-card"><div class="jp-info-card__title">Mac says "damaged"?</div>
-        <div class="jp-info-card__body">It isn't — Apple Silicon blocks unsigned apps. Copy to Applications,
-        then once in Terminal: <code>xattr -cr /Applications/Jellypal.app</code> — or install via the
-        itch app, which skips quarantine entirely.</div></div>
+        <div class="jp-info-card__body">It isn't — Apple Silicon blocks unsigned <b>browser</b> downloads.
+        The Terminal install command above never trips it. Already got the dmg? Run the
+        <b>Fix-Jellypal.command</b> inside, or once in Terminal:
+        <code>xattr -cr /Applications/Jellypal.app</code></div></div>
       <div class="jp-info-card"><div class="jp-info-card__title">Verify your download</div>
         <div class="jp-info-card__body">SHA-256, checkable with <code>certutil -hashfile</code>:<br>
         <code class="hash">setup.exe&nbsp; 1eee42e838674087565b80142cba7ed631ee7d1d413ccc1846d8c722f781c8d5</code><br>
         <code class="hash">win.zip&nbsp;&nbsp;&nbsp; 4555697d631ef2386250c30a9472c3eea2e92b50200ab03a71b8e6b50cbfc93d</code><br>
-        <code class="hash">mac.dmg&nbsp;&nbsp;&nbsp; 334a456beff4639e1f0996c60ae13518c250519a4aa86de435c377ce9a174577</code></div></div>
+        <code class="hash">mac.dmg&nbsp;&nbsp;&nbsp; 334a456beff4639e1f0996c60ae13518c250519a4aa86de435c377ce9a174577</code><br>
+        <code class="hash">mac.tgz&nbsp;&nbsp;&nbsp; 5bb02f5d5ff2bcfcb32c18f88e416d99b1c36003b09d268805a6afa95e55df61</code></div></div>
     </div>
   </section>
 
@@ -401,9 +403,9 @@
     </div>
     <div class="trust">Free to start · 1.6 MB · no account, no ads, no tracking.<br>
     If Windows says <b>"unrecognized app"</b>, choose <b>More info → Run anyway</b> — that's normal for a small unsigned app.<br>
-    If macOS says <b>"damaged"</b>, it isn't — copy to Applications, then run once in Terminal:
-    <code style="user-select:all">xattr -cr /Applications/Jellypal.app</code> — or use the
-    <b>Fix-Jellypal.command</b> included in the dmg.</div>
+    <b>Mac, zero warnings:</b> paste this in Terminal —
+    <code style="user-select:all">curl -L https://jellypal.fun/dl/jellypal-0.2.16-mac.tar.gz | tar xz -C /Applications &amp;&amp; open /Applications/Jellypal.app</code><br>
+    — or grab the dmg and open the <b>Fix-Jellypal.command</b> inside it if macOS calls it "damaged" (it isn't — it's just unsigned).</div>
   </section>
   </main>
 
