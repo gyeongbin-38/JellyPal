@@ -26,19 +26,24 @@ JP_API=https://<worker> JP_ADMIN=<key> node grant.cjs JP<uid> B
 ```
 The app polls `/claim` on launch + every 10 min.
 
-**Stripe auto-delivery:** create a Payment Link per pack, give buyers the URL
-as `https://buy.stripe.com/<link>?client_reference_id=` + their MY ID, add a
-webhook to `<worker>/stripe` for `checkout.session.completed`, and set
-`wrangler secret put STRIPE_WHSEC`. Pack is resolved from session metadata
-or by price: add `[vars]` lines like `PRICE_499 = "B"` (USD cents) in
-wrangler.toml.
+**Gumroad license keys (live store):** create one product per pack and turn
+on license-key generation in each product's settings. Put each product's
+permalink slug (`gumroad.com/l/<slug>`) into `GR_A..D` in wrangler.toml and
+`wrangler deploy`. Buyers paste their key into the app's REDEEM CODE box;
+`/redeem` probes each permalink via `api.gumroad.com/v2/licenses/verify`,
+consumes one license use on first redeem, binds the key hash to the buyer's
+uid hash, and returns a signed grant. Refunded/chargebacked purchases are
+refused even though Gumroad answers `success`.
+
+**Stripe auto-delivery (dormant — no Korea settlement):** the `/stripe`
+webhook + `PRICE_<cents>` vars remain wired if the region ever opens up.
 
 ## Endpoints
 
 | path | body | does |
 |---|---|---|
 | `GET /health` | – | liveness |
-| `POST /redeem` | `{uid, code}` | verify seller sig, bind code to uid hash, return signed grant |
+| `POST /redeem` | `{uid, code}` | verify seller sig **or** Gumroad license key, bind to uid hash, return signed grant |
 | `POST /claim` | `{uid}` | return pending signed grants |
 | `POST /ack` | `{uid, nonces}` | delete claimed grants |
 | `POST /admin/grant` | `x-admin-key` + `{uid, pack}` | manual grant |

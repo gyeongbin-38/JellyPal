@@ -15,3 +15,10 @@ PRICE_100 = "A"
 PRICE_179 = "B"
 PRICE_299 = "C"
 PRICE_599 = "D"
+# Gumroad product permalinks (the slug in gumroad.com/l/<slug>) per pack —
+# /redeem probes these to verify license keys. Fill after creating the
+# four pack products with license keys enabled.
+GR_A = ""
+GR_B = ""
+GR_C = ""
+GR_D = ""

@@ -83,34 +83,45 @@ Load order is `pals.js` → `ranch.js` at end of body. No bundler — plain glob
   and grep that ranch.js symbols exist in pals.js (the last rewrite shipped
   `sprite(p.spIdx)` + a nonexistent `drawPal` — an all-empty page for a day)
 
-## Payments — Stripe (wired, needs account setup)
+## Payments — Gumroad license keys (wired, needs product setup)
 
-Flow: **Stripe Payment Link** per pack → buyer's MY ID rides as
-`?client_reference_id=` → Stripe webhook `checkout.session.completed` →
-worker `POST /stripe` verifies `STRIPE_WHSEC` HMAC + dedupes `ev.id` →
-`putGrant` → app polls `/claim` → jelly lands automatically. No codes.
+Flow: **Gumroad product** per pack with "generate license keys" on →
+checkout hands the buyer a unique key → buyer pastes it in the app's
+REDEEM CODE box → worker `POST /redeem` probes `GR_A..D` permalinks via
+Gumroad `licenses/verify` → signed grant → jelly lands. No MY ID needed
+at checkout — the key itself is the purchase.
 
-- Site wiring: `PAY_LINKS = {A,B,C,D}` const in `index.html`'s inline script.
-  Buttons stay "checkout — soon" until a real `buy.stripe.com/…` link exists.
-  `#myid` input validates `JP[A-Z2-7]{24}` before checkout.
-- App wiring: `GEM_PACK_URLS` in `src/main.js` — `packUrl()` appends
-  `client_reference_id=<uid>` automatically on buy.stripe.com links.
-  `GEM_SHOP_URL` = `jellypal.fun#jelly`.
-- Worker: `PRICE_<cents>` vars in `wrangler.toml` map amount → pack
-  ($1.00→A, $1.79→B, $2.99→C, $5.99→D); `metadata.pack` also honored.
+- Site wiring: `PAY_LINKS = {A,B,C,D}` const in `index.html`'s inline
+  script. Gumroad URLs are detected (`isGumroad`) — buttons go live
+  without MY ID and the id card hides itself.
+- App wiring: `GEM_PACK_URLS` in `src/main.js` — gumroad links skip the
+  `?uid` passthrough (nothing on their side reads it). `tryRedeem()`
+  passes non-`JELLYPAL-*` input straight to `/redeem` — only the server
+  can verify a store key (offline → "SERVER BUSY — TRY AGAIN").
+- Worker: `GR_A..GR_D` vars in `wrangler.toml` hold each product's
+  permalink (the slug in `gumroad.com/l/<slug>`). Empty = gumroad off.
+  First redeem sets `increment_uses_count=true` (spent on their side);
+  a same-uid re-redeem verifies without consuming. Refunded/
+  chargebacked purchases verify `success` but are refused.
+- Legacy: seller-signed `JELLYPAL-*` codes still verify offline +
+  online; the Stripe `/stripe` webhook + `PRICE_<cents>` mapping are
+  still in the worker (dormant — Stripe can't settle to Korea).
 
 **Owner to finish** (can't be done from code):
-1. Stripe dashboard → create 4 Payment Links (250/$1.00, 500/$1.79,
-   1000/$2.99, 2500/$5.99) → paste into `PAY_LINKS` + `GEM_PACK_URLS`
-2. Dashboard → Developers → Webhooks → endpoint `https://api.jellypal.fun/stripe`,
-   event `checkout.session.completed` → copy signing secret →
-   `cd server && npx wrangler secret put STRIPE_WHSEC`
+1. gumroad.com → create 4 products (250/$1.00, 500/$1.79, 1000/$2.99,
+   2500/$5.99) → in each product's settings enable **License keys**
+   ("we generate a unique key per sale")
+2. Copy each product's permalink slug (`/l/<slug>`) into `wrangler.toml`
+   `GR_A..D` and `wrangler deploy`; paste the product URLs into
+   `PAY_LINKS` + `GEM_PACK_URLS`
 3. Rebuild the app so the shop copy/link wiring ships; update `site/dl`
    binaries + SHA-256s on the page
+4. One real $1 test purchase end-to-end before announcing
 
 ## Design backlog (what's left)
 
-1. ~~itch.io wiring~~ → replaced by Stripe (see above). `UPDATE_URL` still empty.
+1. ~~itch.io wiring~~ → replaced by Gumroad (see above). itch key-lists
+   remain a manual fallback — mint with `server/codes.cjs`.
 2. ~~Product screenshot~~ — DONE via the stylized `shot-desktop.png` (slimes on
    a mock desktop) in a `.deskshot` section + as og:image. A real Win+G capture
    would still be better when someone can grab one.

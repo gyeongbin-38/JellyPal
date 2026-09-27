@@ -207,9 +207,13 @@ Size: S < half day, M = 1-2 days, L = multi-day.
    `windows-installer` (setup exe) + `windows-portable` (zip contents,
    itch-app installable). Manual web uploads must be deleted on the edit
    page by hand — no API for that.
-1. **Code delivery flow** — NOW: Stripe Payment Links + webhook → KV grant
-   → app /claim. Links still need creating in the Stripe dashboard, then
-   paste into `GEM_PACK_URLS` (app) + `PAY_LINKS` (site).
+1. **Code delivery flow** — NOW: Gumroad products with license keys →
+   buyer pastes key in REDEEM CODE → worker verifies via Gumroad api →
+   signed grant. Needs: 4 products on gumroad.com (license keys enabled),
+   permalink slugs into `GR_A..D` in server/wrangler.toml + deploy, product
+   URLs into `GEM_PACK_URLS` (app) + `PAY_LINKS` (site), then a rebuild.
+   (Stripe was dropped — no Korea settlement; worker still keeps the
+   dormant /stripe webhook.)
 2. **Real gameplay capture** — promo.gif is synthetic; a real recorded
    clip of dangling/ranch still sells better. [S]
 3. ~~In-game shop surface~~ — DONE: GEMS row in settings, pack prices,

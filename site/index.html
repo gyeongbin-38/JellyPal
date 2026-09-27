@@ -326,8 +326,8 @@
     </div>
     <p class="jp-lede">
       Everything is earnable free by typing — packs just skip the wait.
-      Pay once on Stripe and the jelly lands in your app automatically.
-      No codes to type, no account to make.
+      Pay once on Gumroad and you get a license key on the spot —
+      paste it in the app (settings → REDEEM CODE) and the jelly lands.
     </p>
     <div class="myid jp-card">
       <div class="myidl">
@@ -343,8 +343,8 @@
       <div class="pack best jp-card jp-card--lift dither"><div class="jp-badge jp-badge--gold flag">best value</div><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">1000 <small>JELLY</small></div><div class="usd">$2.99 · ≈20 pulls</div><a class="packbuy jp-button jp-button--small jp-button--primary" data-pack="C">buy · $2.99</a></div>
       <div class="pack jp-card jp-card--lift dither"><canvas class="jellypic" width="52" height="40"></canvas><div class="amt">2500 <small>JELLY</small></div><div class="usd">$5.99 · ≈50 pulls</div><a class="packbuy jp-button jp-button--small jp-button--secondary" data-pack="D">buy · $5.99</a></div>
     </div>
-    <div class="note" id="myidhint">One-time purchase, not a subscription. Paste your <b>MY&nbsp;ID</b> above,
-    then check out — Stripe sends the jelly to that install (usually within a minute; open the app and it arrives).
+    <div class="note" id="myidhint">One-time purchase, not a subscription. After checkout Gumroad shows a
+    <b>license key</b> (and emails it to you) — in the app: settings → REDEEM CODE → paste it, and the jelly lands.
     Pulls cost 50 jelly · breeds cost 20 · premium accessories 800–1400 — and every drop is earnable free by typing.</div>
   </section>
 
@@ -414,10 +414,11 @@
 <script src="ranch.js"></script>
 <script>
 /* ---------- checkout wiring ----------
-   One hosted checkout link per pack (Paddle Payment Links, or any
-   provider). The buyer's MY ID rides along in the provider's passthrough
-   param so the webhook on api.jellypal.fun can grant jelly to that
-   install automatically. Paste the 4 links here. */
+   One hosted checkout link per pack. Gumroad links don't need MY ID —
+   checkout hands the buyer a license key they redeem in-app (the worker
+   verifies it with Gumroad's license api). Providers that grant via
+   webhook instead (Stripe, Paddle) do need the id riding in their
+   passthrough param. Paste the 4 links here. */
 const PAY_LINKS = { A: "", B: "", C: "", D: "" };
 (function () {
   const input = document.getElementById("myid");
@@ -430,12 +431,18 @@ const PAY_LINKS = { A: "", B: "", C: "", D: "" };
   /* any provider's checkout link works — MY ID rides in whichever
      passthrough param that provider echoes back to our webhook */
   const liveLink = (l) => /^https:\/\/\S+\.\S+/.test(l || "");
+  const isGumroad = (u) => /gumroad\.com|gum\.road|l\.gumroad/i.test(u || "");
+  const needsId = (u) => liveLink(u) && !isGumroad(u);
   const withUid = (u, v) => {
     const p = /buy\.stripe\.com/.test(u) ? "client_reference_id"
       : /paddle\.com/.test(u) ? "custom_data%5Buid%5D"
       : "uid";
     return `${u}${u.includes("?") ? "&" : "?"}${p}=${encodeURIComponent(v)}`;
   };
+  /* license-key checkout makes the MY ID card pointless — hide it when
+     every configured link works without one */
+  if (!Object.values(PAY_LINKS).some(needsId))
+    document.querySelector(".myid").style.display = "none";
 
   function refresh() {
     const v = myId();
@@ -444,9 +451,9 @@ const PAY_LINKS = { A: "", B: "", C: "", D: "" };
     btns.forEach((b) => {
       const link = PAY_LINKS[b.dataset.pack];
       const live = liveLink(link);
-      if (live && okId(v)) {
+      if (live && (okId(v) || isGumroad(link))) {
         /* a real href makes it a real link: tabbable, Enter-activates */
-        b.href = withUid(link, v);
+        b.href = isGumroad(link) ? link : withUid(link, v);
         b.target = "_blank"; b.rel = "noopener";
         b.textContent = b.dataset.lbl;
         b.removeAttribute("aria-disabled");

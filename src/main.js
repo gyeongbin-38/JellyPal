@@ -1652,12 +1652,18 @@ const GEM_PACKS = { A: 250, B: 500, C: 1000, D: 2500 };
 // redeem codes are Ed25519 signatures checked in the Rust binary — the
 // client ships only the public key, so unpacked exes can never mint codes
 async function tryRedeem(raw) {
-  const fmt = ("JELLYPAL" + raw.toUpperCase().replace(/^JELLYPAL-?/, "").replace(/[^A-Z2-7]/g, ""))
+  const jpFmt = ("JELLYPAL" + raw.toUpperCase().replace(/^JELLYPAL-?/, "").replace(/[^A-Z2-7]/g, ""))
     .replace(/^JELLYPAL([A-D])([A-Z2-7]{8})([A-Z2-7]+)$/, "JELLYPAL-$1-$2-$3");
+  // JELLYPAL-* codes verify locally too; anything else is a store-issued
+  // license key (Gumroad) that only the shop server can check — pass it
+  // through untouched so its dashes/spacing survive
+  const isJP = /^JELLYPAL-[A-D]-[A-Z2-7]{8}-[A-Z2-7]+$/.test(jpFmt);
+  const fmt = isJP ? jpFmt : raw.trim().toUpperCase();
+  if (!fmt) return "BAD CODE";
   if (redeemed.includes(fmt)) return "CODE USED";
-  // preferred path: the shop server verifies the seller signature and binds
-  // the code to this uid — a code already claimed by another install dies
-  // here instead of paying out again on every machine it gets pasted into
+  // preferred path: the shop server verifies the signature (or the store's
+  // license api) and binds the code to this uid — a code already claimed
+  // by another install dies here instead of paying out again
   try {
     const gems = await invoke("redeem_bound", { uid, code: fmt });
     redeemed.push(fmt);
@@ -1666,6 +1672,12 @@ async function tryRedeem(raw) {
     dirty = true;
     return `+${gems} JELLY!`;
   } catch (e) {
+    if (!isJP) {
+      // license keys have no offline path — a network failure isn't a bad
+      // code, it just couldn't be checked yet
+      return ["offline", "bad response", "server busy"].includes(e)
+        ? "SERVER BUSY — TRY AGAIN" : (e || "BAD CODE").toUpperCase();
+    }
     // fall back to the local signature check only when the server never
     // gave a real answer — a real refusal (bad/already-claimed code) is final
     if (!["offline", "bad response", "server busy"].includes(e))
@@ -1797,9 +1809,10 @@ function settingsRows() {
 // a fallback path (gift codes, support fixes).
 let gemShop = false;
 const GEM_SHOP_URL = "https://jellypal.fun#jelly"; // pack store = the site
-// per-pack checkout links (Paddle, Stripe, whatever provider lands). the
-// app appends MY ID in the provider's passthrough param so the backend
-// webhook can grant jelly straight to this install — no codes to type.
+// per-pack checkout links (Gumroad product pages, or any provider). gumroad
+// hands the buyer a license key they redeem in-app — no uid passthrough.
+// webhook-style providers (Stripe, Paddle) get MY ID in their passthrough
+// param so the backend can grant straight to this install.
 // empty = falls back to GEM_SHOP_URL.
 const GEM_PACK_URLS = { A: "", B: "", C: "", D: "" };
 const withUid = (u) => {
@@ -1808,11 +1821,15 @@ const withUid = (u) => {
   const p = /buy\.stripe\.com/.test(u) ? "client_reference_id"
     : /paddle\.com/.test(u) ? "custom_data[uid]"
     : "uid"; // generic links just get ?uid= — ignored params are harmless
-  return `${u}${u.includes("?") ? "&" : "?"}${p}=${encodeURIComponent(uid)}`;
+  const [base, frag] = u.split("#", 2);
+  const q = `${base}${base.includes("?") ? "&" : "?"}${p}=${encodeURIComponent(uid)}`;
+  return frag ? `${q}#${frag}` : q;
 };
 const packUrl = (id) => {
   const u = GEM_PACK_URLS[id] || GEM_SHOP_URL;
-  return u ? withUid(u) : "";
+  // license-key checkout (gumroad) and the plain store page take no uid
+  if (!u || /gumroad\.com|gum\.road|l\.gumroad/i.test(u) || u === GEM_SHOP_URL) return u;
+  return withUid(u);
 };
 // update probe: a tiny text file hosting the newest version string
 // (e.g. "0.2.1") — any static host works; leave empty to disable
@@ -9689,8 +9706,8 @@ function frameBody(now) {
       ctx.strokeRect(BR[0] + 0.5, BR[1] + 0.5, BR[2] - 1, BR[3] - 1);
       drawText(ctx, "BUY", BR[0] + BR[2] / 2 - textW("BUY", 1) / 2, BR[1] + 7, 1, live ? "#2f7e4e" : "#a8907a", null, true);
     }
-    drawText(ctx, "PAY ONCE - JELLY LANDS IN YOUR APP", gx + gw / 2 - textW("PAY ONCE - JELLY LANDS IN YOUR APP", 1) / 2, gy + 168, 1, "#8a6b4a");
-    drawText(ctx, "AUTO-DELIVERED TO YOUR MY ID", gx + gw / 2 - textW("AUTO-DELIVERED TO YOUR MY ID", 1) / 2, gy + 182, 1, "#a8845c");
+    drawText(ctx, "PAY ONCE - GUMROAD GIVES YOU A KEY", gx + gw / 2 - textW("PAY ONCE - GUMROAD GIVES YOU A KEY", 1) / 2, gy + 168, 1, "#8a6b4a");
+    drawText(ctx, "PASTE IT IN REDEEM CODE BELOW", gx + gw / 2 - textW("PASTE IT IN REDEEM CODE BELOW", 1) / 2, gy + 182, 1, "#a8845c");
     const rows = gemShopRows();
     const lbls = [GEM_SHOP_URL ? "STORE PAGE" : "STORE LINK TBD", "REDEEM CODE"];
     for (let i = 0; i < rows.length; i++) {
@@ -9736,7 +9753,7 @@ function drawRedeem(c, W, H, t) {
   c.strokeStyle = "#8a6b4a";
   c.lineWidth = 2;
   c.strokeRect(bx + 1, by + 1, 278, 78);
-  drawText(c, "ENTER JELLY CODE", bx + 140 - textW("ENTER JELLY CODE", 1) / 2, by + 10, 1, "#5c4632", null, true);
+  drawText(c, "ENTER LICENSE KEY", bx + 140 - textW("ENTER LICENSE KEY", 1) / 2, by + 10, 1, "#5c4632", null, true);
   c.fillStyle = "#efe0c2";
   c.fillRect(bx + 16, by + 28, 248, 22);
   c.strokeStyle = "#c9a06c";

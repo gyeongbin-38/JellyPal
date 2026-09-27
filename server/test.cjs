@@ -137,6 +137,71 @@ async function main() {
   const u = JSON.parse(store.get(uh));
   ok(u && u.codes === 2 && u.granted === 1000, `user record (codes=${u?.codes}, granted=${u?.granted})`);
 
+  console.log("gumroad license keys:");
+  // stub the worker's outbound gumroad api calls — worker.fetch() requests
+  // don't go through global fetch, only gumroadVerify() does
+  const realFetch = globalThis.fetch;
+  const calls = [];
+  let reply = { success: false, message: "not found" };
+  globalThis.fetch = async (url, opts) => {
+    const body = new URLSearchParams(opts.body);
+    calls.push({
+      permalink: body.get("product_permalink"),
+      key: body.get("license_key"),
+      consume: body.get("increment_uses_count"),
+    });
+    return { json: async () => reply };
+  };
+  env.GR_A = "jpa"; env.GR_B = "jpb"; env.GR_C = "jpc"; env.GR_D = "jpd";
+  try {
+    // valid key for pack C — gumroad answers success only for the jpc probe
+    const gkey = "AB12CD34-EF56GH78";
+    r = await post(worker, env, "/redeem", { uid: uidA, code: gkey });
+    j = await r.json();
+    ok(j.error === "bad code", "gumroad key, all probes fail -> bad code");
+    calls.length = 0;
+
+    globalThis.fetch = async (url, opts) => {
+      const body = new URLSearchParams(opts.body);
+      calls.push({ permalink: body.get("product_permalink"), key: body.get("license_key"), consume: body.get("increment_uses_count") });
+      const hit = body.get("product_permalink") === "jpc";
+      return { json: async () => hit
+        ? { success: true, uses: 1, purchase: { refunded: false, chargebacked: false } }
+        : { success: false, message: "not found" } };
+    };
+    r = await post(worker, env, "/redeem", { uid: uidA, code: gkey });
+    j = await r.json();
+    ok(j.grant && j.grant.pack === "C" && verifyGrant(j.grant, uidA), "gumroad key -> pack C grant");
+    ok(calls.some((c) => c.consume === "true"), "first redeem consumes a license use");
+
+    calls.length = 0;
+    r = await post(worker, env, "/redeem", { uid: uidB, code: gkey });
+    j = await r.json();
+    ok(j.error === "code already claimed", "bound key, other uid -> refused");
+    ok(calls.length === 0, "bound key never hits gumroad for a foreign uid");
+
+    calls.length = 0;
+    r = await post(worker, env, "/redeem", { uid: uidA, code: gkey });
+    j = await r.json();
+    ok(j.grant && verifyGrant(j.grant, uidA), "bound key, same uid -> re-grant");
+    ok(calls.length > 0 && calls.every((c) => c.consume === "false"), "re-redeem verifies without consuming");
+
+    // refunded purchase verifies but must not pay out
+    globalThis.fetch = async () => ({ json: async () => ({ success: true, purchase: { refunded: true } }) });
+    r = await post(worker, env, "/redeem", { uid: uidA, code: "REFUNDED-KEY-001" });
+    j = await r.json();
+    ok(j.error === "bad code", "refunded license -> refused");
+
+    // gumroad down -> busy, not "bad code"
+    globalThis.fetch = async () => { throw new Error("gumroad down"); };
+    r = await post(worker, env, "/redeem", { uid: uidA, code: "SOME-OTHER-KEY" });
+    j = await r.json();
+    ok(r.status === 500 && j.error === "server busy", "gumroad unreachable -> server busy, retryable");
+  } finally {
+    globalThis.fetch = realFetch;
+    delete env.GR_A; delete env.GR_B; delete env.GR_C; delete env.GR_D;
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 }

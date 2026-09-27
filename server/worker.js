@@ -99,19 +99,60 @@ async function signGrant(env, pack, nonce, uid) {
   return { pack, nonce, tag, sig: b32enc(new Uint8Array(sig)) };
 }
 
+// Gumroad license keys: each pack is a Gumroad product with license keys
+// enabled, so every sale hands the buyer a unique key. The buyer pastes it
+// in the app's redeem box; we ask Gumroad which product it unlocks by
+// probing each pack's permalink (env GR_A..GR_D — the slug in the product
+// URL gumroad.com/l/<slug>). `consume` increments the license's use count,
+// marking it spent on Gumroad's side too; a bound-key re-redeem (restore)
+// verifies without spending another use.
+async function gumroadVerify(env, key, consume) {
+  const packs = ["A", "B", "C", "D"].filter((p) => env[`GR_${p}`]);
+  if (!packs.length) return null;
+  let reached = false;
+  for (const pack of packs) {
+    let v = null;
+    try {
+      const r = await fetch("https://api.gumroad.com/v2/licenses/verify", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body:
+          `product_permalink=${encodeURIComponent(env[`GR_${pack}`])}` +
+          `&license_key=${encodeURIComponent(key)}` +
+          `&increment_uses_count=${consume ? "true" : "false"}`,
+      });
+      v = await r.json().catch(() => null);
+      reached = true;
+    } catch { /* gumroad hiccup — try the next product */ }
+    // refunded/chargebacked keys verify "success" but must not pay out
+    if (v && v.success && v.purchase && !v.purchase.refunded && !v.purchase.chargebacked)
+      return { pack, gems: GEMS[pack] };
+  }
+  // every probe failed on the network, not on the key — tell the client to
+  // retry later instead of showing "bad code"
+  if (!reached) return "busy";
+  return null;
+}
+
 async function redeem(req, env) {
   const { uid, code } = await req.json().catch(() => ({}));
   if (!UID_RE.test(uid || "") || typeof code !== "string" || code.length > 200)
     return J({ error: "bad request" }, 400);
   const uh = await uidHash(uid);
-  const v = await verifySellerCode(code.toUpperCase().trim());
-  if (!v) return J({ error: "bad code" });
-  const cKey = `code:${await sha(code.toUpperCase().trim())}`;
+  const c2 = code.toUpperCase().trim();
+  const cKey = `code:${await sha(c2)}`;
   const bound = await env.DB.get(cKey);
-  // a code is bound to one uid — that uid may re-redeem (reinstall/reset
+  // a code/key is bound to one uid — that uid may re-redeem (reinstall/reset
   // restores their purchase); any OTHER uid is stealing it
   if (bound && bound !== uh) return J({ error: "code already claimed" });
-  await env.DB.put(cKey, uh);
+  let v = await verifySellerCode(c2);
+  if (!v) {
+    const g = await gumroadVerify(env, c2, !bound);
+    if (g === "busy") return J({ error: "server busy" }, 500);
+    v = g;
+  }
+  if (!v) return J({ error: "bad code" });
+  if (!bound) await env.DB.put(cKey, uh);
   const uKey = `user:${uh}`;
   const u = (await env.DB.get(uKey, "json")) || { created: Date.now(), codes: 0, granted: 0 };
   u.codes++; u.granted += v.gems;
