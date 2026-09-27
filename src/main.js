@@ -397,7 +397,7 @@ const FLAVOR = {
   hyb: "BORN RIGHT ON THIS DESKTOP|ONE OF A KIND",
 };
 
-const APP_VER = "0.2.14"; // keep in sync with tauri.conf.json version
+const APP_VER = "0.2.15"; // keep in sync with tauri.conf.json version
 
 // species -> personality assignment (hybrids inherit one parent's)
 const PSY_ASSIGN = {
@@ -3945,6 +3945,17 @@ cv.addEventListener("pointerup", (e) => {
     ballHeld = false;
     cv.style.cursor = "default";
     invoke("set_dragging", { on: false });
+    const [mx, my] = canvasPos(e);
+    // dropped into the top slot: back in the toybox — gentle release only,
+    // so a hard fling sailing through the strip doesn't pocket it
+    if (ball && my <= 50 && Math.abs(mx - winW / 2) <= 66 && Math.hypot(ballVX, ballVY) < 250) {
+      for (let i = 0; i < 8; i++) fx.push({ x: mx + Math.random() * 20 - 10, y: my - Math.random() * 10, vx: Math.random() * 50 - 25, vy: -Math.random() * 40, life: 0.5, c: "#e8dcc8" });
+      ball = null;
+      bangs.push({ x: mx, y: 62, life: 1.2, t: "PUT AWAY" });
+      sfx.pop();
+      dirty = true;
+      return;
+    }
     if (ball) {
       const bs = Math.hypot(ballVX, ballVY);
       if (bs > 350) { ball.vx = ballVX * 0.75; ball.vy = Math.min(ballVY * 0.75, 0) - 80; }
@@ -4543,8 +4554,9 @@ let cardAccCells = []; // live hit rects, rebuilt every drawCard frame
 let cardGearCell = null; // the single gear cell on a pal card — opens the modal
 let cardAccModal = false; // accessory picker overlay inside the pal card
 const KC_CLOSE = [KW - 26, 5, 20, 20];
-// pal cards are taller — they carry the accessory gear strip
-const cardKH = () => (cardTarget === "pet" ? 224 : 254);
+// both card kinds carry the accessory gear strip — the pet card is
+// taller still since it also has the level row on top of it
+const cardKH = () => (cardTarget === "pet" ? 274 : 254);
 const cardHomeR = () => [KW - 116, cardKH() - 32, 100, 22];
 // bestiary card overlay: sits above every window, owns its clicks
 const infoEl = document.getElementById("info");
@@ -5397,11 +5409,13 @@ function drawCard(now) {
     kctx.fillRect(76, ry + 10, Math.round(160 * prog), 6);
     ry += 22;
   }
-  // gear cell (pals only): one doodad shown — the currently equipped
-  // accessory, or "-" for none. click it to open the picker modal
+  // gear cell: one doodad shown — the currently equipped accessory, or
+  // "+" for none. click it to open the picker modal. the main pet wears
+  // gear too (same-species pals share its accEquip slot), so its card
+  // gets the same row — otherwise there's no way to see or remove it
   cardAccCells = [];
   cardGearCell = null;
-  if (!isPet) {
+  {
     drawText(kctx, "GEAR", 16, ry + 4, 1, "#8a6b4a", null, true);
     const cur = accEquip[sp.id];
     const cx = 56, cy = ry - 6;
@@ -5425,7 +5439,7 @@ function drawCard(now) {
   if (!isPet) drawText(kctx, "DRAG ME", 16, cardKH() - 24, 1, "#a89478", null, true);
   // accessory picker modal: covers the card body below the header —
   // a grid of every owned doodad, current one marked, "-" unequips
-  if (cardAccModal && !isPet) {
+  if (cardAccModal) {
     const items = [null, ...accOwned];
     const cols = 6, cw = 38, chh = 28;
     const gx = 14, gy = 38;
@@ -5472,15 +5486,17 @@ kc.addEventListener("pointerdown", (e) => {
   const inR = (R) => mx >= R[0] && mx <= R[0] + R[2] && my >= R[1] && my <= R[1] + R[3];
   if (inR(KC_CLOSE)) { closeCard(); sfx.pop(); return; }
   const homeR = cardHomeR();
-  if (cardTarget === "pet" && inR(homeR)) { sendPetHome(); closeCard(); return; }
-  if (cardTarget !== "pet" && cardTarget) {
+  // pet home first — but while the picker modal is up the modal covers
+  // that area, so the click must go to the grid instead of parking it
+  if (cardTarget === "pet" && !cardAccModal && inR(homeR)) { sendPetHome(); closeCard(); return; }
+  if (cardTarget) {
     if (cardAccModal) {
-      // picker modal: click a doodad to equip it on THIS pal, "-" to
+      // picker modal: click a doodad to equip it on THIS slime, "-" to
       // unequip — any pick closes the modal back to the card
       const items2 = [null, ...accOwned];
       for (const [cx, cy, cw, ch, accId] of cardAccCells) {
         if (mx >= cx && mx <= cx + cw && my >= cy && my <= cy + ch) {
-          const sid = SPECIES[cardTarget.sp].id;
+          const sid = cardTarget === "pet" ? SPECIES[active].id : SPECIES[cardTarget.sp].id;
           if (accId) accEquip[sid] = accId; else delete accEquip[sid];
           dirty = true;
           cardAccModal = false;
@@ -5502,7 +5518,7 @@ kc.addEventListener("pointerdown", (e) => {
       sfx.pop();
       return;
     }
-    if (inR(homeR)) {
+    if (cardTarget !== "pet" && inR(homeR)) {
       sendPalHome(cardTarget);
       closeCard();
       return;
@@ -9406,7 +9422,7 @@ function frameBody(now) {
   // HOME drop slot — appears top-center while any slime is being dragged;
   // release over it to send it back to the ranch (the main pet too).
   // props share the slot — dropping furniture there puts it away
-  if (palHeld || held || propHeld) {
+  if (palHeld || held || propHeld || ballHeld) {
     const hx = Math.round(winW / 2 - 66);
     const over = curX > hx && curX < hx + 132 && curY >= 2 && curY <= 52;
     ctx.globalAlpha = over ? 0.98 : 0.85;
@@ -9417,7 +9433,7 @@ function frameBody(now) {
     ctx.strokeRect(hx + 1, 7, 130, 40);
     // tiny house glyph
     drawSpr(ctx, "house", hx + 24, 28, 3, over ? "#4c9e50" : "#8a6b4a");
-    drawText(ctx, propHeld ? "PUT AWAY" : "SEND HOME", hx + 44, 25, 1, over ? "#2f7a36" : "#5c4632", null, true);
+    drawText(ctx, propHeld || ballHeld ? "PUT AWAY" : "SEND HOME", hx + 44, 25, 1, over ? "#2f7a36" : "#5c4632", null, true);
     ctx.globalAlpha = 1;
   }
 
