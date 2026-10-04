@@ -1386,7 +1386,8 @@ const TREATS = [
 
 let xp = 0;
 let level = 0;
-let jelly = 100;
+const START_JELLY = 500; // new installs start here — generous first session
+let jelly = START_JELLY;
 let owned = ["sprout"];
 let active = 0;
 let dirty = false;
@@ -2499,7 +2500,7 @@ invokeAsync("load_state").then((txt) => {
   loadFailed = false;
   xp = sanitizeSavedInt(s.xp);
   level = Math.min(3, Math.floor(xp / KEYS_PER_LEVEL));
-  if (typeof s.jelly === "number") jelly = sanitizeSavedInt(s.jelly, 100);
+  if (typeof s.jelly === "number") jelly = sanitizeSavedInt(s.jelly, START_JELLY);
   pityRare = sanitizeSavedInt(s.pityRare, 0, 12);
   pityLeg = sanitizeSavedInt(s.pityLeg, 0, 50);
   // The next hybrid id is derived from accepted hybrid records below. The
@@ -2717,6 +2718,17 @@ function persist() {
   });
 }
 setInterval(() => { if (dirty && saveReady) persist().catch(() => {}); }, 5000);
+
+// passive jelly drip: +1 every 5 minutes the app is alive — the ranch keeps
+// earning even without typing (away-time has its own 1/10min credit at
+// load). Sleep gaps just delay the next drip instead of bursting a batch.
+let dripAt = Date.now() + 5 * 60000;
+setInterval(() => {
+  if (Date.now() < dripAt) return;
+  dripAt = Date.now() + 5 * 60000;
+  jelly = addSavedInt(jelly, 1);
+  dirty = true;
+}, 30000);
 
 // bred hybrids hatch as babies: half-size + pacifier for their first hour
 const BABY_MS = 3600000;
