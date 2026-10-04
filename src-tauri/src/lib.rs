@@ -23,18 +23,162 @@ static MOUSE_HELD: AtomicI32 = AtomicI32::new(0);
 // set while reset_save is wiping — an in-flight save_state landing after the
 // deletes would resurrect the very save the user asked to destroy
 static RESETTING: AtomicBool = AtomicBool::new(false);
+// Serialize state generations with RESET. The flag rejects queued saves; the
+// lock lets RESET wait for a save that already started, then delete last.
+static SAVE_IO_LOCK: Mutex<()> = Mutex::new(());
+// Crash reports can arrive close together (frame guard + invariant guard).
+// Serialize rotation and append so neither writer can discard the other's
+// diagnostic while compacting the log.
+static CRASH_LOG_LOCK: Mutex<()> = Mutex::new(());
 // per-monitor rects in window-logical px [x, y, w, h] — filled at setup
 // when the overlay spans more than one display
 static MON_LIST: Mutex<Vec<[f64; 4]>> = Mutex::new(Vec::new());
+const MAX_CLICKABLE_RECTS: usize = 64;
+const MAX_CLICKABLE_COORD: f64 = 1_000_000.0;
+const MAX_FOCUS_TITLE_CHARS: usize = 512;
+const MAX_FOCUS_APP_CHARS: usize = 256;
+
+fn bounded_focus_text(value: &str, max_chars: usize) -> String {
+    value.chars().take(max_chars).collect()
+}
+
+// Real-executable smoke tests need a genuinely empty profile without ever
+// moving or rewriting the player's save. Honor an override only when it is an
+// absolute path carrying our explicit marker; an accidental environment value
+// therefore falls back to Tauri's normal app-data directory.
+fn test_data_dir() -> Option<std::path::PathBuf> {
+    let dir = std::path::PathBuf::from(std::env::var_os("JELLYPAL_TEST_DATA_DIR")?);
+    if dir.is_absolute() && dir.join(".jellypal-test-profile").is_file() {
+        Some(dir)
+    } else {
+        None
+    }
+}
+
+fn data_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let dir = if let Some(dir) = test_data_dir() {
+        dir
+    } else {
+        app.path().app_data_dir().map_err(|e| e.to_string())?
+    };
+    ensure_data_dir(dir)
+}
+
+fn ensure_data_dir(dir: std::path::PathBuf) -> Result<std::path::PathBuf, String> {
+    prepare_regular_dir_path(&dir, true).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+fn lock_recover<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    recover_lock_result(mutex.lock())
+}
+
+fn recover_lock_result<T>(
+    result: std::sync::LockResult<std::sync::MutexGuard<'_, T>>,
+) -> std::sync::MutexGuard<'_, T> {
+    result.unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+fn required_runtime_value<T>(value: Option<T>, name: &str) -> std::io::Result<T> {
+    value.ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("required runtime value is missing: {name}"),
+        )
+    })
+}
 
 #[tauri::command]
 fn get_monitors() -> Vec<[f64; 4]> {
-    MON_LIST.lock().unwrap().clone()
+    lock_recover(&MON_LIST).clone()
+}
+
+fn sanitize_clickable_rects(rects: Vec<[f64; 4]>) -> Vec<[f64; 4]> {
+    rects
+        .into_iter()
+        .filter(|r| {
+            r.iter()
+                .all(|n| n.is_finite() && n.abs() <= MAX_CLICKABLE_COORD)
+                && r[2] > 0.0
+                && r[3] > 0.0
+        })
+        .take(MAX_CLICKABLE_RECTS)
+        .collect()
+}
+
+fn adjust_mouse_held(current: i32, pressed: bool) -> i32 {
+    if pressed {
+        current.max(0).saturating_add(1)
+    } else {
+        current.saturating_sub(1).max(0)
+    }
+}
+
+fn next_poll_tick(current: u32) -> u32 {
+    current.wrapping_add(1)
+}
+
+fn next_held_stall(current: u32, diverged: bool, button_held: bool) -> u32 {
+    if diverged && button_held {
+        current.saturating_add(1)
+    } else {
+        0
+    }
+}
+
+fn clickable_policy_self_test() -> bool {
+    let valid = [[0.0, 1.0, 2.0, 3.0], [-10.0, -20.0, 30.0, 40.0]];
+    let flood: Vec<[f64; 4]> = (0..MAX_CLICKABLE_RECTS + 10)
+        .map(|n| [n as f64, 0.0, 1.0, 1.0])
+        .collect();
+    [
+        sanitize_clickable_rects(vec![]).is_empty(),
+        sanitize_clickable_rects(valid.to_vec()) == valid,
+        sanitize_clickable_rects(vec![[f64::NAN, 0.0, 1.0, 1.0]]).is_empty(),
+        sanitize_clickable_rects(vec![[0.0, f64::INFINITY, 1.0, 1.0]]).is_empty(),
+        sanitize_clickable_rects(vec![[0.0, 0.0, 0.0, 1.0]]).is_empty(),
+        sanitize_clickable_rects(vec![[0.0, 0.0, 1.0, 0.0]]).is_empty(),
+        sanitize_clickable_rects(vec![[0.0, 0.0, -1.0, 1.0]]).is_empty(),
+        sanitize_clickable_rects(vec![[0.0, 0.0, 1.0, -1.0]]).is_empty(),
+        sanitize_clickable_rects(vec![[MAX_CLICKABLE_COORD + 1.0, 0.0, 1.0, 1.0]]).is_empty(),
+        sanitize_clickable_rects(vec![[0.0, 0.0, MAX_CLICKABLE_COORD + 1.0, 1.0]]).is_empty(),
+        sanitize_clickable_rects(vec![[
+            -MAX_CLICKABLE_COORD,
+            MAX_CLICKABLE_COORD,
+            MAX_CLICKABLE_COORD,
+            1.0,
+        ]])
+        .len()
+            == 1,
+        {
+            let bounded = sanitize_clickable_rects(flood);
+            bounded.len() == MAX_CLICKABLE_RECTS
+                && bounded.last().map(|r| r[0]) == Some((MAX_CLICKABLE_RECTS - 1) as f64)
+        },
+        adjust_mouse_held(0, true) == 1,
+        adjust_mouse_held(i32::MAX, true) == i32::MAX,
+        adjust_mouse_held(0, false) == 0,
+        adjust_mouse_held(i32::MIN, false) == 0,
+        next_poll_tick(u32::MAX) == 0,
+        next_held_stall(0, true, true) == 1,
+        next_held_stall(u32::MAX, true, true) == u32::MAX,
+        next_held_stall(42, false, true) == 0 && next_held_stall(42, true, false) == 0,
+        {
+            let mutex = Mutex::new(7u8);
+            let guard = lock_recover(&mutex);
+            let recovered = *recover_lock_result(Err(std::sync::PoisonError::new(guard)));
+            recovered == 7
+        },
+        required_runtime_value(Some(7u8), "test").ok() == Some(7),
+        required_runtime_value::<u8>(None, "test").is_err(),
+    ]
+    .into_iter()
+    .all(|ok| ok)
 }
 
 #[tauri::command]
 fn set_clickable(rects: Vec<[f64; 4]>) {
-    *CLICKABLE.lock().unwrap() = rects;
+    *lock_recover(&CLICKABLE) = sanitize_clickable_rects(rects);
 }
 
 #[tauri::command]
@@ -51,6 +195,16 @@ fn set_dragging(on: bool) {
 // This kills casual save editing; it is not DRM — someone who can call
 // CryptProtectData under their own account can still forge a blob.
 const SAVE_MAGIC: &str = "JPENC1:";
+// A maximally populated, sanitized v2 save (1,000 hybrids, 64,000 top
+// pixels, 2,000 redeem records) is under 2 MiB. Keep ample growth headroom
+// while preventing a broken or hostile IPC call from sealing/writing an
+// unbounded blob and displacing the last good generation.
+const MAX_SAVE_BYTES: usize = 16 * 1024 * 1024;
+// DPAPI + Base64 expansion puts a maximally valid plaintext save a little
+// above 21 MiB. Bound on-disk reads too so a replaced/corrupt save cannot make
+// boot or recovery allocate an arbitrary file.
+const MAX_SAVE_FILE_BYTES: u64 = 24 * 1024 * 1024;
+const MAX_CHECKPOINT_FILE_BYTES: u64 = 4 * 1024;
 
 #[cfg(windows)]
 fn dpapi_protect(data: &[u8]) -> Option<Vec<u8>> {
@@ -59,7 +213,10 @@ fn dpapi_protect(data: &[u8]) -> Option<Vec<u8>> {
         cbData: data.len() as u32,
         pbData: data.as_ptr() as *mut u8,
     };
-    let mut out = CRYPT_INTEGER_BLOB { cbData: 0, pbData: std::ptr::null_mut() };
+    let mut out = CRYPT_INTEGER_BLOB {
+        cbData: 0,
+        pbData: std::ptr::null_mut(),
+    };
     unsafe {
         if CryptProtectData(
             &input,
@@ -81,12 +238,15 @@ fn dpapi_protect(data: &[u8]) -> Option<Vec<u8>> {
 
 #[cfg(windows)]
 fn dpapi_unprotect(blob: &[u8]) -> Option<Vec<u8>> {
-    use windows_sys::Win32::Security::Cryptography::{CRYPT_INTEGER_BLOB, CryptUnprotectData};
+    use windows_sys::Win32::Security::Cryptography::{CryptUnprotectData, CRYPT_INTEGER_BLOB};
     let input = CRYPT_INTEGER_BLOB {
         cbData: blob.len() as u32,
         pbData: blob.as_ptr() as *mut u8,
     };
-    let mut out = CRYPT_INTEGER_BLOB { cbData: 0, pbData: std::ptr::null_mut() };
+    let mut out = CRYPT_INTEGER_BLOB {
+        cbData: 0,
+        pbData: std::ptr::null_mut(),
+    };
     unsafe {
         if CryptUnprotectData(
             &input,
@@ -107,6 +267,11 @@ fn dpapi_unprotect(blob: &[u8]) -> Option<Vec<u8>> {
 }
 
 fn seal_save(json: &str) -> String {
+    // The marker-gated clean-boot profile is disposable and its Node harness
+    // must inspect the first-run payload. Keep production profiles DPAPI-sealed.
+    if test_data_dir().is_some() {
+        return json.to_string();
+    }
     #[cfg(windows)]
     {
         if let Some(blob) = dpapi_protect(json.as_bytes()) {
@@ -151,16 +316,514 @@ static LAST_SAVE: Mutex<Option<String>> = Mutex::new(None);
 // FNV-1a — the hash only binds a file to its sealed chk entry, so it needs
 // to be stable, not cryptographic (a forged chk is a DPAPI problem, not a
 // hashing one)
-fn fnv64(s: &str) -> u64 {
+fn fnv64_bytes(bytes: &[u8]) -> u64 {
     let mut h: u64 = 0xcbf29ce484222325;
-    for b in s.as_bytes() {
+    for b in bytes {
         h = (h ^ *b as u64).wrapping_mul(0x100000001b3);
     }
     h
 }
 
+fn fnv64(s: &str) -> u64 {
+    fnv64_bytes(s.as_bytes())
+}
+
+// Decide whether a parsed plaintext generation belongs to the current save
+// chain. A zero registry watermark means first boot or a deliberate reinstall
+// (the uninstaller clears it), so a legacy/plain backup may be adopted. Once a
+// watermark exists, deleting state.chk must never turn an edited plaintext
+// file into an accepted "legacy" save.
+fn save_generation_allowed(raw: &str, chk: Option<(u64, u64, Option<u64>)>, reg_seq: u64) -> bool {
+    match chk {
+        Some((seq, cur, prev)) => {
+            let h = fnv64(raw);
+            let generation = if h == cur {
+                Some(seq)
+            } else if prev == Some(h) {
+                Some(seq.saturating_sub(1))
+            } else {
+                None
+            };
+            match generation {
+                Some(g) => g.saturating_add(1) >= reg_seq,
+                // Early saves once allowed an unknown generation so a fresh
+                // reinstall could adopt a lone backup. That exception is safe
+                // only after the watermark has actually been cleared.
+                None => reg_seq == 0 && seq <= 2,
+            }
+        }
+        None => reg_seq == 0,
+    }
+}
+
+fn save_policy_self_test() -> bool {
+    let current = "{\"jelly\":20}";
+    let previous = "{\"jelly\":10}";
+    let known = Some((7, fnv64(current), Some(fnv64(previous))));
+    let early_unknown = Some((2, fnv64("different"), None));
+    [
+        save_generation_allowed(current, None, 0),
+        !save_generation_allowed("{\"jelly\":99999}", None, 1),
+        save_generation_allowed(current, known, 7),
+        save_generation_allowed(previous, known, 7),
+        !save_generation_allowed(previous, known, 8),
+        save_generation_allowed("backup", early_unknown, 0),
+        !save_generation_allowed("forged", early_unknown, 1),
+        !save_generation_allowed("backup", Some((3, fnv64("different"), None)), 0),
+    ]
+    .into_iter()
+    .all(|ok| ok)
+}
+
+fn validate_save_payload(json: &str) -> Result<(), String> {
+    if json.len() > MAX_SAVE_BYTES {
+        return Err("save payload exceeds 16 MiB".into());
+    }
+    let value: serde_json::Value =
+        serde_json::from_str(json).map_err(|_| "save payload is not valid JSON".to_string())?;
+    if !value.is_object() {
+        return Err("save payload root must be an object".into());
+    }
+    Ok(())
+}
+
+fn load_generation_allowed(raw: &str, chk: Option<(u64, u64, Option<u64>)>, reg_seq: u64) -> bool {
+    validate_save_payload(raw).is_ok() && save_generation_allowed(raw, chk, reg_seq)
+}
+
+fn load_generation_self_test() -> [bool; 4] {
+    let object = "{\"jelly\":20}";
+    let known = Some((7, fnv64(object), None));
+    [
+        load_generation_allowed(object, known, 7),
+        !load_generation_allowed("null", Some((7, fnv64("null"), None)), 7),
+        !load_generation_allowed("[]", Some((7, fnv64("[]"), None)), 7),
+        !load_generation_allowed("\"text\"", Some((7, fnv64("\"text\""), None)), 7),
+    ]
+}
+
+fn save_payload_self_test() -> bool {
+    let shell_len = r#"{"pad":""}"#.len();
+    let exact = format!(r#"{{"pad":"{}"}}"#, "x".repeat(MAX_SAVE_BYTES - shell_len));
+    let exact_ok = exact.len() == MAX_SAVE_BYTES && validate_save_payload(&exact).is_ok();
+    drop(exact);
+    let oversized = "x".repeat(MAX_SAVE_BYTES + 1);
+    [
+        validate_save_payload("{}").is_ok(),
+        validate_save_payload(" \n {\"ver\":2,\"hybrids\":[]} \t").is_ok(),
+        validate_save_payload("").is_err(),
+        validate_save_payload("{\"broken\":").is_err(),
+        validate_save_payload("null").is_err(),
+        validate_save_payload("[]").is_err(),
+        validate_save_payload("42").is_err(),
+        exact_ok,
+        matches!(validate_save_payload(&oversized), Err(e) if e.contains("exceeds")),
+    ]
+    .into_iter()
+    .all(|ok| ok)
+}
+
+fn regular_file_exists(path: &std::path::Path) -> std::io::Result<bool> {
+    match std::fs::symlink_metadata(path) {
+        Ok(meta) if meta.file_type().is_file() && !migration_reparse(&meta) => Ok(true),
+        Ok(_) => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "save path is not a regular file",
+        )),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(e),
+    }
+}
+
+fn read_regular_file(path: &std::path::Path, max_bytes: u64) -> std::io::Result<Vec<u8>> {
+    let meta = std::fs::symlink_metadata(path)?;
+    if !meta.file_type().is_file() || migration_reparse(&meta) || meta.len() > max_bytes {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "save file is not a bounded regular file",
+        ));
+    }
+    let file = std::fs::OpenOptions::new().read(true).open(path)?;
+    let opened = file.metadata()?;
+    if !opened.file_type().is_file() || migration_reparse(&opened) || opened.len() > max_bytes {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "opened save file is not a bounded regular file",
+        ));
+    }
+    read_bounded(file, max_bytes)
+}
+
+fn read_bounded<R: std::io::Read>(reader: R, max_bytes: u64) -> std::io::Result<Vec<u8>> {
+    use std::io::Read as _;
+
+    let mut bytes = Vec::with_capacity(max_bytes.min(8 * 1024) as usize);
+    reader
+        .take(max_bytes.saturating_add(1))
+        .read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > max_bytes {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "file grew beyond policy while reading",
+        ));
+    }
+    Ok(bytes)
+}
+
+fn read_regular_text(path: &std::path::Path, max_bytes: u64) -> std::io::Result<String> {
+    String::from_utf8(read_regular_file(path, max_bytes)?)
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidData, "save file is not UTF-8"))
+}
+
+fn write_create_new(path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
+    use std::io::Write as _;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)?;
+    file.write_all(data)
+}
+
+fn remove_file_leaf_no_follow(path: &std::path::Path) -> std::io::Result<()> {
+    let meta = match std::fs::symlink_metadata(path) {
+        Ok(meta) => meta,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e),
+    };
+    if migration_reparse(&meta) {
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::MetadataExt;
+            const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
+            if meta.file_attributes() & FILE_ATTRIBUTE_DIRECTORY != 0 {
+                return std::fs::remove_dir(path);
+            }
+            return std::fs::remove_file(path);
+        }
+        #[cfg(not(windows))]
+        {
+            return std::fs::remove_file(path);
+        }
+    }
+    if meta.file_type().is_file() {
+        std::fs::remove_file(path)
+    } else {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "temporary file leaf is not a regular file",
+        ))
+    }
+}
+
+fn write_fresh_file(path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
+    // Removing an existing hard link/symlink unlinks this directory entry;
+    // opening it for truncation could modify the external target instead.
+    remove_file_leaf_no_follow(path)?;
+    write_create_new(path, data)
+}
+
+fn replace_regular_file(tmp: &std::path::Path, dest: &std::path::Path) -> std::io::Result<()> {
+    let _ = regular_file_exists(tmp)?;
+    let _ = regular_file_exists(dest)?;
+    std::fs::rename(tmp, dest)
+}
+
+fn write_atomic_regular(path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
+    let name = path.file_name().ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, "file path has no leaf")
+    })?;
+    let mut tmp_name = name.to_os_string();
+    tmp_name.push(".tmp");
+    let tmp = path.with_file_name(tmp_name);
+    write_fresh_file(&tmp, data)?;
+    if let Err(e) = replace_regular_file(&tmp, path) {
+        let _ = remove_file_leaf_no_follow(&tmp);
+        return Err(e);
+    }
+    Ok(())
+}
+
+// Preserve rejected generations before the frontend starts a clean ranch and
+// eventually overwrites state.json. Content-derived names make repeated boots
+// idempotent while keeping every distinct rejected generation available for
+// manual support/recovery.
+fn preserve_rejected_save(dir: &std::path::Path) -> usize {
+    let recovery = dir.join("recovery");
+    let mut copied = 0;
+    let mut recovery_ready = false;
+    for (name, label, max_bytes) in [
+        ("state.json", "state", MAX_SAVE_FILE_BYTES),
+        ("state.json.bak", "backup", MAX_SAVE_FILE_BYTES),
+        ("state.chk", "checkpoint", MAX_CHECKPOINT_FILE_BYTES),
+    ] {
+        let src = dir.join(name);
+        // A corrupt save is exactly what this path is meant to preserve.
+        // Hash bytes instead of decoding UTF-8 so even a partially written or
+        // otherwise malformed artifact survives byte-for-byte for support.
+        let Ok(bytes) = read_regular_file(&src, max_bytes) else {
+            continue;
+        };
+        if !recovery_ready && prepare_regular_dir_path(&recovery, true).is_err() {
+            continue;
+        }
+        recovery_ready = true;
+        let dest = recovery.join(format!("rejected-{label}-{:016x}.txt", fnv64_bytes(&bytes)));
+        match std::fs::symlink_metadata(&dest) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                if write_create_new(&dest, &bytes).is_ok() {
+                    copied += 1;
+                }
+            }
+            _ => {}
+        }
+    }
+    if recovery_ready {
+        let note = recovery.join("README.txt");
+        if std::fs::symlink_metadata(&note).is_err() {
+            let _ = write_create_new(
+                &note,
+                "Jellypal rejected these save generations because their checkpoint or rollback watermark did not match.\nThey were not loaded. Keep them for manual support/recovery; Settings > RESET removes this folder.\n"
+                    .as_bytes(),
+            );
+        }
+    }
+    copied
+}
+
+fn recovery_self_test() -> bool {
+    let root = std::env::temp_dir().join(format!("jellypal-save-recovery-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    if std::fs::create_dir_all(&root).is_err() {
+        return false;
+    }
+    let state = "{\"jelly\":99999}";
+    let backup = [0xff, 0x00, 0xfe, b'J', b'P'];
+    let checkpoint = "sealed-checkpoint";
+    let wrote = std::fs::write(root.join("state.json"), state).is_ok()
+        && std::fs::write(root.join("state.json.bak"), backup).is_ok()
+        && std::fs::write(root.join("state.chk"), checkpoint).is_ok();
+    let first = if wrote {
+        preserve_rejected_save(&root)
+    } else {
+        0
+    };
+    let recovery = root.join("recovery");
+    let checks = [
+        first == 3,
+        std::fs::read_to_string(recovery.join(format!("rejected-state-{:016x}.txt", fnv64(state))))
+            .ok()
+            .as_deref()
+            == Some(state),
+        std::fs::read(recovery.join(format!("rejected-backup-{:016x}.txt", fnv64_bytes(&backup))))
+            .ok()
+            .as_deref()
+            == Some(backup.as_slice()),
+        std::fs::read_to_string(recovery.join(format!(
+            "rejected-checkpoint-{:016x}.txt",
+            fnv64(checkpoint)
+        )))
+        .ok()
+        .as_deref()
+            == Some(checkpoint),
+        std::fs::read_to_string(recovery.join("README.txt"))
+            .map(|note| note.contains("rejected") && note.contains("RESET"))
+            .unwrap_or(false),
+        preserve_rejected_save(&root) == 0,
+    ];
+    let _ = std::fs::remove_dir_all(&root);
+    checks.into_iter().all(|ok| ok)
+}
+
+fn save_filesystem_self_test() -> bool {
+    let root = std::env::temp_dir().join(format!(
+        "jellypal-save-filesystem-policy-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    let data = root.join("data");
+    let outside = root.join("outside");
+    let root_seeded = std::fs::create_dir_all(&data).is_ok()
+        && std::fs::create_dir(&outside).is_ok()
+        && std::fs::write(outside.join("keep.txt"), b"KEEP").is_ok();
+
+    let bounded = data.join("bounded");
+    let bounded_seeded = std::fs::write(&bounded, b"ABCD").is_ok();
+    let bounded_exact = read_regular_file(&bounded, 4).ok().as_deref() == Some(b"ABCD");
+    let bounded_rejected = read_regular_file(&bounded, 3).is_err();
+    let stream_exact = read_bounded(std::io::Cursor::new(b"ABCD"), 4)
+        .ok()
+        .as_deref()
+        == Some(b"ABCD");
+    let stream_overflow = read_bounded(std::io::Cursor::new(b"ABCDE"), 4).is_err();
+    let blocked_tmp = data.join("blocked.tmp");
+    let temp_dir_seeded = std::fs::create_dir(&blocked_tmp).is_ok()
+        && std::fs::write(blocked_tmp.join("keep.txt"), b"KEEP").is_ok();
+    let temp_dir_rejected = write_fresh_file(&blocked_tmp, b"NOPE").is_err();
+    let temp_dir_preserved =
+        std::fs::read(blocked_tmp.join("keep.txt")).ok().as_deref() == Some(b"KEEP");
+    let directory = data.join("directory");
+    let directory_rejected = std::fs::create_dir(&directory).is_ok()
+        && regular_file_exists(&directory).is_err()
+        && read_regular_file(&directory, 10).is_err();
+
+    let stale_tmp = data.join("state.json.tmp");
+    let tmp_link_seeded = std::fs::hard_link(outside.join("keep.txt"), &stale_tmp).is_ok();
+    let tmp_rewritten = write_fresh_file(&stale_tmp, b"LOCAL").is_ok()
+        && std::fs::read(&stale_tmp).ok().as_deref() == Some(b"LOCAL");
+    let outside_after_tmp =
+        std::fs::read(outside.join("keep.txt")).ok().as_deref() == Some(b"KEEP");
+
+    let state = data.join("state.json");
+    let target_link_seeded = std::fs::hard_link(outside.join("keep.txt"), &state).is_ok();
+    let replacement_tmp = data.join("replacement.tmp");
+    let replacement_seeded = write_fresh_file(&replacement_tmp, b"NEW").is_ok()
+        && replace_regular_file(&replacement_tmp, &state).is_ok();
+    let target_replaced = std::fs::read(&state).ok().as_deref() == Some(b"NEW");
+    let outside_after_replace =
+        std::fs::read(outside.join("keep.txt")).ok().as_deref() == Some(b"KEEP");
+
+    let recovery = data.join("recovery");
+    let recovery_link_created = create_migration_test_link(&recovery, &outside);
+    let recovery_rejected = preserve_rejected_save(&data) == 0;
+    let outside_after_recovery = std::fs::read(outside.join("keep.txt")).ok().as_deref()
+        == Some(b"KEEP")
+        && !outside.join("README.txt").exists();
+    let recovery_link_removed = remove_tree_no_follow(&recovery).is_ok() && !recovery.exists();
+    let recovery_copied = preserve_rejected_save(&data) == 1;
+    let recovered = recovery.join(format!("rejected-state-{:016x}.txt", fnv64_bytes(b"NEW")));
+    let recovered_exact = std::fs::read(recovered).ok().as_deref() == Some(b"NEW");
+    let recovery_idempotent = preserve_rejected_save(&data) == 0;
+
+    let invalid_text = data.join("invalid-text");
+    let invalid_text_rejected = std::fs::write(&invalid_text, [0xff]).is_ok()
+        && read_regular_text(&invalid_text, 1).is_err();
+    let absent_is_false = matches!(regular_file_exists(&data.join("absent")), Ok(false));
+    let serialization = save_serialization_self_test();
+    let checks = [
+        root_seeded,
+        bounded_seeded,
+        bounded_exact,
+        bounded_rejected,
+        stream_exact,
+        stream_overflow,
+        temp_dir_seeded,
+        temp_dir_rejected,
+        temp_dir_preserved,
+        directory_rejected,
+        tmp_link_seeded,
+        tmp_rewritten,
+        outside_after_tmp,
+        target_link_seeded,
+        replacement_seeded,
+        target_replaced,
+        outside_after_replace,
+        recovery_link_created,
+        recovery_rejected,
+        outside_after_recovery,
+        recovery_link_removed,
+        recovery_copied,
+        recovered_exact,
+        recovery_idempotent,
+        invalid_text_rejected,
+        absent_is_false,
+        serialization[0],
+        serialization[1],
+        serialization[2],
+    ];
+    let _ = remove_tree_no_follow(&recovery);
+    let _ = std::fs::remove_dir_all(&root);
+    checks.into_iter().all(|ok| ok)
+}
+
+fn save_serialization_self_test() -> [bool; 3] {
+    use std::sync::atomic::AtomicBool as TestAtomicBool;
+    use std::sync::mpsc;
+    use std::sync::Arc;
+
+    RESETTING.store(false, Ordering::SeqCst);
+    let artifact = Arc::new(TestAtomicBool::new(false));
+    let (started_tx, started_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let in_flight_artifact = Arc::clone(&artifact);
+    let in_flight = std::thread::spawn(move || {
+        let _guard = lock_recover(&SAVE_IO_LOCK);
+        let allowed = !RESETTING.load(Ordering::SeqCst);
+        let _ = started_tx.send(allowed);
+        let _ = release_rx.recv_timeout(Duration::from_secs(2));
+        if allowed {
+            in_flight_artifact.store(true, Ordering::Relaxed);
+        }
+    });
+    let in_flight_allowed = started_rx
+        .recv_timeout(Duration::from_secs(2))
+        .unwrap_or(false);
+    RESETTING.store(true, Ordering::SeqCst);
+    let _ = release_tx.send(());
+    {
+        let _reset_guard = lock_recover(&SAVE_IO_LOCK);
+        artifact.store(false, Ordering::Relaxed);
+    }
+    let in_flight_joined = in_flight.join().is_ok();
+    let reset_won = in_flight_joined && !artifact.load(Ordering::Relaxed);
+
+    RESETTING.store(false, Ordering::SeqCst);
+    artifact.store(false, Ordering::Relaxed);
+    let reset_guard = lock_recover(&SAVE_IO_LOCK);
+    RESETTING.store(true, Ordering::SeqCst);
+    let queued_artifact = Arc::clone(&artifact);
+    let queued = std::thread::spawn(move || {
+        let _guard = lock_recover(&SAVE_IO_LOCK);
+        if !RESETTING.load(Ordering::SeqCst) {
+            queued_artifact.store(true, Ordering::Relaxed);
+        }
+    });
+    drop(reset_guard);
+    let queued_joined = queued.join().is_ok();
+    let queued_blocked = queued_joined && !artifact.load(Ordering::Relaxed);
+    RESETTING.store(false, Ordering::SeqCst);
+
+    [in_flight_allowed, reset_won, queued_blocked]
+}
+
+#[cfg(test)]
+mod save_policy_tests {
+    use super::{fnv64, save_generation_allowed};
+
+    #[test]
+    fn checkpointless_save_requires_zero_watermark() {
+        assert!(save_generation_allowed("{\"jelly\":1}", None, 0));
+        assert!(!save_generation_allowed("{\"jelly\":99999}", None, 1));
+        assert!(!save_generation_allowed("{\"jelly\":99999}", None, 50));
+    }
+
+    #[test]
+    fn current_and_one_previous_generation_are_accepted() {
+        let current = "{\"jelly\":20}";
+        let previous = "{\"jelly\":10}";
+        let chk = Some((7, fnv64(current), Some(fnv64(previous))));
+        assert!(save_generation_allowed(current, chk, 7));
+        assert!(save_generation_allowed(previous, chk, 7));
+        assert!(!save_generation_allowed(previous, chk, 8));
+    }
+
+    #[test]
+    fn unknown_early_generation_only_adopts_after_reinstall() {
+        let chk = Some((2, fnv64("different"), None));
+        assert!(save_generation_allowed("backup", chk, 0));
+        assert!(!save_generation_allowed("forged", chk, 1));
+        assert!(!save_generation_allowed(
+            "backup",
+            Some((3, fnv64("different"), None)),
+            0
+        ));
+    }
+}
+
 fn read_chk(dir: &std::path::Path) -> Option<(u64, u64, Option<u64>)> {
-    let txt = std::fs::read_to_string(dir.join("state.chk")).ok()?;
+    let txt = read_regular_text(&dir.join("state.chk"), MAX_CHECKPOINT_FILE_BYTES).ok()?;
     let raw = unseal_save(&txt)?;
     let v: serde_json::Value = serde_json::from_str(&raw).ok()?;
     let seq = v.get("seq")?.as_u64()?;
@@ -169,11 +832,30 @@ fn read_chk(dir: &std::path::Path) -> Option<(u64, u64, Option<u64>)> {
     Some((seq, cur, prev))
 }
 
+fn next_save_seq(current: Option<u64>) -> Result<u64, String> {
+    current
+        .unwrap_or(0)
+        .checked_add(1)
+        .ok_or_else(|| "save checkpoint sequence exhausted".to_string())
+}
+
+fn save_sequence_self_test() -> [bool; 3] {
+    [
+        next_save_seq(None) == Ok(1),
+        next_save_seq(Some(41)) == Ok(42),
+        next_save_seq(Some(u64::MAX)).is_err(),
+    ]
+}
+
 // written after the state.json rename succeeds, so chk never advertises a
 // generation that didn't land. order matters: a chk write that fails leaves
 // chk one generation back, which still verifies .bak on the next load
-fn write_chk(dir: &std::path::Path, cur_plain: &str, prev_plain: Option<&str>) {
-    let seq = read_chk(dir).map(|c| c.0).unwrap_or(0) + 1;
+fn write_chk(
+    dir: &std::path::Path,
+    cur_plain: &str,
+    prev_plain: Option<&str>,
+) -> Result<(), String> {
+    let seq = next_save_seq(read_chk(dir).map(|c| c.0))?;
     let body = serde_json::json!({
         "seq": seq,
         "cur": fnv64(cur_plain),
@@ -181,157 +863,422 @@ fn write_chk(dir: &std::path::Path, cur_plain: &str, prev_plain: Option<&str>) {
     })
     .to_string();
     let tmp = dir.join("state.chk.tmp");
-    if std::fs::write(&tmp, seal_save(&body)).is_ok() {
-        let _ = std::fs::rename(&tmp, dir.join("state.chk"));
+    let sealed = seal_save(&body);
+    write_fresh_file(&tmp, sealed.as_bytes()).map_err(|e| e.to_string())?;
+    replace_regular_file(&tmp, &dir.join("state.chk")).map_err(|e| e.to_string())?;
+    reg_write_seq(seq)?;
+    Ok(())
+}
+
+fn registry_status(code: u32, missing_ok: bool, operation: &str) -> Result<(), String> {
+    if code == 0 || (missing_ok && code == 2) {
+        Ok(())
+    } else {
+        Err(format!("{operation} failed ({code})"))
     }
-    reg_write_seq(seq);
+}
+
+fn autostart_key_status(code: u32) -> Result<bool, String> {
+    if code == 0 {
+        Ok(true)
+    } else if code == 2 {
+        // Turning startup off is idempotent: a missing Run key already means
+        // the requested state has been reached.
+        Ok(false)
+    } else {
+        Err(format!("autostart registry key open failed ({code})"))
+    }
+}
+
+fn autostart_value_status(code: u32) -> Result<(), String> {
+    // Deleting an absent value is also a successful transition to OFF.
+    registry_status(code, true, "autostart registry value delete")
+}
+
+fn autostart_registry_status_self_test() -> [bool; 6] {
+    [
+        autostart_key_status(0) == Ok(true),
+        autostart_key_status(2) == Ok(false),
+        autostart_key_status(5).is_err(),
+        autostart_value_status(0).is_ok(),
+        autostart_value_status(2).is_ok(),
+        autostart_value_status(5).is_err(),
+    ]
+}
+
+fn xml_escape_text(text: &str) -> Result<String, String> {
+    let mut escaped = String::with_capacity(text.len());
+    for ch in text.chars() {
+        match ch {
+            '&' => escaped.push_str("&amp;"),
+            '<' => escaped.push_str("&lt;"),
+            '>' => escaped.push_str("&gt;"),
+            '"' => escaped.push_str("&quot;"),
+            '\'' => escaped.push_str("&apos;"),
+            '\u{9}' | '\u{a}' | '\u{d}' => escaped.push(ch),
+            '\u{20}'..='\u{d7ff}' | '\u{e000}'..='\u{fffd}' | '\u{10000}'..='\u{10ffff}' => {
+                escaped.push(ch)
+            }
+            _ => return Err("autostart path contains a character XML cannot represent".into()),
+        }
+    }
+    Ok(escaped)
+}
+
+fn launch_agent_plist(executable: &str) -> Result<String, String> {
+    let executable = xml_escape_text(executable)?;
+    Ok(format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+         <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
+         <plist version=\"1.0\"><dict>\n\
+         <key>Label</key><string>com.jellypal.desktop</string>\n\
+         <key>ProgramArguments</key><array><string>{executable}</string></array>\n\
+         <key>RunAtLoad</key><true/>\n\
+         </dict></plist>\n"
+    ))
+}
+
+fn autostart_xml_self_test() -> [bool; 10] {
+    [
+        xml_escape_text("/Applications/Jellypal.app")
+            == Ok("/Applications/Jellypal.app".to_string()),
+        xml_escape_text("A&B<C>D") == Ok("A&amp;B&lt;C&gt;D".to_string()),
+        xml_escape_text("\"quoted\" 'path'")
+            == Ok("&quot;quoted&quot; &apos;path&apos;".to_string()),
+        xml_escape_text("&amp;") == Ok("&amp;amp;".to_string()),
+        xml_escape_text("tab\tline\nreturn\r") == Ok("tab\tline\nreturn\r".to_string()),
+        xml_escape_text("bad\u{1}").is_err(),
+        xml_escape_text("bad\u{fffe}").is_err(),
+        launch_agent_plist("/Applications/Jellypal.app/Contents/MacOS/jellypal").is_ok_and(
+            |body| {
+                body.contains(
+                    "<key>ProgramArguments</key><array><string>/Applications/Jellypal.app/Contents/MacOS/jellypal</string></array>",
+                ) && body.contains("<key>RunAtLoad</key><true/>")
+            },
+        ),
+        launch_agent_plist("/Users/A&B/<Jellypal>")
+            .is_ok_and(|body| body.contains("<string>/Users/A&amp;B/&lt;Jellypal&gt;</string>")),
+        launch_agent_plist("bad\u{1}").is_err(),
+    ]
 }
 
 #[cfg(windows)]
-fn reg_key(create: bool) -> Option<windows_sys::Win32::System::Registry::HKEY> {
-    use windows_sys::Win32::System::Registry::{RegCreateKeyExW, RegOpenKeyExW, KEY_WRITE, HKEY_CURRENT_USER};
-    let sub: Vec<u16> = "Software\\JellyPal".encode_utf16().chain(std::iter::once(0)).collect();
+fn set_windows_autostart(enable: bool) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::System::Registry::{
+        RegCloseKey, RegCreateKeyExW, RegDeleteValueW, RegOpenKeyExW, RegSetValueExW,
+        HKEY_CURRENT_USER, KEY_SET_VALUE, REG_SZ,
+    };
+
+    let sub: Vec<u16> = "Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let name: Vec<u16> = "Jellypal"
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    let command = if enable {
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let mut data = Vec::with_capacity(exe.as_os_str().encode_wide().count() + 3);
+        data.push('"' as u16);
+        data.extend(exe.as_os_str().encode_wide());
+        data.push('"' as u16);
+        data.push(0);
+        Some(data)
+    } else {
+        None
+    };
+
+    unsafe {
+        let mut key = std::ptr::null_mut();
+        if enable {
+            let rc = RegCreateKeyExW(
+                HKEY_CURRENT_USER,
+                sub.as_ptr(),
+                0,
+                std::ptr::null(),
+                0,
+                KEY_SET_VALUE,
+                std::ptr::null(),
+                &mut key,
+                std::ptr::null_mut(),
+            );
+            registry_status(rc, false, "autostart registry key create")?;
+            if key.is_null() {
+                return Err("autostart registry key create returned no handle".into());
+            }
+
+            let data = command
+                .as_deref()
+                .ok_or_else(|| "autostart command is unavailable".to_string())?;
+            let rc = RegSetValueExW(
+                key,
+                name.as_ptr(),
+                0,
+                REG_SZ,
+                data.as_ptr() as _,
+                (data.len() * std::mem::size_of::<u16>()) as u32,
+            );
+            RegCloseKey(key);
+            registry_status(rc, false, "autostart registry value write")
+        } else {
+            let rc = RegOpenKeyExW(HKEY_CURRENT_USER, sub.as_ptr(), 0, KEY_SET_VALUE, &mut key);
+            if !autostart_key_status(rc)? {
+                return Ok(());
+            }
+            if key.is_null() {
+                return Err("autostart registry key open returned no handle".into());
+            }
+            let rc = RegDeleteValueW(key, name.as_ptr());
+            RegCloseKey(key);
+            autostart_value_status(rc)
+        }
+    }
+}
+
+fn registry_status_self_test() -> [bool; 4] {
+    [
+        registry_status(0, false, "write").is_ok(),
+        registry_status(5, false, "write").is_err(),
+        registry_status(2, true, "clear").is_ok(),
+        registry_status(5, true, "clear").is_err(),
+    ]
+}
+
+fn parse_registry_seq(units: &[u16]) -> Result<u64, String> {
+    let end = units
+        .iter()
+        .position(|unit| *unit == 0)
+        .unwrap_or(units.len());
+    let text = String::from_utf16(&units[..end])
+        .map_err(|_| "save registry watermark is not valid UTF-16".to_string())?;
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Err("save registry watermark is empty".into());
+    }
+    trimmed
+        .parse::<u64>()
+        .map_err(|_| "save registry watermark is not a valid sequence".to_string())
+}
+
+fn registry_value_self_test() -> [bool; 4] {
+    let max = format!("{}\0", u64::MAX).encode_utf16().collect::<Vec<_>>();
+    [
+        parse_registry_seq(&"42\0".encode_utf16().collect::<Vec<_>>()) == Ok(42),
+        parse_registry_seq(&max) == Ok(u64::MAX),
+        parse_registry_seq(&[0]).is_err(),
+        parse_registry_seq(&"12x\0".encode_utf16().collect::<Vec<_>>()).is_err(),
+    ]
+}
+
+#[cfg(windows)]
+fn reg_key(create: bool) -> Result<Option<windows_sys::Win32::System::Registry::HKEY>, String> {
+    use windows_sys::Win32::Foundation::ERROR_FILE_NOT_FOUND;
+    use windows_sys::Win32::System::Registry::{
+        RegCreateKeyExW, RegOpenKeyExW, HKEY_CURRENT_USER, KEY_READ, KEY_WRITE,
+    };
+    let sub: Vec<u16> = "Software\\JellyPal"
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
     unsafe {
         let mut key = std::ptr::null_mut();
         let rc = if create {
-            RegCreateKeyExW(HKEY_CURRENT_USER, sub.as_ptr(), 0, std::ptr::null(), 0, KEY_WRITE, std::ptr::null_mut(), &mut key, std::ptr::null_mut())
+            RegCreateKeyExW(
+                HKEY_CURRENT_USER,
+                sub.as_ptr(),
+                0,
+                std::ptr::null(),
+                0,
+                KEY_WRITE,
+                std::ptr::null_mut(),
+                &mut key,
+                std::ptr::null_mut(),
+            )
         } else {
-            RegOpenKeyExW(HKEY_CURRENT_USER, sub.as_ptr(), 0, KEY_WRITE | windows_sys::Win32::System::Registry::KEY_READ, &mut key)
+            RegOpenKeyExW(HKEY_CURRENT_USER, sub.as_ptr(), 0, KEY_READ, &mut key)
         };
-        if rc == 0 { Some(key) } else { None }
+        if rc == 0 {
+            Ok(Some(key))
+        } else if !create && rc == ERROR_FILE_NOT_FOUND {
+            Ok(None)
+        } else {
+            Err(format!("save registry key open failed ({rc})"))
+        }
     }
 }
 
 #[cfg(windows)]
-fn reg_write_seq(seq: u64) {
+fn reg_write_seq(seq: u64) -> Result<(), String> {
     use windows_sys::Win32::System::Registry::{RegCloseKey, RegSetValueExW, REG_SZ};
-    let Some(key) = reg_key(true) else { return };
-    unsafe {
-        let name: Vec<u16> = "sv".encode_utf16().chain(std::iter::once(0)).collect();
-        let data: Vec<u16> = seq.to_string().encode_utf16().chain(std::iter::once(0)).collect();
-        RegSetValueExW(key, name.as_ptr(), 0, REG_SZ, data.as_ptr() as _, (data.len() * 2) as u32);
-        RegCloseKey(key);
+    if test_data_dir().is_some() {
+        return Ok(());
     }
+    let Some(key) = reg_key(true)? else {
+        return Err("save registry key create returned no handle".into());
+    };
+    let rc = unsafe {
+        let name: Vec<u16> = "sv".encode_utf16().chain(std::iter::once(0)).collect();
+        let data: Vec<u16> = seq
+            .to_string()
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        let rc = RegSetValueExW(
+            key,
+            name.as_ptr(),
+            0,
+            REG_SZ,
+            data.as_ptr() as _,
+            (data.len() * 2) as u32,
+        );
+        RegCloseKey(key);
+        rc
+    };
+    registry_status(rc, false, "save registry watermark write")
 }
 
 #[cfg(windows)]
-fn reg_read_seq() -> u64 {
-    use windows_sys::Win32::System::Registry::{RegCloseKey, RegQueryValueExW};
-    let Some(key) = reg_key(false) else { return 0 };
+fn reg_read_seq() -> Result<u64, String> {
+    use windows_sys::Win32::Foundation::ERROR_FILE_NOT_FOUND;
+    use windows_sys::Win32::System::Registry::{RegCloseKey, RegQueryValueExW, REG_SZ};
+    if test_data_dir().is_some() {
+        return Ok(0);
+    }
+    let Some(key) = reg_key(false)? else {
+        return Ok(0);
+    };
     unsafe {
         let name: Vec<u16> = "sv".encode_utf16().chain(std::iter::once(0)).collect();
         let mut buf = [0u16; 32];
         let mut len = (buf.len() * 2) as u32;
         let mut ty = 0u32;
-        let rc = RegQueryValueExW(key, name.as_ptr(), std::ptr::null(), &mut ty, buf.as_mut_ptr() as _, &mut len);
+        let rc = RegQueryValueExW(
+            key,
+            name.as_ptr(),
+            std::ptr::null(),
+            &mut ty,
+            buf.as_mut_ptr() as _,
+            &mut len,
+        );
         RegCloseKey(key);
-        if rc != 0 {
-            return 0;
+        if rc == ERROR_FILE_NOT_FOUND {
+            return Ok(0);
         }
-        let n = (len as usize / 2).saturating_sub(1);
-        String::from_utf16_lossy(&buf[..n]).trim().parse().unwrap_or(0)
+        registry_status(rc, false, "save registry watermark read")?;
+        if ty != REG_SZ || len == 0 || len as usize > buf.len() * 2 || len % 2 != 0 {
+            return Err("save registry watermark has an invalid type or length".into());
+        }
+        parse_registry_seq(&buf[..len as usize / 2])
     }
 }
 
 #[cfg(windows)]
-fn reg_clear() {
+fn reg_clear() -> Result<(), String> {
+    use windows_sys::Win32::Foundation::ERROR_FILE_NOT_FOUND;
     use windows_sys::Win32::System::Registry::{RegDeleteKeyW, HKEY_CURRENT_USER};
-    unsafe {
-        let sub: Vec<u16> = "Software\\JellyPal".encode_utf16().chain(std::iter::once(0)).collect();
-        let _ = RegDeleteKeyW(HKEY_CURRENT_USER, sub.as_ptr());
-    }
-}
-
-#[cfg(not(windows))]
-fn reg_write_seq(_: u64) {}
-#[cfg(not(windows))]
-fn reg_read_seq() -> u64 {
-    0
-}
-#[cfg(not(windows))]
-fn reg_clear() {}
-
-#[tauri::command]
-fn save_state(app: tauri::AppHandle, json: String) -> Result<(), String> {
-    if RESETTING.load(Ordering::Relaxed) {
+    if test_data_dir().is_some() {
         return Ok(());
     }
-    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let state = dir.join("state.json");
-    let tmp = dir.join("state.json.tmp");
-    // write to a temp file first so a crash mid-write can't corrupt the save;
-    // keep the previous good state as .bak for load_state to fall back on
-    std::fs::write(&tmp, seal_save(&json)).map_err(|e| e.to_string())?;
-    let had_state = state.exists();
-    if had_state {
-        let _ = std::fs::copy(&state, dir.join("state.json.bak"));
-    }
-    std::fs::rename(&tmp, &state).map_err(|e| e.to_string())?;
-    // advance the rollback checkpoint last — chk.reg only attest generations
-    // that actually landed, so a crash here just leaves chk one gen behind
-    // and the next load falls back to .bak instead of wiping
-    let prev = if had_state {
-        LAST_SAVE.lock().unwrap().clone()
-    } else {
-        None
+    let rc = unsafe {
+        let sub: Vec<u16> = "Software\\JellyPal"
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
+        RegDeleteKeyW(HKEY_CURRENT_USER, sub.as_ptr())
     };
-    write_chk(&dir, &json, prev.as_deref());
-    *LAST_SAVE.lock().unwrap() = Some(json);
+    registry_status(rc, rc == ERROR_FILE_NOT_FOUND, "reset registry cleanup")
+}
+
+#[cfg(not(windows))]
+fn reg_write_seq(_: u64) -> Result<(), String> {
+    Ok(())
+}
+#[cfg(not(windows))]
+fn reg_read_seq() -> Result<u64, String> {
+    Ok(0)
+}
+#[cfg(not(windows))]
+fn reg_clear() -> Result<(), String> {
     Ok(())
 }
 
 #[tauri::command]
-fn load_state(app: tauri::AppHandle) -> String {
-    let Ok(dir) = app.path().app_data_dir() else {
-        return "{}".into();
+fn save_state(app: tauri::AppHandle, json: String) -> Result<(), String> {
+    let _save_guard = lock_recover(&SAVE_IO_LOCK);
+    if RESETTING.load(Ordering::SeqCst) {
+        return Ok(());
+    }
+    // Validate before touching state.json.tmp or the last-good backup. An
+    // invalid frontend payload must fail closed without advancing the save
+    // chain or displacing either accepted generation.
+    validate_save_payload(&json)?;
+    let dir = data_dir(&app)?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let state = dir.join("state.json");
+    let tmp = dir.join("state.json.tmp");
+    let backup = dir.join("state.json.bak");
+    let backup_tmp = dir.join("state.json.bak.tmp");
+    let checkpoint = dir.join("state.chk");
+    // Validate every persistent destination before changing a generation.
+    // Missing files are fine; directories/reparse entries fail closed.
+    let had_state = regular_file_exists(&state).map_err(|e| e.to_string())?;
+    let _ = regular_file_exists(&backup).map_err(|e| e.to_string())?;
+    let had_checkpoint = regular_file_exists(&checkpoint).map_err(|e| e.to_string())?;
+    if had_checkpoint {
+        let _ =
+            read_regular_file(&checkpoint, MAX_CHECKPOINT_FILE_BYTES).map_err(|e| e.to_string())?;
+    }
+    // write to a temp file first so a crash mid-write can't corrupt the save;
+    // keep the previous good state as .bak for load_state to fall back on
+    let sealed = seal_save(&json);
+    write_fresh_file(&tmp, sealed.as_bytes()).map_err(|e| e.to_string())?;
+    if had_state {
+        let old = read_regular_file(&state, MAX_SAVE_FILE_BYTES).map_err(|e| e.to_string())?;
+        write_fresh_file(&backup_tmp, &old).map_err(|e| e.to_string())?;
+        replace_regular_file(&backup_tmp, &backup).map_err(|e| e.to_string())?;
+    }
+    replace_regular_file(&tmp, &state).map_err(|e| e.to_string())?;
+    // advance the rollback checkpoint last — chk.reg only attest generations
+    // that actually landed, so a crash here just leaves chk one gen behind
+    // and the next load falls back to .bak instead of wiping
+    let prev = if had_state {
+        lock_recover(&LAST_SAVE).clone()
+    } else {
+        None
     };
+    write_chk(&dir, &json, prev.as_deref())?;
+    *lock_recover(&LAST_SAVE) = Some(json);
+    Ok(())
+}
+
+#[tauri::command]
+fn load_state(app: tauri::AppHandle) -> Result<String, String> {
+    let _save_guard = lock_recover(&SAVE_IO_LOCK);
+    let dir = data_dir(&app)?;
     // fall back to the last-good backup if the main save won't parse (or an
     // edited blob won't decrypt — tampering looks exactly like corruption)
     let chk = read_chk(&dir);
-    let reg_seq = reg_read_seq();
+    let reg_seq = reg_read_seq()?;
     for name in ["state.json", "state.json.bak"] {
-        if let Ok(txt) = std::fs::read_to_string(dir.join(name)) {
+        if let Ok(txt) = read_regular_text(&dir.join(name), MAX_SAVE_FILE_BYTES) {
             let Some(raw) = unseal_save(&txt) else {
                 continue;
             };
-            if serde_json::from_str::<serde_json::Value>(&raw).is_err() {
-                continue;
-            }
-            let ok = match chk {
-                // the file must be one of the two newest generations and not
-                // lag the registry watermark — a restored older pair fails
-                // the seq check even though its hashes are self-consistent
-                Some((seq, cur, prev)) => {
-                    let h = fnv64(&raw);
-                    let gen = if h == cur {
-                        Some(seq)
-                    } else if prev == Some(h) {
-                        Some(seq.saturating_sub(1))
-                    } else {
-                        None
-                    };
-                    match gen {
-                        Some(g) => g + 1 >= reg_seq,
-                        // unknown generation on a barely-started ranch is a
-                        // reinstalled user dropping their own backup back in
-                        // — adopt it rather than wipe it. scummers could use
-                        // the same hole, but only by wiping their ranch first
-                        None => seq <= 2,
-                    }
-                }
-                // no chk: first boot or a legacy save — but a sealed save
-                // with an sv watermark means someone deleted the chk to
-                // sneak a restore past us
-                None => !(reg_seq > 0 && txt.starts_with(SAVE_MAGIC)),
-            };
+            // The file must belong to one of the two newest checkpointed
+            // generations and not lag the registry watermark. A missing chk
+            // adopts legacy/plain backups only on a true first boot/reinstall
+            // (watermark 0), never merely because an attacker changed format.
+            let ok = load_generation_allowed(&raw, chk, reg_seq);
             if ok {
-                *LAST_SAVE.lock().unwrap() = Some(raw.clone());
-                return raw;
+                *lock_recover(&LAST_SAVE) = Some(raw.clone());
+                return Ok(raw);
             }
         }
     }
-    "{}".into()
+    preserve_rejected_save(&dir);
+    Ok("{}".into())
 }
 
 #[tauri::command]
@@ -339,61 +1286,427 @@ fn quit_app(app: tauri::AppHandle) {
     app.exit(0);
 }
 
+// RESET owns these exact leaf paths, but the photos/recovery/legacy folders
+// are externally reachable and may have been replaced with a link or Windows
+// junction. Unlink a reparse entry itself instead of recursively traversing
+// its target. Rust's remove_dir_all applies the same no-follow rule to nested
+// links; the shipped reset policy test locks both root and nested cases down.
+fn remove_tree_no_follow(path: &std::path::Path) -> std::io::Result<()> {
+    let meta = match std::fs::symlink_metadata(path) {
+        Ok(meta) => meta,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e),
+    };
+    if migration_reparse(&meta) {
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::MetadataExt;
+            const FILE_ATTRIBUTE_DIRECTORY: u32 = 0x10;
+            if meta.file_attributes() & FILE_ATTRIBUTE_DIRECTORY != 0 {
+                return std::fs::remove_dir(path);
+            }
+            return std::fs::remove_file(path);
+        }
+        #[cfg(not(windows))]
+        {
+            return std::fs::remove_file(path);
+        }
+    }
+    if meta.is_dir() {
+        std::fs::remove_dir_all(path)
+    } else if meta.is_file() {
+        std::fs::remove_file(path)
+    } else {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "reset target is not a regular file or directory",
+        ))
+    }
+}
+
+fn reset_data_paths_with<F>(
+    dir: &std::path::Path,
+    include_legacy: bool,
+    mut remove: F,
+) -> Result<(), String>
+where
+    F: FnMut(&std::path::Path) -> std::io::Result<()>,
+{
+    for name in [
+        "state.json",
+        "state.json.bak",
+        "state.json.tmp",
+        "state.json.bak.tmp",
+        "state.chk",
+        "state.chk.tmp",
+        "photos",
+        "recovery",
+    ] {
+        remove(&dir.join(name)).map_err(|e| format!("reset could not remove {name}: {e}"))?;
+    }
+    if include_legacy {
+        let roaming = dir
+            .parent()
+            .ok_or_else(|| "reset data directory has no parent".to_string())?;
+        for legacy in ["com.jellypal.app", "com.typet.app"] {
+            remove(&roaming.join(legacy))
+                .map_err(|e| format!("reset could not remove {legacy}: {e}"))?;
+        }
+    }
+    Ok(())
+}
+
+fn reset_plan_self_test() -> [bool; 3] {
+    let dir = std::path::PathBuf::from("jellypal-reset-plan-root").join("current");
+    let mut visited = Vec::new();
+    let complete = reset_data_paths_with(&dir, true, |path| {
+        visited.push(path.to_path_buf());
+        Ok(())
+    });
+    let exact_plan = complete.is_ok()
+        && visited.len() == 10
+        && visited.first() == Some(&dir.join("state.json"))
+        && visited.get(7) == Some(&dir.join("recovery"))
+        && visited.last() == Some(&dir.parent().unwrap().join("com.typet.app"));
+
+    let mut attempted = Vec::new();
+    let failed = reset_data_paths_with(&dir, true, |path| {
+        attempted.push(path.to_path_buf());
+        if path.file_name().and_then(|n| n.to_str()) == Some("photos") {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "simulated reset denial",
+            ))
+        } else {
+            Ok(())
+        }
+    });
+    let failure_propagated =
+        matches!(failed, Err(ref e) if e.contains("photos") && e.contains("denial"));
+    let stopped_safely = attempted.last() == Some(&dir.join("photos"))
+        && !attempted.contains(&dir.join("recovery"))
+        && !attempted.contains(&dir.parent().unwrap().join("com.jellypal.app"));
+    [exact_plan, failure_propagated, stopped_safely]
+}
+
+fn reset_cleanup_self_test() -> bool {
+    let root = std::env::temp_dir().join(format!(
+        "jellypal-reset-policy-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    let outside = root.join("outside");
+    let regular = root.join("regular");
+    let root_seeded = std::fs::create_dir(&root).is_ok();
+    let outside_seeded = std::fs::create_dir(&outside).is_ok()
+        && std::fs::write(outside.join("keep.txt"), b"KEEP").is_ok();
+    let regular_seeded = std::fs::create_dir(&regular).is_ok()
+        && std::fs::write(regular.join("local.txt"), b"LOCAL").is_ok();
+    let nested_link = regular.join("escape");
+    let nested_link_created = create_migration_test_link(&nested_link, &outside);
+    let root_link = root.join("linked-root");
+    let root_link_created = create_migration_test_link(&root_link, &outside);
+    let regular_removed = remove_tree_no_follow(&regular).is_ok() && !regular.exists();
+    let root_link_removed = remove_tree_no_follow(&root_link).is_ok() && !root_link.exists();
+    let outside_preserved =
+        std::fs::read(outside.join("keep.txt")).ok().as_deref() == Some(b"KEEP");
+    let file = root.join("unexpected-file");
+    let file_removed = std::fs::write(&file, b"FILE").is_ok()
+        && remove_tree_no_follow(&file).is_ok()
+        && !file.exists();
+    let absent_is_idempotent = remove_tree_no_follow(&root.join("absent")).is_ok();
+    let checks = [
+        root_seeded,
+        outside_seeded,
+        regular_seeded,
+        nested_link_created,
+        root_link_created,
+        regular_removed,
+        root_link_removed,
+        outside_preserved,
+        file_removed,
+        absent_is_idempotent,
+    ];
+    let _ = remove_tree_no_follow(&root_link);
+    let _ = std::fs::remove_dir_all(&root);
+    checks.into_iter().all(|ok| ok)
+}
+
 #[tauri::command]
-fn reset_save(app: tauri::AppHandle) {
+fn reset_save(app: tauri::AppHandle) -> Result<(), String> {
     // block any in-flight/queued save first — without this, a persist() that
     // was already on its way could land after the deletes and undo the reset
-    RESETTING.store(true, Ordering::Relaxed);
+    RESETTING.store(true, Ordering::SeqCst);
+    let _save_guard = lock_recover(&SAVE_IO_LOCK);
     // wipe every save artifact, then relaunch so the next boot is a true
     // first run. the .bak matters: load_state falls back to it, so leaving
     // it behind would resurrect the wiped save.
-    if let Ok(dir) = app.path().app_data_dir() {
-        for name in ["state.json", "state.json.bak", "state.json.tmp", "state.chk", "state.chk.tmp"] {
-            let _ = std::fs::remove_file(dir.join(name));
-        }
-        reg_clear();
-        *LAST_SAVE.lock().unwrap() = None;
-        let _ = std::fs::remove_dir_all(dir.join("photos"));
-        // kill legacy identifier dirs too — boot-time migration copies an old
-        // com.jellypal.app/com.typet.app save into the new dir whenever the new
-        // one has no state.json, which would silently undo the reset
-        if let Some(roaming) = dir.parent() {
-            for legacy in ["com.jellypal.app", "com.typet.app"] {
-                let _ = std::fs::remove_dir_all(roaming.join(legacy));
-            }
-        }
+    let result = data_dir(&app).and_then(|dir| {
+        // Kill legacy identifier dirs too: boot-time migration would copy an
+        // old save back whenever the new directory has no state.json.
+        reset_data_paths_with(&dir, test_data_dir().is_none(), remove_tree_no_follow)?;
+        reg_clear()?;
+        *lock_recover(&LAST_SAVE) = None;
+        Ok(())
+    });
+    if let Err(error) = result {
+        // Keep the current process usable and allow saves/retries after a
+        // denied or otherwise incomplete cleanup instead of wedging RESETTING.
+        RESETTING.store(false, Ordering::SeqCst);
+        return Err(error);
     }
     tauri::process::restart(&app.env());
 }
 
-// forensic log: frontend frame errors + a heartbeat so a frozen app can
-// tell us afterwards whether JS was still alive and what threw
+const CRASH_LOG_MAX_BYTES: u64 = 256 * 1024;
+const CRASH_LOG_RETAIN_BYTES: usize = 192 * 1024;
+const CRASH_MESSAGE_MAX_BYTES: usize = 4096;
+const CRASH_MESSAGE_MAX_CHARS: usize = 8192;
+const CRASH_MESSAGE_TRUNCATED: &str = " [message truncated]";
+const CRASH_LOG_ROTATED: &[u8] = b"[older log entries dropped]\n";
+
+// Produce exactly one bounded, printable record. In particular, CR/LF cannot
+// forge extra log entries and a giant newline/control-character payload cannot
+// make this error-reporting path spend unbounded time or memory formatting it.
+fn format_crash_line(ms: u128, msg: &str) -> String {
+    let mut body = String::with_capacity(CRASH_MESSAGE_MAX_BYTES);
+    let mut chars = msg.chars().peekable();
+    let mut scanned = 0usize;
+    let mut in_newline = false;
+    let mut truncated = false;
+
+    while let Some(ch) = chars.next() {
+        if scanned >= CRASH_MESSAGE_MAX_CHARS {
+            truncated = true;
+            break;
+        }
+        scanned += 1;
+
+        let piece: &str;
+        let mut utf8 = [0u8; 4];
+        if ch == '\r' || ch == '\n' {
+            if in_newline {
+                continue;
+            }
+            in_newline = true;
+            piece = " | ";
+        } else if ch.is_control() {
+            in_newline = false;
+            piece = " ";
+        } else {
+            in_newline = false;
+            piece = ch.encode_utf8(&mut utf8);
+        }
+
+        if body.len() + piece.len() > CRASH_MESSAGE_MAX_BYTES {
+            truncated = true;
+            break;
+        }
+        body.push_str(piece);
+    }
+    if chars.peek().is_some() {
+        truncated = true;
+    }
+    if truncated {
+        while body.len() + CRASH_MESSAGE_TRUNCATED.len() > CRASH_MESSAGE_MAX_BYTES {
+            body.pop();
+        }
+        body.push_str(CRASH_MESSAGE_TRUNCATED);
+    }
+    format!("[{ms}] {body}\n")
+}
+
+fn crash_log_tail(path: &std::path::Path) -> std::io::Result<Vec<u8>> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut file = std::fs::File::open(path)?;
+    let len = file.metadata()?.len();
+    let start = len.saturating_sub(CRASH_LOG_RETAIN_BYTES as u64);
+    file.seek(SeekFrom::Start(start))?;
+    let mut tail = Vec::with_capacity((len - start) as usize);
+    file.take(CRASH_LOG_RETAIN_BYTES as u64)
+        .read_to_end(&mut tail)?;
+    if start > 0 {
+        // The seek may land halfway through a UTF-8 code point or record. Start
+        // at the next complete line; all records written here end in LF.
+        tail = tail
+            .iter()
+            .position(|&b| b == b'\n')
+            .map(|i| tail[i + 1..].to_vec())
+            .unwrap_or_default();
+    }
+    Ok(tail)
+}
+
+fn append_crash_log(path: &std::path::Path, msg: &str, ms: u128) -> std::io::Result<()> {
+    let line = format_crash_line(ms, msg);
+    let (exists, existing_len) = match std::fs::symlink_metadata(path) {
+        Ok(meta) if meta.file_type().is_file() && !migration_reparse(&meta) => (true, meta.len()),
+        Ok(_) => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "crash.log is not a regular file",
+            ))
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => (false, 0),
+        Err(e) => return Err(e),
+    };
+
+    let mut next = if existing_len.saturating_add(line.len() as u64) > CRASH_LOG_MAX_BYTES {
+        let tail = crash_log_tail(path)?;
+        let mut compact = Vec::with_capacity(CRASH_LOG_ROTATED.len() + tail.len());
+        compact.extend_from_slice(CRASH_LOG_ROTATED);
+        compact.extend_from_slice(&tail);
+        compact
+    } else if exists {
+        read_regular_file(path, CRASH_LOG_MAX_BYTES)?
+    } else {
+        Vec::new()
+    };
+    next.extend_from_slice(line.as_bytes());
+    write_atomic_regular(path, &next)
+}
+
+fn write_panic_log(path: &std::path::Path, msg: &str) -> std::io::Result<()> {
+    let line = format_crash_line(0, msg);
+    write_atomic_regular(path, line.as_bytes())
+}
+
+fn crash_log_policy_self_test() -> bool {
+    let bounded = format_crash_line(7, &"🪼".repeat(5000));
+    let newline_bomb = format_crash_line(8, &"\n".repeat(CRASH_MESSAGE_MAX_CHARS + 100));
+    let base = std::env::temp_dir().join(format!(
+        "jellypal-log-policy-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    if std::fs::create_dir(&base).is_err() {
+        return false;
+    }
+    let log = base.join("crash.log");
+    let normal_write =
+        append_crash_log(&log, "FIRST", 10).is_ok() && append_crash_log(&log, "SECOND", 11).is_ok();
+    let normal = std::fs::read_to_string(&log).unwrap_or_default();
+
+    let mut oversized = String::new();
+    while oversized.len() < CRASH_LOG_MAX_BYTES as usize + 4096 {
+        oversized.push_str("old filler record\n");
+    }
+    oversized.push_str("LAST-RETAINED\n");
+    let seeded = std::fs::write(&log, oversized).is_ok();
+    let rotated_write = append_crash_log(&log, "NEW-DIAGNOSTIC", 12).is_ok();
+    let rotated = std::fs::read_to_string(&log).unwrap_or_default();
+    let rotated_len = std::fs::metadata(&log).map(|m| m.len()).unwrap_or(u64::MAX);
+
+    let blocked = base.join("blocked");
+    let dir_created = std::fs::create_dir(&blocked).is_ok();
+    let rejects_non_file = append_crash_log(&blocked, "NOPE", 13).is_err();
+
+    let outside = base.join("outside.txt");
+    let linked = base.join("linked.log");
+    let hardlink_seeded =
+        std::fs::write(&outside, b"KEEP").is_ok() && std::fs::hard_link(&outside, &linked).is_ok();
+    let hardlink_write = append_crash_log(&linked, "HARDLINK", 14).is_ok();
+    let outside_preserved = std::fs::read(&outside).ok().as_deref() == Some(b"KEEP");
+    let linked_first = std::fs::read_to_string(&linked).unwrap_or_default();
+
+    let outside_tmp = base.join("outside-tmp.txt");
+    let linked_tmp = base.join("linked.log.tmp");
+    let temp_link_seeded = std::fs::write(&outside_tmp, b"TMP-KEEP").is_ok()
+        && std::fs::hard_link(&outside_tmp, &linked_tmp).is_ok();
+    let temp_link_write = append_crash_log(&linked, "SECOND", 15).is_ok();
+    let outside_tmp_preserved = std::fs::read(&outside_tmp).ok().as_deref() == Some(b"TMP-KEEP");
+    let linked_second = std::fs::read_to_string(&linked).unwrap_or_default();
+
+    let panic_log = base.join("panic.log");
+    let panic_normal_write = write_panic_log(&panic_log, "boom\r\nnext").is_ok();
+    let panic_normal = std::fs::read_to_string(&panic_log).unwrap_or_default();
+    let panic_bounded_write = write_panic_log(&panic_log, &"PANIC".repeat(2000)).is_ok();
+    let panic_bounded = std::fs::read_to_string(&panic_log).unwrap_or_default();
+    let panic_outside = base.join("panic-outside.txt");
+    let panic_link_seeded = std::fs::remove_file(&panic_log).is_ok()
+        && std::fs::write(&panic_outside, b"KEEP").is_ok()
+        && std::fs::hard_link(&panic_outside, &panic_log).is_ok();
+    let panic_link_write = write_panic_log(&panic_log, "LINKED").is_ok();
+    let panic_link_isolated = std::fs::read(&panic_outside).ok().as_deref() == Some(b"KEEP")
+        && std::fs::read_to_string(&panic_log)
+            .map(|body| body == "[0] LINKED\n")
+            .unwrap_or(false);
+    let panic_outside_tmp = base.join("panic-outside-tmp.txt");
+    let panic_tmp = base.join("panic.log.tmp");
+    let panic_temp_link_seeded = std::fs::write(&panic_outside_tmp, b"TMP-KEEP").is_ok()
+        && std::fs::hard_link(&panic_outside_tmp, &panic_tmp).is_ok();
+    let panic_temp_link_write = write_panic_log(&panic_log, "SECOND").is_ok();
+    let panic_temp_isolated = std::fs::read(&panic_outside_tmp).ok().as_deref()
+        == Some(b"TMP-KEEP")
+        && !panic_tmp.exists()
+        && std::fs::read_to_string(&panic_log)
+            .map(|body| body == "[0] SECOND\n")
+            .unwrap_or(false);
+    let _ = std::fs::remove_dir_all(&base);
+
+    [
+        format_crash_line(42, "boom") == "[42] boom\n",
+        format_crash_line(42, "a\r\nb\nc\rd") == "[42] a | b | c | d\n",
+        format_crash_line(42, "a\0b\u{1b}c\td") == "[42] a b c d\n",
+        bounded.is_char_boundary(bounded.len()),
+        bounded.contains(CRASH_MESSAGE_TRUNCATED),
+        bounded.len() <= CRASH_MESSAGE_MAX_BYTES + 32,
+        newline_bomb.contains(CRASH_MESSAGE_TRUNCATED),
+        normal_write,
+        normal == "[10] FIRST\n[11] SECOND\n",
+        seeded,
+        rotated_write,
+        rotated.starts_with(std::str::from_utf8(CRASH_LOG_ROTATED).unwrap_or("")),
+        rotated.contains("LAST-RETAINED\n"),
+        rotated.ends_with("[12] NEW-DIAGNOSTIC\n"),
+        rotated_len <= CRASH_LOG_MAX_BYTES,
+        dir_created && rejects_non_file,
+        hardlink_seeded,
+        hardlink_write,
+        outside_preserved,
+        linked_first.contains("KEEP[14] HARDLINK\n"),
+        temp_link_seeded,
+        temp_link_write,
+        outside_tmp_preserved,
+        linked_second.contains("[14] HARDLINK\n") && linked_second.ends_with("[15] SECOND\n"),
+        panic_normal_write,
+        panic_normal == "[0] boom | next\n",
+        panic_bounded_write
+            && panic_bounded.contains(CRASH_MESSAGE_TRUNCATED)
+            && panic_bounded.len() <= CRASH_MESSAGE_MAX_BYTES + 32,
+        panic_link_seeded,
+        panic_link_write,
+        panic_link_isolated,
+        panic_temp_link_seeded,
+        panic_temp_link_write,
+        panic_temp_isolated,
+    ]
+    .into_iter()
+    .all(|ok| ok)
+}
+
+// Forensic log: frontend frame errors + a heartbeat so a frozen app can tell
+// us afterwards whether JS was still alive and what threw.
 #[tauri::command]
 fn log_crash(app: tauri::AppHandle, msg: String) {
-    let Ok(dir) = app.path().app_data_dir() else {
+    let Ok(dir) = data_dir(&app) else {
         return;
     };
-    let _ = std::fs::create_dir_all(&dir);
+    if std::fs::create_dir_all(&dir).is_err() {
+        return;
+    }
     let ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0);
-    let line = format!("[{ms}] {}\n", msg.replace('\n', " | "));
-    if let Ok(mut f) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(dir.join("crash.log"))
-    {
-        use std::io::Write;
-        let _ = f.write_all(line.as_bytes());
-        // cap the file at ~256KB: when it grows past, truncate to the tail
-        if let Ok(meta) = f.metadata() {
-            if meta.len() > 256 * 1024 {
-                let _ = f.set_len(0);
-                let _ = f.write_all(b"[log truncated]\n");
-            }
-        }
-    }
+    let _guard = lock_recover(&CRASH_LOG_LOCK);
+    let _ = append_crash_log(&dir.join("crash.log"), &msg, ms);
 }
 
 // minimal base64 decoder for PNG data URLs (avoids a crate dependency)
@@ -439,39 +1752,860 @@ fn is_demo() -> bool {
         .unwrap_or(false)
 }
 
-fn photos_dir(app: &tauri::AppHandle) -> Option<std::path::PathBuf> {
-    app.path().app_data_dir().ok().map(|d| d.join("photos"))
+fn prepare_regular_dir_path(path: &std::path::Path, create: bool) -> std::io::Result<()> {
+    match std::fs::symlink_metadata(path) {
+        Ok(meta) if meta.is_dir() && !migration_reparse(&meta) => Ok(()),
+        Ok(_) => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "path is not a regular directory",
+        )),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound && create => {
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            std::fs::create_dir(path)?;
+            let meta = std::fs::symlink_metadata(path)?;
+            if meta.is_dir() && !migration_reparse(&meta) {
+                Ok(())
+            } else {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "created path is not a regular directory",
+                ))
+            }
+        }
+        Err(e) => Err(e),
+    }
 }
 
-// tiny recursive copy for the identifier-migration (photos/ dir)
-fn copy_dir(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(dst)?;
-    for e in std::fs::read_dir(src)?.flatten() {
-        let dest = dst.join(e.file_name());
-        if e.path().is_dir() {
-            copy_dir(&e.path(), &dest)?;
+fn photos_dir(app: &tauri::AppHandle, create: bool) -> Result<std::path::PathBuf, String> {
+    let dir = data_dir(app)?.join("photos");
+    prepare_regular_dir_path(&dir, create).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+const MAX_PHOTO_STEM: usize = 80;
+const MAX_PNG_B64: usize = 64 * 1024 * 1024;
+const MAX_PNG_BYTES: usize = MAX_PNG_B64 / 4 * 3;
+const MAX_PNG_DIMENSION: u32 = 16_384;
+const MAX_PNG_PIXELS: u64 = 64 * 1024 * 1024;
+const MAX_PNG_CHUNKS: usize = 8_192;
+// A photo folder is user-visible and can be modified outside the app. Keep a
+// hostile or accidentally huge directory from turning one album-open IPC into
+// an unbounded allocation or filesystem walk. Within the scan window retain
+// the same lexicographically newest names the existing album UI opens first.
+const MAX_PHOTO_SCAN_ENTRIES: usize = 16_384;
+const MAX_PHOTO_CATALOG: usize = 4_096;
+const PNG_SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
+fn valid_photo_stem(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= MAX_PHOTO_STEM
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
+fn valid_photo_file_name(name: &str) -> bool {
+    name.strip_suffix(".png").is_some_and(valid_photo_stem)
+}
+
+fn valid_photo_file_size(len: u64) -> bool {
+    len >= 45 && len <= MAX_PNG_BYTES as u64
+}
+
+fn bounded_photo_catalog<I>(entries: I, scan_limit: usize, catalog_limit: usize) -> Vec<String>
+where
+    I: IntoIterator<Item = Option<String>>,
+{
+    if scan_limit == 0 || catalog_limit == 0 {
+        return vec![];
+    }
+    let mut newest = std::collections::BinaryHeap::<std::cmp::Reverse<String>>::new();
+    for name in entries.into_iter().take(scan_limit).flatten() {
+        if newest.len() < catalog_limit {
+            newest.push(std::cmp::Reverse(name));
+        } else if newest.peek().is_some_and(|oldest| name > oldest.0) {
+            newest.pop();
+            newest.push(std::cmp::Reverse(name));
+        }
+    }
+    let mut names: Vec<String> = newest.into_iter().map(|entry| entry.0).collect();
+    names.sort();
+    names
+}
+
+fn list_photo_names_in_dir(
+    dir: &std::path::Path,
+    scan_limit: usize,
+    catalog_limit: usize,
+) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return vec![];
+    };
+    bounded_photo_catalog(
+        entries.map(|entry| {
+            let entry = entry.ok()?;
+            let name = entry.file_name().to_str()?.to_owned();
+            let meta = std::fs::symlink_metadata(entry.path()).ok()?;
+            (meta.file_type().is_file()
+                && valid_photo_file_size(meta.len())
+                && valid_photo_file_name(&name))
+            .then_some(name)
+        }),
+        scan_limit,
+        catalog_limit,
+    )
+}
+
+fn png_u32(data: &[u8], at: usize) -> Option<u32> {
+    Some(u32::from_be_bytes(data.get(at..at + 4)?.try_into().ok()?))
+}
+
+fn valid_png_ihdr(data: &[u8]) -> bool {
+    if data.len() != 13 {
+        return false;
+    }
+    let width = png_u32(data, 0).unwrap_or(0);
+    let height = png_u32(data, 4).unwrap_or(0);
+    let pixels = (width as u64).saturating_mul(height as u64);
+    let bit_depth = data[8];
+    let color_type = data[9];
+    let depth_ok = match color_type {
+        0 => matches!(bit_depth, 1 | 2 | 4 | 8 | 16),
+        2 | 4 | 6 => matches!(bit_depth, 8 | 16),
+        3 => matches!(bit_depth, 1 | 2 | 4 | 8),
+        _ => false,
+    };
+    width > 0
+        && height > 0
+        && width <= MAX_PNG_DIMENSION
+        && height <= MAX_PNG_DIMENSION
+        && pixels <= MAX_PNG_PIXELS
+        && depth_ok
+        && data[10] == 0 // compression method
+        && data[11] == 0 // filter method
+        && data[12] <= 1 // interlace method
+}
+
+// Lightweight structural validation before a PNG reaches the browser image
+// decoder. CRC/zlib decoding remains the browser's job; this gate contains
+// dimensions, chunk walks, and malformed lengths so corrupt/bomb headers fail
+// without allocating an image surface.
+fn valid_png_structure(data: &[u8]) -> bool {
+    if !valid_photo_file_size(data.len() as u64) || !data.starts_with(PNG_SIGNATURE) {
+        return false;
+    }
+    let mut pos = PNG_SIGNATURE.len();
+    let mut chunks = 0usize;
+    let mut saw_ihdr = false;
+    let mut saw_idat = false;
+    let mut idat_ended = false;
+
+    while pos < data.len() {
+        chunks += 1;
+        if chunks > MAX_PNG_CHUNKS || pos.checked_add(12).is_none_or(|end| end > data.len()) {
+            return false;
+        }
+        let Some(length) = png_u32(data, pos).map(|n| n as usize) else {
+            return false;
+        };
+        let kind = &data[pos + 4..pos + 8];
+        if !kind.iter().all(|b| b.is_ascii_alphabetic()) {
+            return false;
+        }
+        let Some(chunk_end) = pos
+            .checked_add(8)
+            .and_then(|start| start.checked_add(length))
+            .and_then(|end| end.checked_add(4))
+        else {
+            return false;
+        };
+        if chunk_end > data.len() {
+            return false;
+        }
+        let body = &data[pos + 8..pos + 8 + length];
+
+        if chunks == 1 {
+            if kind != b"IHDR" || !valid_png_ihdr(body) {
+                return false;
+            }
+            saw_ihdr = true;
+        } else if kind == b"IHDR" {
+            return false;
+        } else if kind == b"PLTE" {
+            if saw_idat || body.is_empty() || body.len() > 768 || body.len() % 3 != 0 {
+                return false;
+            }
+        } else if kind == b"IDAT" {
+            if !saw_ihdr || idat_ended {
+                return false;
+            }
+            if !body.is_empty() {
+                saw_idat = true;
+            }
+        } else if kind == b"IEND" {
+            return body.is_empty() && saw_ihdr && saw_idat && chunk_end == data.len();
         } else {
-            std::fs::copy(e.path(), dest)?;
+            // Uppercase first byte denotes a critical chunk. PNG defines only
+            // IHDR/PLTE/IDAT/IEND; unknown critical data cannot be ignored.
+            if kind[0].is_ascii_uppercase() {
+                return false;
+            }
+            if saw_idat {
+                idat_ended = true;
+            }
+        }
+        pos = chunk_end;
+    }
+    false
+}
+
+fn decode_png_payload(data: &str) -> Result<Vec<u8>, String> {
+    if data.is_empty() || data.len() > MAX_PNG_B64 || data.len() % 4 != 0 {
+        return Err("invalid png payload size".into());
+    }
+    let pad = data.bytes().rev().take_while(|b| *b == b'=').count();
+    if pad > 2
+        || data.as_bytes()[..data.len() - pad].contains(&b'=')
+        || !data
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/' || b == b'=')
+    {
+        return Err("invalid png base64".into());
+    }
+    let decoded = b64decode(data)?;
+    if !valid_png_structure(&decoded) {
+        return Err("invalid png structure".into());
+    }
+    Ok(decoded)
+}
+
+fn save_photo_file(path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
+    match std::fs::symlink_metadata(path) {
+        Ok(meta) if meta.file_type().is_file() && !migration_reparse(&meta) => {}
+        Ok(_) => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "photo target is not a regular file",
+            ));
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e),
+    }
+    write_atomic_regular(path, data)
+}
+
+fn read_photo_file(path: &std::path::Path) -> Result<Vec<u8>, String> {
+    let data = read_regular_file(path, MAX_PNG_BYTES as u64).map_err(|e| e.to_string())?;
+    if !valid_png_structure(&data) {
+        return Err("invalid png structure".into());
+    }
+    Ok(data)
+}
+
+fn photo_policy_self_test() -> bool {
+    let long = "x".repeat(MAX_PHOTO_STEM + 1);
+    let valid_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+    let valid = b64decode(valid_b64).unwrap_or_default();
+    let mutate = |at: usize, bytes: &[u8]| {
+        let mut png = valid.clone();
+        png[at..at + bytes.len()].copy_from_slice(bytes);
+        png
+    };
+    [
+        valid_photo_stem("jellypal_123"),
+        valid_photo_stem("share-ABC-9"),
+        valid_photo_stem("A"),
+        !valid_photo_stem(""),
+        !valid_photo_stem("."),
+        !valid_photo_stem(".."),
+        !valid_photo_stem("../state"),
+        !valid_photo_stem("a/b"),
+        !valid_photo_stem(r"a\b"),
+        !valid_photo_stem("a:b"),
+        !valid_photo_stem("snowman-☃"),
+        !valid_photo_stem(&long),
+        valid_photo_file_name("jellypal_1.png"),
+        valid_photo_file_name("share-A.png"),
+        !valid_photo_file_name(".png"),
+        !valid_photo_file_name("x.PNG"),
+        !valid_photo_file_name("x..png"),
+        !valid_photo_file_name("../x.png"),
+        valid_png_structure(&valid),
+        decode_png_payload(valid_b64).is_ok(),
+        decode_png_payload("iVBORw0KGg!=").is_err(),
+        decode_png_payload("dGV4dA==").is_err(),
+        !valid_png_structure(PNG_SIGNATURE),
+        !valid_png_structure(&mutate(16, &0u32.to_be_bytes())),
+        !valid_png_structure(&mutate(16, &(MAX_PNG_DIMENSION + 1).to_be_bytes())),
+        !valid_png_structure(&{
+            let mut png = mutate(16, &8193u32.to_be_bytes());
+            png[20..24].copy_from_slice(&8192u32.to_be_bytes());
+            png
+        }),
+        valid_png_structure(&{
+            let mut png = mutate(16, &8192u32.to_be_bytes());
+            png[20..24].copy_from_slice(&8192u32.to_be_bytes());
+            png
+        }),
+        !valid_png_structure(&mutate(25, &[1])),
+        !valid_png_structure(&mutate(26, &[1])),
+        !valid_png_structure(&mutate(27, &[1])),
+        !valid_png_structure(&mutate(28, &[2])),
+        !valid_png_structure(&mutate(8, &12u32.to_be_bytes())),
+        !valid_png_structure(&mutate(37, b"tEXt")),
+        !valid_png_structure(&valid[..56]),
+        !valid_png_structure(&mutate(37, b"ABCD")),
+        !valid_png_structure(&mutate(37, b"ID1T")),
+        !valid_png_structure(&mutate(33, &u32::MAX.to_be_bytes())),
+        !valid_png_structure(&{
+            let mut png = valid.clone();
+            png.push(0);
+            png
+        }),
+    ]
+    .into_iter()
+    .all(|ok| ok)
+}
+
+const MAX_MIGRATION_DEPTH: usize = 8;
+const MAX_MIGRATION_FILE_BYTES: u64 = 64 * 1024 * 1024;
+
+#[derive(Default)]
+struct MigrationStats {
+    files: usize,
+    dirs: usize,
+    skipped: usize,
+}
+
+fn migration_reparse(meta: &std::fs::Metadata) -> bool {
+    if meta.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        // Junctions are mount-point reparse records rather than ordinary
+        // symlinks, so FileType::is_symlink alone does not contain them.
+        return meta.file_attributes() & 0x400 != 0;
+    }
+    #[cfg(not(windows))]
+    false
+}
+
+fn prepare_migration_dir(path: &std::path::Path) -> std::io::Result<()> {
+    match std::fs::symlink_metadata(path) {
+        Ok(meta) if meta.is_dir() && !migration_reparse(&meta) => Ok(()),
+        Ok(_) => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "migration directory is not a regular directory",
+        )),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            std::fs::create_dir(path)?;
+            let meta = std::fs::symlink_metadata(path)?;
+            if meta.is_dir() && !migration_reparse(&meta) {
+                Ok(())
+            } else {
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    "created migration directory is not regular",
+                ))
+            }
+        }
+        Err(e) => Err(e),
+    }
+}
+
+fn copy_regular_file_atomic(
+    src: &std::path::Path,
+    dest: &std::path::Path,
+    max_bytes: u64,
+) -> std::io::Result<()> {
+    use std::io::Read as _;
+
+    let src_meta = std::fs::symlink_metadata(src)?;
+    if !src_meta.file_type().is_file() || migration_reparse(&src_meta) || src_meta.len() > max_bytes
+    {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "migration source is not a bounded regular file",
+        ));
+    }
+    let name = dest.file_name().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "migration destination has no leaf",
+        )
+    })?;
+    let mut tmp_name = name.to_os_string();
+    tmp_name.push(".tmp");
+    let tmp = dest.with_file_name(tmp_name);
+    remove_file_leaf_no_follow(&tmp)?;
+
+    let result = (|| {
+        let input = std::fs::OpenOptions::new().read(true).open(src)?;
+        let opened = input.metadata()?;
+        if !opened.file_type().is_file() || migration_reparse(&opened) || opened.len() > max_bytes {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "opened migration source is outside policy",
+            ));
+        }
+        let mut output = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)?;
+        let copied = std::io::copy(&mut input.take(max_bytes.saturating_add(1)), &mut output)?;
+        if copied > max_bytes {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "migration source grew beyond policy",
+            ));
+        }
+        output.sync_all()?;
+        drop(output);
+        replace_regular_file(&tmp, dest)
+    })();
+    if result.is_err() {
+        let _ = remove_file_leaf_no_follow(&tmp);
+    }
+    result
+}
+
+// Best-effort legacy-profile copy. Never follow links/junctions on either
+// side, and bound nesting so a malformed old tree cannot wedge first boot.
+// A bad entry is skipped while its safe siblings still migrate.
+fn copy_legacy_tree(
+    src: &std::path::Path,
+    dst: &std::path::Path,
+    depth: usize,
+    stats: &mut MigrationStats,
+) -> std::io::Result<()> {
+    let src_meta = std::fs::symlink_metadata(src)?;
+    if !src_meta.is_dir() || migration_reparse(&src_meta) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "migration source is not a regular directory",
+        ));
+    }
+    prepare_migration_dir(dst)?;
+
+    for entry in std::fs::read_dir(src)? {
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(_) => {
+                stats.skipped += 1;
+                continue;
+            }
+        };
+        let source = entry.path();
+        let dest = dst.join(entry.file_name());
+        let meta = match std::fs::symlink_metadata(&source) {
+            Ok(meta) => meta,
+            Err(_) => {
+                stats.skipped += 1;
+                continue;
+            }
+        };
+        if migration_reparse(&meta) {
+            stats.skipped += 1;
+            continue;
+        }
+        if meta.is_dir() {
+            if depth >= MAX_MIGRATION_DEPTH {
+                stats.skipped += 1;
+                continue;
+            }
+            if copy_legacy_tree(&source, &dest, depth + 1, stats).is_ok() {
+                stats.dirs += 1;
+            } else {
+                stats.skipped += 1;
+            }
+            continue;
+        }
+        if !meta.is_file() || meta.len() > MAX_MIGRATION_FILE_BYTES {
+            stats.skipped += 1;
+            continue;
+        }
+        match std::fs::symlink_metadata(&dest) {
+            Ok(dest_meta) if !dest_meta.is_file() || migration_reparse(&dest_meta) => {
+                stats.skipped += 1;
+                continue;
+            }
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => {
+                stats.skipped += 1;
+                continue;
+            }
+        }
+        if copy_regular_file_atomic(&source, &dest, MAX_MIGRATION_FILE_BYTES).is_ok() {
+            stats.files += 1;
+        } else {
+            stats.skipped += 1;
         }
     }
     Ok(())
 }
 
+#[cfg(windows)]
+fn create_migration_test_link(link: &std::path::Path, target: &std::path::Path) -> bool {
+    std::process::Command::new("cmd.exe")
+        .args(["/D", "/C", "mklink", "/J"])
+        .arg(link)
+        .arg(target)
+        .output()
+        .map(|out| out.status.success())
+        .unwrap_or(false)
+}
+
+fn photo_directory_self_test() -> bool {
+    let root = std::env::temp_dir().join(format!(
+        "jellypal-photo-directory-policy-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    let root_seeded = std::fs::create_dir(&root).is_ok();
+    let missing = root.join("missing");
+    let missing_read_rejected = prepare_regular_dir_path(&missing, false).is_err();
+    let missing_created = prepare_regular_dir_path(&missing, true).is_ok();
+    let created_readable = prepare_regular_dir_path(&missing, false).is_ok();
+
+    let file = root.join("file");
+    let file_seeded = std::fs::write(&file, b"FILE").is_ok();
+    let file_rejected = prepare_regular_dir_path(&file, false).is_err()
+        && prepare_regular_dir_path(&file, true).is_err();
+
+    let outside = root.join("outside");
+    let outside_seeded = std::fs::create_dir(&outside).is_ok()
+        && std::fs::write(outside.join("keep.txt"), b"KEEP").is_ok();
+    let link = root.join("linked-photos");
+    let link_created = create_migration_test_link(&link, &outside);
+    let link_rejected = prepare_regular_dir_path(&link, false).is_err()
+        && prepare_regular_dir_path(&link, true).is_err()
+        && std::fs::read(outside.join("keep.txt")).ok().as_deref() == Some(b"KEEP");
+
+    let checks = [
+        root_seeded,
+        missing_read_rejected,
+        missing_created,
+        created_readable,
+        file_seeded,
+        file_rejected,
+        outside_seeded && link_created,
+        link_rejected,
+    ];
+    let _ = std::fs::remove_dir(&link);
+    let _ = std::fs::remove_dir_all(&root);
+    checks.into_iter().all(|ok| ok)
+}
+
+fn data_directory_self_test() -> bool {
+    let root = std::env::temp_dir().join(format!(
+        "jellypal-data-directory-policy-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    let root_seeded = std::fs::create_dir(&root).is_ok();
+    let regular = root.join("regular");
+    let regular_created = ensure_data_dir(regular.clone()).ok().as_deref() == Some(&regular);
+    let regular_accepted = ensure_data_dir(regular.clone()).is_ok();
+
+    let file = root.join("file");
+    let file_seeded = std::fs::write(&file, b"FILE").is_ok();
+    let file_rejected = ensure_data_dir(file).is_err();
+
+    let outside = root.join("outside");
+    let outside_seeded = std::fs::create_dir(&outside).is_ok()
+        && std::fs::write(outside.join("keep.txt"), b"KEEP").is_ok();
+    let linked = root.join("linked-data");
+    let link_created = create_migration_test_link(&linked, &outside);
+    let link_rejected = ensure_data_dir(linked.clone()).is_err();
+    let outside_preserved =
+        std::fs::read(outside.join("keep.txt")).ok().as_deref() == Some(b"KEEP");
+    let checks = [
+        root_seeded,
+        regular_created,
+        regular_accepted,
+        file_seeded,
+        file_rejected,
+        outside_seeded,
+        link_created,
+        link_rejected,
+        outside_preserved,
+    ];
+    let _ = std::fs::remove_dir(&linked);
+    let _ = std::fs::remove_dir_all(&root);
+    checks.into_iter().all(|ok| ok)
+}
+
+fn photo_catalog_self_test() -> bool {
+    let root = std::env::temp_dir().join(format!(
+        "jellypal-photo-catalog-policy-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    let root_seeded = std::fs::create_dir(&root).is_ok();
+    let payload = [7u8; 45];
+    let entries_seeded = std::fs::write(root.join("jellypal_001.png"), payload).is_ok()
+        && std::fs::write(root.join("jellypal_002.png"), payload).is_ok()
+        && std::fs::write(root.join("jellypal_004.png"), payload).is_ok()
+        && std::fs::write(root.join("tiny.png"), [0u8; 44]).is_ok()
+        && std::fs::write(root.join("wrong.PNG"), payload).is_ok()
+        && std::fs::create_dir(root.join("jellypal_003.png")).is_ok();
+    let full = list_photo_names_in_dir(&root, usize::MAX, usize::MAX);
+    let capped = list_photo_names_in_dir(&root, usize::MAX, 2);
+    let retained = bounded_photo_catalog(
+        ["001", "005", "003", "004", "002"]
+            .into_iter()
+            .map(|name| Some(name.to_owned())),
+        usize::MAX,
+        3,
+    );
+    let invalid_consumes_scan =
+        bounded_photo_catalog([Some("001".to_owned()), None, Some("999".to_owned())], 2, 3);
+    let production_bound = bounded_photo_catalog(
+        (0..MAX_PHOTO_SCAN_ENTRIES + 10).map(|n| Some(format!("{n:05}"))),
+        MAX_PHOTO_SCAN_ENTRIES,
+        MAX_PHOTO_CATALOG,
+    );
+    let checks = [
+        root_seeded,
+        entries_seeded,
+        full == ["jellypal_001.png", "jellypal_002.png", "jellypal_004.png"],
+        capped == ["jellypal_002.png", "jellypal_004.png"],
+        retained == ["003", "004", "005"],
+        invalid_consumes_scan == ["001"],
+        production_bound.len() == MAX_PHOTO_CATALOG
+            && production_bound.first().map(String::as_str) == Some("12288")
+            && production_bound.last().map(String::as_str) == Some("16383"),
+        bounded_photo_catalog([Some("x".to_owned())], 0, 1).is_empty(),
+        bounded_photo_catalog([Some("x".to_owned())], 1, 0).is_empty(),
+    ];
+    let _ = std::fs::remove_dir_all(&root);
+    checks.into_iter().all(|ok| ok)
+}
+
+fn photo_write_self_test() -> bool {
+    let root = std::env::temp_dir().join(format!(
+        "jellypal-photo-write-policy-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    let photos = root.join("photos");
+    let outside = root.join("outside");
+    let root_seeded =
+        std::fs::create_dir_all(&photos).is_ok() && std::fs::create_dir(&outside).is_ok();
+    let valid = b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+    )
+    .unwrap_or_default();
+    let payload_valid = valid_png_structure(&valid);
+
+    let fresh = photos.join("fresh.png");
+    let fresh_written = save_photo_file(&fresh, &valid).is_ok()
+        && std::fs::read(&fresh).ok().as_deref() == Some(valid.as_slice());
+    let fresh_read = read_photo_file(&fresh).ok().as_deref() == Some(valid.as_slice());
+    let blocked_temp_target = photos.join("blocked-temp.png");
+    let blocked_temp = photos.join("blocked-temp.png.tmp");
+    let temp_directory_seeded = std::fs::create_dir(&blocked_temp).is_ok()
+        && std::fs::write(blocked_temp.join("keep.txt"), b"KEEP").is_ok();
+    let temp_directory_rejected = save_photo_file(&blocked_temp_target, &valid).is_err()
+        && std::fs::read(blocked_temp.join("keep.txt")).ok().as_deref() == Some(b"KEEP")
+        && !blocked_temp_target.exists();
+    let tiny = photos.join("tiny.png");
+    let tiny_rejected = std::fs::write(&tiny, [0u8; 44]).is_ok() && read_photo_file(&tiny).is_err();
+    let invalid = photos.join("invalid.png");
+    let invalid_rejected =
+        std::fs::write(&invalid, [0u8; 45]).is_ok() && read_photo_file(&invalid).is_err();
+    let oversized = photos.join("oversized.png");
+    let oversized_rejected = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&oversized)
+        .and_then(|file| file.set_len(MAX_PNG_BYTES as u64 + 1))
+        .is_ok()
+        && read_photo_file(&oversized).is_err();
+
+    let outside_target = outside.join("target.txt");
+    let linked = photos.join("linked.png");
+    let target_link_seeded = std::fs::write(&outside_target, b"KEEP").is_ok()
+        && std::fs::hard_link(&outside_target, &linked).is_ok();
+    let target_link_written = save_photo_file(&linked, &valid).is_ok();
+    let target_isolated = std::fs::read(&outside_target).ok().as_deref() == Some(b"KEEP")
+        && std::fs::read(&linked).ok().as_deref() == Some(valid.as_slice());
+
+    let outside_tmp = outside.join("temp.txt");
+    let linked_tmp = photos.join("linked.png.tmp");
+    let temp_link_seeded = std::fs::write(&outside_tmp, b"TMP-KEEP").is_ok()
+        && std::fs::hard_link(&outside_tmp, &linked_tmp).is_ok();
+    let temp_link_written = save_photo_file(&linked, &valid).is_ok();
+    let temp_isolated =
+        std::fs::read(&outside_tmp).ok().as_deref() == Some(b"TMP-KEEP") && !linked_tmp.exists();
+
+    let blocked = photos.join("blocked.png");
+    let directory_rejected =
+        std::fs::create_dir(&blocked).is_ok() && save_photo_file(&blocked, &valid).is_err();
+    let checks = [
+        root_seeded,
+        payload_valid,
+        fresh_written,
+        fresh_read,
+        temp_directory_seeded,
+        temp_directory_rejected,
+        tiny_rejected,
+        invalid_rejected,
+        oversized_rejected,
+        target_link_seeded,
+        target_link_written,
+        target_isolated,
+        temp_link_seeded,
+        temp_link_written,
+        temp_isolated,
+        directory_rejected,
+    ];
+    let _ = std::fs::remove_dir_all(&root);
+    checks.into_iter().all(|ok| ok)
+}
+
+#[cfg(unix)]
+fn create_migration_test_link(link: &std::path::Path, target: &std::path::Path) -> bool {
+    std::os::unix::fs::symlink(target, link).is_ok()
+}
+
+fn migration_policy_self_test() -> bool {
+    let root = std::env::temp_dir().join(format!(
+        "jellypal-migration-policy-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0)
+    ));
+    let src = root.join("src");
+    let dst = root.join("dst");
+    let outside = root.join("outside");
+    if std::fs::create_dir_all(src.join("photos")).is_err()
+        || std::fs::create_dir_all(&dst).is_err()
+        || std::fs::create_dir_all(&outside).is_err()
+    {
+        return false;
+    }
+    let seeded = std::fs::write(src.join("state.json"), b"STATE").is_ok()
+        && std::fs::write(src.join("photos").join("safe.png"), b"PNG").is_ok()
+        && std::fs::write(src.join("collision"), b"SOURCE").is_ok()
+        && std::fs::create_dir(dst.join("collision")).is_ok()
+        && std::fs::write(dst.join("collision").join("keep.txt"), b"KEEP").is_ok()
+        && std::fs::write(outside.join("secret.txt"), b"SECRET").is_ok();
+
+    let linked_source = src.join("linked-dest.txt");
+    let linked_dest = dst.join("linked-dest.txt");
+    let outside_dest = outside.join("dest.txt");
+    let hardlink_seeded = std::fs::write(&linked_source, b"MIGRATED").is_ok()
+        && std::fs::write(&outside_dest, b"KEEP").is_ok()
+        && std::fs::hard_link(&outside_dest, &linked_dest).is_ok();
+    let linked_tmp = dst.join("linked-dest.txt.tmp");
+    let outside_tmp = outside.join("temp.txt");
+    let temp_hardlink_seeded = std::fs::write(&outside_tmp, b"TMP-KEEP").is_ok()
+        && std::fs::hard_link(&outside_tmp, &linked_tmp).is_ok();
+    let oversized = src.join("oversized.bin");
+    let oversized_seeded = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&oversized)
+        .and_then(|file| file.set_len(MAX_MIGRATION_FILE_BYTES + 1))
+        .is_ok();
+    let temp_dir_source = src.join("temp-dir-dest.txt");
+    let temp_dir = dst.join("temp-dir-dest.txt.tmp");
+    let temp_dir_seeded = std::fs::write(&temp_dir_source, b"LOCAL").is_ok()
+        && std::fs::create_dir(&temp_dir).is_ok()
+        && std::fs::write(temp_dir.join("keep.txt"), b"KEEP").is_ok();
+
+    let mut deep = src.join("deep");
+    let _ = std::fs::create_dir(&deep);
+    for i in 0..=MAX_MIGRATION_DEPTH {
+        deep = deep.join(format!("d{i}"));
+        let _ = std::fs::create_dir(&deep);
+    }
+    let deep_seeded = std::fs::write(deep.join("too-deep.txt"), b"DEEP").is_ok();
+    let link = src.join("escape");
+    let link_created = create_migration_test_link(&link, &outside);
+
+    let mut stats = MigrationStats::default();
+    let copied = copy_legacy_tree(&src, &dst, 0, &mut stats).is_ok();
+    let mut other = MigrationStats::default();
+    let link_root_rejected =
+        copy_legacy_tree(&link, &root.join("link-copy"), 0, &mut other).is_err();
+    let bad_dst = root.join("bad-dst");
+    let bad_dst_seeded = std::fs::write(&bad_dst, b"FILE").is_ok();
+    let bad_dst_rejected = copy_legacy_tree(&src, &bad_dst, 0, &mut other).is_err();
+
+    let checks = [
+        seeded,
+        hardlink_seeded,
+        temp_hardlink_seeded,
+        oversized_seeded,
+        temp_dir_seeded,
+        deep_seeded,
+        link_created,
+        copied,
+        std::fs::read(dst.join("state.json")).ok().as_deref() == Some(b"STATE"),
+        std::fs::read(dst.join("photos").join("safe.png"))
+            .ok()
+            .as_deref()
+            == Some(b"PNG"),
+        !dst.join("escape").exists(),
+        !dst.join("deep")
+            .join("d0")
+            .join("d1")
+            .join("d2")
+            .join("d3")
+            .join("d4")
+            .join("d5")
+            .join("d6")
+            .join("d7")
+            .join("d8")
+            .join("too-deep.txt")
+            .exists(),
+        std::fs::read(dst.join("collision").join("keep.txt"))
+            .ok()
+            .as_deref()
+            == Some(b"KEEP"),
+        std::fs::read(&linked_dest).ok().as_deref() == Some(b"MIGRATED"),
+        std::fs::read(&outside_dest).ok().as_deref() == Some(b"KEEP"),
+        std::fs::read(&outside_tmp).ok().as_deref() == Some(b"TMP-KEEP"),
+        !linked_tmp.exists(),
+        !dst.join("oversized.bin").exists(),
+        std::fs::read(temp_dir.join("keep.txt")).ok().as_deref() == Some(b"KEEP"),
+        !dst.join("temp-dir-dest.txt").exists(),
+        stats.files == 3,
+        stats.skipped >= 5,
+        link_root_rejected,
+        bad_dst_seeded && bad_dst_rejected,
+    ];
+    let _ = std::fs::remove_dir(&link);
+    let _ = std::fs::remove_dir_all(&root);
+    checks.into_iter().all(|ok| ok)
+}
+
 #[tauri::command]
 fn list_photos(app: tauri::AppHandle) -> Vec<String> {
-    let Some(dir) = photos_dir(&app) else { return vec![] };
-    let mut names: Vec<String> = std::fs::read_dir(dir)
-        .map(|rd| {
-            rd.filter_map(|e| e.ok())
-                .filter_map(|e| {
-                    let n = e.file_name().to_string_lossy().into_owned();
-                    if n.ends_with(".png") { Some(n) } else { None }
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    names.sort();
-    names
+    let Ok(dir) = photos_dir(&app, false) else {
+        return vec![];
+    };
+    list_photo_names_in_dir(&dir, MAX_PHOTO_SCAN_ENTRIES, MAX_PHOTO_CATALOG)
 }
 
 // minimal base64 encoder for returning photo bytes to the frontend
@@ -479,47 +2613,62 @@ fn b64encode(data: &[u8]) -> String {
     const TBL: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(data.len() * 4 / 3 + 4);
     for c in data.chunks(3) {
-        let n = ((c[0] as u32) << 16) | ((*c.get(1).unwrap_or(&0) as u32) << 8) | (*c.get(2).unwrap_or(&0) as u32);
+        let n = ((c[0] as u32) << 16)
+            | ((*c.get(1).unwrap_or(&0) as u32) << 8)
+            | (*c.get(2).unwrap_or(&0) as u32);
         out.push(TBL[(n >> 18) as usize & 63] as char);
         out.push(TBL[(n >> 12) as usize & 63] as char);
-        out.push(if c.len() > 1 { TBL[(n >> 6) as usize & 63] as char } else { '=' });
-        out.push(if c.len() > 2 { TBL[n as usize & 63] as char } else { '=' });
+        out.push(if c.len() > 1 {
+            TBL[(n >> 6) as usize & 63] as char
+        } else {
+            '='
+        });
+        out.push(if c.len() > 2 {
+            TBL[n as usize & 63] as char
+        } else {
+            '='
+        });
     }
     out
 }
 
 #[tauri::command]
 fn load_photo(app: tauri::AppHandle, name: String) -> Result<String, String> {
-    let Some(dir) = photos_dir(&app) else { return Err("no photos dir".into()) };
-    let safe: String = name
-        .chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' { c } else { '_' })
-        .collect();
-    let data = std::fs::read(dir.join(safe)).map_err(|e| e.to_string())?;
+    let dir = photos_dir(&app, false)?;
+    if !valid_photo_file_name(&name) {
+        return Err("invalid photo name".into());
+    }
+    let path = dir.join(&name);
+    let data = read_photo_file(&path)?;
     Ok(b64encode(&data))
 }
 
 #[tauri::command]
 fn delete_photo(app: tauri::AppHandle, name: String) -> Result<(), String> {
-    let Some(dir) = photos_dir(&app) else { return Err("no photos dir".into()) };
-    let safe: String = name
-        .chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' || c == '.' { c } else { '_' })
-        .collect();
-    std::fs::remove_file(dir.join(safe)).map_err(|e| e.to_string())
+    let dir = photos_dir(&app, false)?;
+    if !valid_photo_file_name(&name) {
+        return Err("invalid photo name".into());
+    }
+    let path = dir.join(&name);
+    if !std::fs::symlink_metadata(&path)
+        .map(|m| m.file_type().is_file())
+        .unwrap_or(false)
+    {
+        return Err("photo is not a regular file".into());
+    }
+    std::fs::remove_file(path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn open_photos(app: tauri::AppHandle) -> Result<(), String> {
-    let Some(dir) = photos_dir(&app) else { return Err("no photos dir".into()) };
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let dir = photos_dir(&app, true)?;
     open_with_shell(&dir.to_string_lossy())
 }
 
 #[tauri::command]
 fn open_url(url: String) -> Result<(), String> {
     // gem-shop store link — only ever https, opened in the default browser
-    if !url.starts_with("https://") {
+    if !valid_https_url(&url) {
         return Err("refusing non-https url".into());
     }
     open_with_shell(&url)
@@ -537,6 +2686,9 @@ const GEM_AMOUNTS: [(&str, u64); 4] = [("A", 250), ("B", 500), ("C", 1000), ("D"
 
 fn b32dec(s: &str) -> Option<Vec<u8>> {
     // RFC4648 base32, no padding — decode exactly the bits present
+    if s.len() > 128 {
+        return None;
+    }
     let mut out = Vec::with_capacity(s.len() * 5 / 8);
     let (mut acc, mut bits) = (0u64, 0u32);
     for c in s.bytes() {
@@ -557,13 +2709,16 @@ fn b32dec(s: &str) -> Option<Vec<u8>> {
 
 fn verify_code_with(pubkey: &[u8; 32], code: &str) -> Result<u64, String> {
     use ed25519_dalek::Verifier as _;
+    if !valid_redeem_input(code.trim()) {
+        return Err("bad code".into());
+    }
     let up = code.trim().to_uppercase();
     let body = up.strip_prefix("JELLYPAL-").unwrap_or(up.as_str());
     let mut it = body.split('-');
     let pack = it.next().ok_or("bad code")?;
     let nonce = it.next().ok_or("bad code")?;
     let sigs = it.next().ok_or("bad code")?;
-    if it.next().is_some() || nonce.len() != 8 {
+    if it.next().is_some() || !valid_nonce(nonce) || !valid_b32_text(sigs, 103) {
         return Err("bad code".into());
     }
     let gems = GEM_AMOUNTS
@@ -578,7 +2733,8 @@ fn verify_code_with(pubkey: &[u8; 32], code: &str) -> Result<u64, String> {
     let sig = ed25519_dalek::Signature::from_slice(&sig_bytes).map_err(|e| e.to_string())?;
     let vk = ed25519_dalek::VerifyingKey::from_bytes(pubkey).map_err(|e| e.to_string())?;
     let msg = format!("JP2:{pack}:{nonce}");
-    vk.verify(msg.as_bytes(), &sig).map_err(|_| "bad code".to_string())?;
+    vk.verify(msg.as_bytes(), &sig)
+        .map_err(|_| "bad code".to_string())?;
     Ok(gems)
 }
 
@@ -600,17 +2756,313 @@ const SERVER_PUBKEY: [u8; 32] = [
 // the deployed worker's URL — every server call degrades gracefully to the
 // offline path if this is unreachable
 const SERVER_URL: &str = "https://api.jellypal.fun";
+const MAX_UID_BYTES: usize = 26;
+const MAX_REDEEM_CODE_BYTES: usize = 160;
+const MAX_ACK_INPUT_NONCES: usize = 256;
+const MAX_ACK_NONCES: usize = 64;
+const MAX_GRANTS_PER_RESPONSE: usize = 64;
+const MAX_SERVER_RESPONSE_BYTES: usize = 256 * 1024;
+const MAX_WEATHER_RESPONSE_BYTES: usize = 64 * 1024;
+const MAX_VERSION_RESPONSE_BYTES: usize = 64;
+const MAX_HTTPS_URL_BYTES: usize = 2_048;
+
+fn valid_b32_text(value: &str, exact_len: usize) -> bool {
+    value.len() == exact_len
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_uppercase() || matches!(b, b'2'..=b'7'))
+}
+
+fn valid_uid(uid: &str) -> bool {
+    uid.len() == MAX_UID_BYTES
+        && uid.starts_with("JP")
+        && valid_b32_text(&uid[2..], MAX_UID_BYTES - 2)
+}
+
+fn valid_redeem_input(code: &str) -> bool {
+    !code.is_empty()
+        && code.len() <= MAX_REDEEM_CODE_BYTES
+        && code.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+}
+
+fn valid_nonce(nonce: &str) -> bool {
+    valid_b32_text(nonce, 8)
+}
+
+fn valid_https_url(url: &str) -> bool {
+    if url.is_empty()
+        || url.len() > MAX_HTTPS_URL_BYTES
+        || url.contains('\\')
+        || !url.bytes().all(|byte| byte.is_ascii_graphic())
+    {
+        return false;
+    }
+    let Ok(parsed) = tauri::Url::parse(url) else {
+        return false;
+    };
+    parsed.scheme() == "https"
+        && parsed.host_str().is_some_and(|host| !host.is_empty())
+        && parsed.username().is_empty()
+        && parsed.password().is_none()
+}
+
+fn valid_release_version(value: &str) -> bool {
+    let mut parts = value.split('.');
+    for _ in 0..3 {
+        let Some(part) = parts.next() else {
+            return false;
+        };
+        if part.is_empty()
+            || (part.len() > 1 && part.starts_with('0'))
+            || !part.bytes().all(|byte| byte.is_ascii_digit())
+            || part.parse::<u32>().is_err()
+        {
+            return false;
+        }
+    }
+    parts.next().is_none()
+}
+
+fn sanitize_ack_nonces(nonces: Vec<String>) -> Vec<String> {
+    let mut clean = Vec::with_capacity(MAX_ACK_NONCES);
+    for nonce in nonces.into_iter().take(MAX_ACK_INPUT_NONCES) {
+        if valid_nonce(&nonce) && !clean.contains(&nonce) {
+            clean.push(nonce);
+            if clean.len() == MAX_ACK_NONCES {
+                break;
+            }
+        }
+    }
+    clean
+}
+
+// `Command::output` buffers child stdout without a ceiling. Read at most one
+// byte beyond the policy instead, then terminate an oversized producer before
+// it can make a broken/malicious endpoint consume arbitrary memory.
+fn bounded_command_output(
+    command: &mut std::process::Command,
+    max_bytes: usize,
+) -> std::io::Result<Vec<u8>> {
+    use std::io::Read as _;
+    use std::process::Stdio;
+
+    let mut child = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()?;
+    let Some(stdout) = child.stdout.take() else {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::BrokenPipe,
+            "child stdout unavailable",
+        ));
+    };
+    let mut bytes = Vec::with_capacity(max_bytes.min(8 * 1024));
+    let read = stdout
+        .take(max_bytes.saturating_add(1) as u64)
+        .read_to_end(&mut bytes);
+    if let Err(e) = read {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(e);
+    }
+    if bytes.len() > max_bytes {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "child response exceeds policy",
+        ));
+    }
+    let status = child.wait()?;
+    if !status.success() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "child command failed",
+        ));
+    }
+    Ok(bytes)
+}
+
+fn run_checked_command(command: &mut std::process::Command) -> std::io::Result<()> {
+    use std::process::Stdio;
+
+    let status = command
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("child command exited with {status}"),
+        ))
+    }
+}
+
+fn configured_curl_command(args: &[&str]) -> std::process::Command {
+    let mut command = std::process::Command::new("curl");
+    // curl only honors -q/--disable as the first argument. This prevents a
+    // user's .curlrc from adding proxies, credentials, output files, or other
+    // behavior to Jellypal's fixed, bounded requests.
+    command.arg("-q").args(args);
+    command
+}
+
+fn curl_text(args: &[&str], max_bytes: usize) -> Option<String> {
+    let mut command = configured_curl_command(args);
+    String::from_utf8(bounded_command_output(&mut command, max_bytes).ok()?).ok()
+}
 
 fn curl_post(url: &str, body: &str) -> Option<String> {
-    let out = std::process::Command::new("curl")
-        .args(["-s", "--max-time", "8", "-X", "POST",
-               "-H", "Content-Type: application/json", "-d", body, url])
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
+    curl_text(
+        &[
+            "-s",
+            "--max-time",
+            "8",
+            "-X",
+            "POST",
+            "-H",
+            "Content-Type: application/json",
+            "-d",
+            body,
+            url,
+        ],
+        MAX_SERVER_RESPONSE_BYTES,
+    )
+}
+
+// A transport-level success is not the same as an application-level success:
+// curl can exit zero for HTTP error responses, and the worker reports those as
+// JSON `{error: ...}` bodies. Keep every grant endpoint on the same strict
+// contract so a refusal or malformed response is never mistaken for success.
+fn parse_server_json(response: &str) -> Result<serde_json::Value, String> {
+    let value: serde_json::Value =
+        serde_json::from_str(response).map_err(|_| "bad response".to_string())?;
+    if let Some(error) = value.get("error").and_then(|entry| entry.as_str()) {
+        return Err(error.to_string());
     }
-    Some(String::from_utf8_lossy(&out.stdout).to_string())
+    Ok(value)
+}
+
+fn parse_ack_response(response: &str) -> Result<(), String> {
+    let value = parse_server_json(response)?;
+    if value.get("ok").and_then(|entry| entry.as_bool()) == Some(true) {
+        Ok(())
+    } else {
+        Err("bad response".into())
+    }
+}
+
+fn network_policy_self_test() -> bool {
+    const TEST_UID: &str = "JPABCDEFGHIJKLMNOPQRSTUVWX";
+    const B32: &[u8; 32] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    let mixed = sanitize_ack_nonces(vec![
+        "ABCDEFGH".into(),
+        "BAD".into(),
+        "ABCDEFGH".into(),
+        "234567AB".into(),
+    ]);
+    let flood: Vec<String> = (0..MAX_ACK_NONCES + 10)
+        .map(|n| {
+            format!(
+                "AAAAAA{}{}",
+                B32[(n / 32) % 32] as char,
+                B32[n % 32] as char
+            )
+        })
+        .collect();
+    let bounded_flood = sanitize_ack_nonces(flood);
+    let mut invalid_first = vec!["BAD".to_string(); MAX_ACK_INPUT_NONCES];
+    invalid_first.push("ABCDEFGH".into());
+    let curl_command = configured_curl_command(&["-s", "https://example.com/version.txt"]);
+    let curl_args: Vec<String> = curl_command
+        .get_args()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .collect();
+
+    let small_output = std::env::current_exe().ok().and_then(|exe| {
+        let mut command = std::process::Command::new(exe);
+        command.arg("--network-policy-child-small");
+        bounded_command_output(&mut command, MAX_VERSION_RESPONSE_BYTES).ok()
+    });
+    let large_rejected = std::env::current_exe().ok().is_some_and(|exe| {
+        let mut command = std::process::Command::new(exe);
+        command.arg("--network-policy-child-large");
+        bounded_command_output(&mut command, MAX_VERSION_RESPONSE_BYTES).is_err()
+    });
+    let checked_success = std::env::current_exe().ok().is_some_and(|exe| {
+        let mut command = std::process::Command::new(exe);
+        command.arg("--network-policy-child-small");
+        run_checked_command(&mut command).is_ok()
+    });
+    let checked_failure = std::env::current_exe().ok().is_some_and(|exe| {
+        let mut command = std::process::Command::new(exe);
+        command.arg("--network-policy-child-fail");
+        run_checked_command(&mut command).is_err()
+    });
+    [
+        valid_uid(TEST_UID),
+        !valid_uid("JPabcdefghijklmnopqrstuvwx"),
+        !valid_uid("XXABCDEFGHIJKLMNOPQRSTUVWX"),
+        !valid_uid("JPABC"),
+        valid_redeem_input("abc-123-XYZ"),
+        !valid_redeem_input(""),
+        !valid_redeem_input(&"A".repeat(MAX_REDEEM_CODE_BYTES + 1)),
+        !valid_redeem_input("ABC 123"),
+        valid_nonce("ABCDEFGH"),
+        !valid_nonce("AAAAAAA1"),
+        valid_b32_text(&"A".repeat(103), 103),
+        !valid_b32_text(&"A".repeat(102), 103),
+        valid_https_url("https://example.com/a?b=1"),
+        !valid_https_url("http://example.com"),
+        !valid_https_url("https://example.com/\nnext"),
+        !valid_https_url(&format!("https://{}", "x".repeat(MAX_HTTPS_URL_BYTES))),
+        valid_https_url("https://example.com:8443/store?q=1#buy"),
+        !valid_https_url("https://?q=1"),
+        !valid_https_url("https://user@example.com/store"),
+        !valid_https_url("https://user:pass@example.com/store"),
+        !valid_https_url("https://example.com\\@evil.test/store"),
+        !valid_https_url("https://example.com:70000/store"),
+        valid_release_version("0.2.16"),
+        valid_release_version("4294967295.0.1"),
+        !valid_release_version("1.2"),
+        !valid_release_version("1.2.3.4"),
+        !valid_release_version("01.2.3"),
+        !valid_release_version("1.a.3"),
+        !valid_release_version("4294967296.0.0"),
+        !valid_release_version("1..3"),
+        mixed == ["ABCDEFGH", "234567AB"],
+        bounded_flood.len() == MAX_ACK_NONCES
+            && bounded_flood.first().map(String::as_str) == Some("AAAAAAAA")
+            && bounded_flood.last().map(String::as_str) == Some("AAAAAAB7"),
+        sanitize_ack_nonces(invalid_first).is_empty(),
+        curl_args.first().map(String::as_str) == Some("-q"),
+        curl_args.get(1..).is_some_and(|args| {
+            args == [
+                "-s".to_string(),
+                "https://example.com/version.txt".to_string(),
+            ]
+        }),
+        small_output.as_deref() == Some(b"OK"),
+        large_rejected,
+        checked_success,
+        checked_failure,
+        parse_ack_response(r#"{"ok":true}"#).is_ok(),
+        parse_ack_response(r#"{"ok":false}"#).is_err(),
+        matches!(
+            parse_ack_response(r#"{"error":"server busy"}"#),
+            Err(error) if error == "server busy"
+        ),
+        matches!(
+            parse_ack_response("not json"),
+            Err(error) if error == "bad response"
+        ),
+    ]
+    .into_iter()
+    .all(|ok| ok)
 }
 
 // grant wire shape: {pack, nonce, tag, sig} where sig is base32(ed25519
@@ -618,14 +3070,18 @@ fn curl_post(url: &str, body: &str) -> Option<String> {
 // uid[2..10] — binds the grant to one install so a leaked grant is junk.
 fn verify_grant(v: &serde_json::Value, uid: &str) -> Result<(String, u64), String> {
     use ed25519_dalek::Verifier as _;
-    if uid.len() < 10 {
+    if !valid_uid(uid) {
         return Err("bad uid".into());
     }
     let pack = v.get("pack").and_then(|x| x.as_str()).ok_or("bad grant")?;
     let nonce = v.get("nonce").and_then(|x| x.as_str()).ok_or("bad grant")?;
     let tag = v.get("tag").and_then(|x| x.as_str()).ok_or("bad grant")?;
     let sigs = v.get("sig").and_then(|x| x.as_str()).ok_or("bad grant")?;
-    if tag != &uid[2..10] {
+    if !valid_nonce(nonce)
+        || !valid_b32_text(tag, 8)
+        || !valid_b32_text(sigs, 103)
+        || tag != &uid[2..10]
+    {
         return Err("grant is bound to a different user".into());
     }
     let sig_bytes = b32dec(sigs).ok_or("bad grant")?;
@@ -635,7 +3091,8 @@ fn verify_grant(v: &serde_json::Value, uid: &str) -> Result<(String, u64), Strin
     let sig = ed25519_dalek::Signature::from_slice(&sig_bytes).map_err(|e| e.to_string())?;
     let vk = ed25519_dalek::VerifyingKey::from_bytes(&SERVER_PUBKEY).map_err(|e| e.to_string())?;
     let msg = format!("JP2G:{pack}:{nonce}:{tag}");
-    vk.verify(msg.as_bytes(), &sig).map_err(|_| "bad grant".to_string())?;
+    vk.verify(msg.as_bytes(), &sig)
+        .map_err(|_| "bad grant".to_string())?;
     let gems = GEM_AMOUNTS
         .iter()
         .find(|(p, _)| *p == pack)
@@ -657,12 +3114,12 @@ async fn redeem_bound(uid: String, code: String) -> Result<u64, String> {
     if SERVER_URL.is_empty() {
         return Err("offline".into());
     }
+    if !valid_uid(&uid) || !valid_redeem_input(&code) {
+        return Err("bad request".into());
+    }
     let body = serde_json::json!({ "uid": uid, "code": code }).to_string();
     let resp = curl_post(&format!("{SERVER_URL}/redeem"), &body).ok_or("offline")?;
-    let v: serde_json::Value = serde_json::from_str(&resp).map_err(|_| "bad response")?;
-    if let Some(e) = v.get("error").and_then(|x| x.as_str()) {
-        return Err(e.to_string());
-    }
+    let v = parse_server_json(&resp)?;
     let g = v.get("grant").cloned().ok_or("bad response")?;
     verify_grant(&g, &uid).map(|(_, gems)| gems)
 }
@@ -675,15 +3132,20 @@ async fn claim_grants(uid: String) -> Result<String, String> {
     if SERVER_URL.is_empty() {
         return Ok("[]".into());
     }
+    if !valid_uid(&uid) {
+        return Err("bad request".into());
+    }
     let body = serde_json::json!({ "uid": uid }).to_string();
     let resp = curl_post(&format!("{SERVER_URL}/claim"), &body).ok_or("offline")?;
-    let v: serde_json::Value = serde_json::from_str(&resp).map_err(|_| "bad response")?;
+    let v = parse_server_json(&resp)?;
     let mut out = Vec::new();
-    if let Some(gs) = v.get("grants").and_then(|x| x.as_array()) {
-        for g in gs {
-            if let Ok((nonce, gems)) = verify_grant(g, &uid) {
-                out.push(serde_json::json!({ "nonce": nonce, "gems": gems }));
-            }
+    let grants = v
+        .get("grants")
+        .and_then(|entry| entry.as_array())
+        .ok_or("bad response")?;
+    for grant in grants.iter().take(MAX_GRANTS_PER_RESPONSE) {
+        if let Ok((nonce, gems)) = verify_grant(grant, &uid) {
+            out.push(serde_json::json!({ "nonce": nonce, "gems": gems }));
         }
     }
     serde_json::to_string(&out).map_err(|e| e.to_string())
@@ -694,41 +3156,40 @@ async fn ack_grants(uid: String, nonces: Vec<String>) -> Result<(), String> {
     if SERVER_URL.is_empty() {
         return Ok(());
     }
+    if !valid_uid(&uid) {
+        return Err("bad request".into());
+    }
+    let nonces = sanitize_ack_nonces(nonces);
+    if nonces.is_empty() {
+        return Ok(());
+    }
     let body = serde_json::json!({ "uid": uid, "nonces": nonces }).to_string();
-    curl_post(&format!("{SERVER_URL}/ack"), &body);
-    Ok(())
+    let response = curl_post(&format!("{SERVER_URL}/ack"), &body).ok_or("offline")?;
+    parse_ack_response(&response)
 }
 
 #[tauri::command]
 async fn check_update(url: String) -> Result<String, String> {
     // version probe — fetches a tiny text file (e.g. "0.2.1") hosted next to
     // the itch page. curl.exe ships with Windows 10+, so no http crate needed
-    if !url.starts_with("https://") {
+    if !valid_https_url(&url) {
         return Err("refusing non-https url".into());
     }
-    let out = std::process::Command::new("curl")
-        .args(["-s", "--max-time", "6", &url])
-        .output()
-        .map_err(|e| e.to_string())?;
-    if !out.status.success() {
-        return Err("curl failed".into());
-    }
-    let body = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if body.is_empty() || body.len() > 32 {
+    let body = curl_text(&["-s", "--max-time", "6", &url], MAX_VERSION_RESPONSE_BYTES)
+        .ok_or("curl failed")?
+        .trim()
+        .to_string();
+    if body.is_empty() || body.len() > 32 || !valid_release_version(&body) {
         return Err("bad version payload".into());
     }
     Ok(body)
 }
 
 fn curl_get(url: &str, max_secs: &str) -> Option<String> {
-    let out = std::process::Command::new("curl")
-        .args(["-s", "--max-time", max_secs, url])
-        .output()
-        .ok()?;
-    if !out.status.success() {
-        return None;
-    }
-    Some(String::from_utf8_lossy(&out.stdout).to_string())
+    curl_text(
+        &["-s", "--max-time", max_secs, url],
+        MAX_WEATHER_RESPONSE_BYTES,
+    )
 }
 
 #[tauri::command]
@@ -754,21 +3215,7 @@ fn set_autostart(enable: bool) -> Result<(), String> {
     {
         // HKCU Run key — the slime is meant to live on the desktop, so it
         // belongs in startup when the user asks for it
-        let key = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
-        if enable {
-            let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-            let path = format!("\"{}\"", exe.display());
-            std::process::Command::new("reg")
-                .args(["add", key, "/v", "Jellypal", "/t", "REG_SZ", "/d", &path, "/f"])
-                .output()
-                .map_err(|e| e.to_string())?;
-        } else {
-            std::process::Command::new("reg")
-                .args(["delete", key, "/v", "Jellypal", "/f"])
-                .output()
-                .map_err(|e| e.to_string())?;
-        }
-        return Ok(());
+        return set_windows_autostart(enable);
     }
     #[cfg(target_os = "macos")]
     {
@@ -777,21 +3224,15 @@ fn set_autostart(enable: bool) -> Result<(), String> {
         let dir = std::path::PathBuf::from(home).join("Library/LaunchAgents");
         let plist = dir.join("com.jellypal.desktop.plist");
         if enable {
-            std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+            prepare_regular_dir_path(&dir, true).map_err(|e| e.to_string())?;
             let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-            let body = format!(
-                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
-                 <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n\
-                 <plist version=\"1.0\"><dict>\n\
-                 <key>Label</key><string>com.jellypal.desktop</string>\n\
-                 <key>ProgramArguments</key><array><string>{}</string></array>\n\
-                 <key>RunAtLoad</key><true/>\n\
-                 </dict></plist>\n",
-                exe.display()
-            );
-            std::fs::write(&plist, body).map_err(|e| e.to_string())?;
-        } else if plist.exists() {
-            std::fs::remove_file(&plist).map_err(|e| e.to_string())?;
+            let exe = exe
+                .to_str()
+                .ok_or_else(|| "autostart path is not valid UTF-8".to_string())?;
+            let body = launch_agent_plist(exe)?;
+            write_atomic_regular(&plist, body.as_bytes()).map_err(|e| e.to_string())?;
+        } else {
+            remove_file_leaf_no_follow(&plist).map_err(|e| e.to_string())?;
         }
         return Ok(());
     }
@@ -804,18 +3245,13 @@ fn set_autostart(enable: bool) -> Result<(), String> {
 
 #[tauri::command]
 fn save_png(app: tauri::AppHandle, data: String, name: String) -> Result<String, String> {
-    let dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|e| e.to_string())?
-        .join("photos");
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let safe: String = name
-        .chars()
-        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
-        .collect();
-    let path = dir.join(format!("{safe}.png"));
-    std::fs::write(&path, b64decode(&data)?).map_err(|e| e.to_string())?;
+    let dir = photos_dir(&app, true)?;
+    if !valid_photo_stem(&name) {
+        return Err("invalid photo name".into());
+    }
+    let path = dir.join(format!("{name}.png"));
+    let decoded = decode_png_payload(&data)?;
+    save_photo_file(&path, &decoded).map_err(|e| e.to_string())?;
     Ok(path.to_string_lossy().into_owned())
 }
 
@@ -825,7 +3261,12 @@ unsafe extern "system" fn enum_windows_cb(hwnd: HWND, lparam: LPARAM) -> i32 {
     if IsWindowVisible(hwnd) == 0 || IsIconic(hwnd) != 0 {
         return TRUE;
     }
-    let mut r = RECT { left: 0, top: 0, right: 0, bottom: 0 };
+    let mut r = RECT {
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+    };
     if GetWindowRect(hwnd, &mut r) != 0 {
         let w = r.right - r.left;
         let h = r.bottom - r.top;
@@ -949,6 +3390,30 @@ fn collect_window_rects(_scale: f64) -> Vec<[i32; 4]> {
     Vec::new()
 }
 
+// rdev::listen rides a CGEventTap on macOS, and event taps deliver nothing
+// until the app is granted Input Monitoring. Preflight reads the current
+// state; Request pops the system prompt once (and keeps returning false
+// until granted — the tap then works on the next launch). Without this the
+// app launches fine but typing silently earns no jelly.
+#[cfg(target_os = "macos")]
+fn ensure_input_monitoring() -> bool {
+    extern "C" {
+        fn CGPreflightListenEventAccess() -> bool;
+        fn CGRequestListenEventAccess() -> bool;
+    }
+    unsafe {
+        if CGPreflightListenEventAccess() {
+            true
+        } else {
+            CGRequestListenEventAccess()
+        }
+    }
+}
+#[cfg(not(target_os = "macos"))]
+fn ensure_input_monitoring() -> bool {
+    true
+}
+
 // the copy/paste modifier differs per platform — Cmd on macOS, Ctrl
 // elsewhere (on Windows the Meta key is the Win key, and Win+V opens
 // clipboard history — it must not count as a paste)
@@ -982,6 +3447,116 @@ pub fn run() {
     // minted code against the embedded pubkey and exits — handy to confirm
     // a Stripe/Gumroad code really works before listing it
     let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--network-policy-child-small") {
+        use std::io::Write as _;
+        let _ = std::io::stdout().write_all(b"OK");
+        std::process::exit(0);
+    }
+    if args.iter().any(|a| a == "--network-policy-child-large") {
+        use std::io::Write as _;
+        let _ = std::io::stdout().write_all(&vec![b'X'; MAX_VERSION_RESPONSE_BYTES + 1]);
+        std::process::exit(0);
+    }
+    if args.iter().any(|a| a == "--network-policy-child-fail") {
+        std::process::exit(7);
+    }
+    if args.iter().any(|a| a == "--self-test-network-policy") {
+        #[cfg(windows)]
+        unsafe {
+            use windows_sys::Win32::System::Console::{AttachConsole, ATTACH_PARENT_PROCESS};
+            AttachConsole(ATTACH_PARENT_PROCESS);
+        }
+        if network_policy_self_test() {
+            println!("NETWORK POLICY GREEN (43/43)");
+            std::process::exit(0);
+        }
+        println!("NETWORK POLICY FAILED");
+        std::process::exit(2);
+    }
+    if args.iter().any(|a| a == "--self-test-input-policy") {
+        #[cfg(windows)]
+        unsafe {
+            use windows_sys::Win32::System::Console::{AttachConsole, ATTACH_PARENT_PROCESS};
+            AttachConsole(ATTACH_PARENT_PROCESS);
+        }
+        if clickable_policy_self_test() {
+            println!("INPUT POLICY GREEN (23/23)");
+            std::process::exit(0);
+        }
+        println!("INPUT POLICY FAILED");
+        std::process::exit(2);
+    }
+    if args.iter().any(|a| a == "--self-test-save-policy") {
+        #[cfg(windows)]
+        unsafe {
+            use windows_sys::Win32::System::Console::{AttachConsole, ATTACH_PARENT_PROCESS};
+            AttachConsole(ATTACH_PARENT_PROCESS);
+        }
+        if save_policy_self_test()
+            && recovery_self_test()
+            && save_filesystem_self_test()
+            && save_payload_self_test()
+            && reset_cleanup_self_test()
+            && reset_plan_self_test().into_iter().all(|ok| ok)
+            && registry_status_self_test().into_iter().all(|ok| ok)
+            && autostart_registry_status_self_test()
+                .into_iter()
+                .all(|ok| ok)
+            && autostart_xml_self_test().into_iter().all(|ok| ok)
+            && registry_value_self_test().into_iter().all(|ok| ok)
+            && load_generation_self_test().into_iter().all(|ok| ok)
+            && save_sequence_self_test().into_iter().all(|ok| ok)
+            && data_directory_self_test()
+        {
+            println!("SAVE POLICY GREEN (105/105)");
+            std::process::exit(0);
+        }
+        println!("SAVE POLICY FAILED");
+        std::process::exit(2);
+    }
+    if args.iter().any(|a| a == "--self-test-photo-policy") {
+        #[cfg(windows)]
+        unsafe {
+            use windows_sys::Win32::System::Console::{AttachConsole, ATTACH_PARENT_PROCESS};
+            AttachConsole(ATTACH_PARENT_PROCESS);
+        }
+        if photo_policy_self_test()
+            && photo_directory_self_test()
+            && photo_catalog_self_test()
+            && photo_write_self_test()
+        {
+            println!("PHOTO POLICY GREEN (71/71)");
+            std::process::exit(0);
+        }
+        println!("PHOTO POLICY FAILED");
+        std::process::exit(2);
+    }
+    if args.iter().any(|a| a == "--self-test-log-policy") {
+        #[cfg(windows)]
+        unsafe {
+            use windows_sys::Win32::System::Console::{AttachConsole, ATTACH_PARENT_PROCESS};
+            AttachConsole(ATTACH_PARENT_PROCESS);
+        }
+        if crash_log_policy_self_test() {
+            println!("LOG POLICY GREEN (33/33)");
+            std::process::exit(0);
+        }
+        println!("LOG POLICY FAILED");
+        std::process::exit(2);
+    }
+    if args.iter().any(|a| a == "--self-test-migration-policy") {
+        #[cfg(windows)]
+        unsafe {
+            use windows_sys::Win32::System::Console::{AttachConsole, ATTACH_PARENT_PROCESS};
+            AttachConsole(ATTACH_PARENT_PROCESS);
+        }
+        if migration_policy_self_test() {
+            println!("MIGRATION POLICY GREEN (24/24)");
+            std::process::exit(0);
+        }
+        println!("MIGRATION POLICY FAILED");
+        std::process::exit(2);
+    }
     if let Some(pos) = args.iter().position(|a| a == "--verify-code") {
         // release builds are windows-subsystem — attach to the parent's
         // console or the answer never reaches the terminal
@@ -1005,7 +3580,8 @@ pub fn run() {
 
     std::panic::set_hook(Box::new(|info| {
         let p = std::env::temp_dir().join("jellypal-panic.log");
-        let _ = std::fs::write(p, format!("{info}"));
+        let body = format!("{info}");
+        let _ = write_panic_log(&p, &body);
     }));
 
     // a companion that silently vanishes looks broken — ask Windows to
@@ -1054,31 +3630,24 @@ pub fn run() {
             set_autostart
         ])
         .setup(|app| {
-            let window = app.get_webview_window("main").unwrap();
+            let window = required_runtime_value(app.get_webview_window("main"), "main window")?;
 
             // identifier migration: com.jellypal.app -> com.jellypal.desktop
             // (the .app suffix collides with macOS bundle semantics). If the
             // new data dir has no save but the old one does, copy everything
             // over so existing installs keep their slimes/photos/settings.
-            if let Ok(new_dir) = app.path().app_data_dir() {
-                if !new_dir.join("state.json").exists() {
-                    let old_dir = app
-                        .path()
-                        .app_data_dir()
-                        .ok()
-                        .and_then(|d| d.parent().map(|p| p.join("com.jellypal.app")));
-                    if let Some(old_dir) = old_dir {
-                        if old_dir.join("state.json").exists() {
-                            let _ = std::fs::create_dir_all(&new_dir);
-                            if let Ok(rd) = std::fs::read_dir(&old_dir) {
-                                for e in rd.flatten() {
-                                    let dest = new_dir.join(e.file_name());
-                                    if e.path().is_dir() {
-                                        let _ = copy_dir(&e.path(), &dest);
-                                    } else {
-                                        let _ = std::fs::copy(e.path(), dest);
-                                    }
-                                }
+            if test_data_dir().is_none() {
+                if let Ok(new_dir) = data_dir(app.handle()) {
+                    if !new_dir.join("state.json").exists() {
+                        let old_dir = app
+                            .path()
+                            .app_data_dir()
+                            .ok()
+                            .and_then(|d| d.parent().map(|p| p.join("com.jellypal.app")));
+                        if let Some(old_dir) = old_dir {
+                            if old_dir.join("state.json").exists() {
+                                let mut stats = MigrationStats::default();
+                                let _ = copy_legacy_tree(&old_dir, &new_dir, 0, &mut stats);
                             }
                         }
                     }
@@ -1116,7 +3685,7 @@ pub fn run() {
                         maxy = maxy.max(p.y + s.height as i32);
                         rects.push([p.x as f64, p.y as f64, s.width as f64, s.height as f64]);
                     }
-                    *MON_LIST.lock().unwrap() = rects
+                    *lock_recover(&MON_LIST) = rects
                         .iter()
                         .map(|r| {
                             [
@@ -1144,8 +3713,12 @@ pub fn run() {
             let summon = MenuItem::with_id(app, "summon", "Summon", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&summon, &quit])?;
+            let tray_icon = required_runtime_value(
+                app.default_window_icon().cloned(),
+                "default window icon",
+            )?;
             TrayIconBuilder::with_id("tray")
-                .icon(app.default_window_icon().unwrap().clone())
+                .icon(tray_icon)
                 .tooltip("Jellypal")
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id().as_ref() {
@@ -1173,8 +3746,10 @@ pub fn run() {
             // (combo detection only; typed content is never read).
             // ctrl on Windows/Linux, meta (Cmd) on macOS — see
             // is_combo_modifier for why they differ
+            let input_ok = ensure_input_monitoring();
+            let _ = app.emit("input-mon", input_ok);
             let handle = app.handle().clone();
-            let log_dir = app.path().app_data_dir().ok();
+            let log_dir = data_dir(app.handle()).ok();
             std::thread::spawn(move || {
                 let mut modifier = false;
                 if let Err(e) = rdev::listen(move |event| {
@@ -1203,12 +3778,16 @@ pub fn run() {
                         // tracked globally so the click-through toggle never
                         // flips mid-gesture (that swap is what wedged input)
                         rdev::EventType::ButtonPress(_) => {
-                            MOUSE_HELD.fetch_add(1, Ordering::Relaxed);
+                            MOUSE_HELD
+                                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
+                                    Some(adjust_mouse_held(v, true))
+                                })
+                                .ok();
                         }
                         rdev::EventType::ButtonRelease(_) => {
                             MOUSE_HELD
                                 .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
-                                    Some((v - 1).max(0))
+                                    Some(adjust_mouse_held(v, false))
                                 })
                                 .ok();
                         }
@@ -1217,10 +3796,8 @@ pub fn run() {
                 }) {
                     if let Some(dir) = log_dir {
                         let _ = std::fs::create_dir_all(&dir);
-                        let _ = std::fs::write(
-                            dir.join("hook.log"),
-                            format!("rdev listen failed: {e:?}"),
-                        );
+                        let body = format!("rdev listen failed: {e:?}");
+                        let _ = write_atomic_regular(&dir.join("hook.log"), body.as_bytes());
                     }
                 }
             });
@@ -1236,7 +3813,7 @@ pub fn run() {
                 let mut held_stall = 0u32;
                 loop {
                     std::thread::sleep(Duration::from_millis(30));
-                    tick += 1;
+                    tick = next_poll_tick(tick);
                     if tick % 66 == 1 {
                         // foreground app name + window title — cross-platform
                         // via active-win-pos-rs (title may be empty on macOS
@@ -1252,10 +3829,10 @@ pub fn run() {
                                 .file_stem()
                                 .map(|s| s.to_string_lossy().into_owned())
                                 .unwrap_or_default();
-                            let _ = win_poll.emit(
-                                "focus",
-                                [aw.title, format!("{} {}", stem, aw.app_name).to_lowercase()],
-                            );
+                            let title = bounded_focus_text(&aw.title, MAX_FOCUS_TITLE_CHARS);
+                            let app_name = format!("{} {}", stem, aw.app_name).to_lowercase();
+                            let app_name = bounded_focus_text(&app_name, MAX_FOCUS_APP_CHARS);
+                            let _ = win_poll.emit("focus", [title, app_name]);
                         }
                     }
                     // global cursor position in physical screen px
@@ -1277,9 +3854,7 @@ pub fn run() {
                         let _ = win_poll.set_always_on_top(true);
                     }
                     let now_inside = DRAGGING.load(Ordering::Relaxed)
-                        || CLICKABLE
-                            .lock()
-                            .unwrap()
+                        || lock_recover(&CLICKABLE)
                             .iter()
                             .any(|r| {
                                 lx >= r[0] && lx <= r[0] + r[2] && ly >= r[1] && ly <= r[1] + r[3]
@@ -1293,7 +3868,7 @@ pub fn run() {
                     // can't freeze input permanently
                     let btn_held = MOUSE_HELD.load(Ordering::Relaxed) > 0;
                     let diverged = now_inside != inside;
-                    held_stall = if diverged && btn_held { held_stall + 1 } else { 0 };
+                    held_stall = next_held_stall(held_stall, diverged, btn_held);
                     if diverged && (!btn_held || held_stall > 66) {
                         // only commit the state when the OS actually flipped —
                         // a swallowed error used to leave `inside` claiming
@@ -1310,8 +3885,8 @@ pub fn run() {
                     // frontend's rects arrived and whether the poll loop is
                     // alive, without needing the app to be instrumented
                     if tick % 33 == 2 {
-                        if let Ok(dir) = win_poll.app_handle().path().app_data_dir() {
-                            let n = CLICKABLE.lock().unwrap().len();
+                        if let Ok(dir) = data_dir(&win_poll.app_handle()) {
+                            let n = lock_recover(&CLICKABLE).len();
                             let body = format!(
                                 "{{\"inside\":{},\"rects\":{},\"cursor\":[{},{}],\"dragging\":{},\"flipfail\":{}}}",
                                 inside,
@@ -1321,7 +3896,10 @@ pub fn run() {
                                 DRAGGING.load(Ordering::Relaxed),
                                 flip_fail
                             );
-                            let _ = std::fs::write(dir.join("clickdbg.json"), body);
+                            let _ = write_atomic_regular(
+                                &dir.join("clickdbg.json"),
+                                body.as_bytes(),
+                            );
                         }
                     }
                 }
@@ -1420,5 +3998,17 @@ mod tests {
         assert!(verify_code_with(&pk, "JELLYPAL-A-XXXXXXXX-ZZZZ").is_err());
         assert!(verify_code_with(&pk, "not a code").is_err());
         assert!(verify_code_with(&pk, "JELLYPAL-E-ABCDEFGH-XXXX").is_err());
+    }
+
+    #[test]
+    fn focus_payload_text_is_unicode_safe_and_bounded() {
+        assert_eq!(bounded_focus_text("Ab🙂Cd", 4), "Ab🙂C");
+        let title = bounded_focus_text(
+            &"창".repeat(MAX_FOCUS_TITLE_CHARS + 10),
+            MAX_FOCUS_TITLE_CHARS,
+        );
+        let app = bounded_focus_text(&"x".repeat(MAX_FOCUS_APP_CHARS + 10), MAX_FOCUS_APP_CHARS);
+        assert_eq!(title.chars().count(), MAX_FOCUS_TITLE_CHARS);
+        assert_eq!(app.chars().count(), MAX_FOCUS_APP_CHARS);
     }
 }

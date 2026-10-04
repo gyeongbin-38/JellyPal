@@ -1,23 +1,48 @@
 const { listen } = window.__TAURI__.event;
 const { invoke } = window.__TAURI__.core;
+function invokeAsync(command, args) {
+  try { return Promise.resolve(invoke(command, args)); }
+  catch (error) { return Promise.reject(error); }
+}
+// Fire-and-forget IPC must consume both synchronous throws and Promise
+// rejections. In particular, the rejection logger itself must never create
+// another unhandled rejection if the backend is already shutting down.
+function invokeQuiet(command, args) {
+  invokeAsync(command, args).catch(() => {});
+}
+function listenQuiet(event, handler) {
+  const failed = (error) => invokeQuiet("log_crash", {
+    msg: `LISTEN ${event} ${String((error && error.message) || error || "failed").slice(0, 200)}`,
+  });
+  const guarded = (...args) => {
+    try { Promise.resolve(handler(...args)).catch(failed); } catch (error) { failed(error); }
+  };
+  try { Promise.resolve(listen(event, guarded)).catch(failed); } catch (error) { failed(error); }
+}
 
 // surface silent failures: a throw inside a setInterval callback (like the
 // clickable-rect updater) would otherwise die with zero log evidence and
 // leave the whole overlay click-through. beforeunload marks clean teardown —
 // ticks stopping with no UNLOAD means the process was killed externally
 window.addEventListener("error", (e) => {
-  try { invoke("log_crash", { msg: "JSERR " + (e.message || "?") + " @" + String(e.filename || "").split("/").pop() + ":" + e.lineno }); } catch {}
+  invokeQuiet("log_crash", { msg: "JSERR " + (e.message || "?") + " @" + String(e.filename || "").split("/").pop() + ":" + e.lineno });
 });
 window.addEventListener("unhandledrejection", (e) => {
   const r = e.reason;
-  try { invoke("log_crash", { msg: "JSREJ " + String((r && (r.stack || r.message)) || r).slice(0, 400) }); } catch {}
+  invokeQuiet("log_crash", { msg: "JSREJ " + String((r && (r.stack || r.message)) || r).slice(0, 400) });
 });
 window.addEventListener("beforeunload", () => {
-  try { invoke("log_crash", { msg: "UNLOAD" }); } catch {}
+  invokeQuiet("log_crash", { msg: "UNLOAD" });
 });
 
 const cv = document.getElementById("c");
 const ctx = cv.getContext("2d");
+// Pointer capture is an optimization, not a correctness boundary. WebView can
+// reject a stale/lost pointer id; keep the drag's native full-input fallback
+// and release/watchdog paths reachable instead of throwing mid-handler.
+function capturePointer(el, pointerId) {
+  try { el.setPointerCapture(pointerId); } catch {}
+}
 
 let winW = innerWidth;
 let winH = innerHeight;
@@ -1153,7 +1178,14 @@ function buildSprite(faceName, pal, top, hw, sil, spIdx, opa) {
   // authored pixels ride the same transform as the silhouette they sit on
   const tfm = v ? v.tfm : (x, y) => [x, y];
   const F = faceSet(spIdx)[faceName];
-  for (const [x, y, ch] of top || []) { const [nx, ny] = tfm(x, y); grid[ny][nx] = ch; }
+  for (const px of top || []) {
+    if (!Array.isArray(px) || px.length < 3) continue;
+    const [x, y, ch] = px;
+    const [nx, ny] = tfm(x, y);
+    // Saved hybrids can outlive several sprite formats. Never let one stale
+    // decoration coordinate index outside the sprite grid and kill frame().
+    if (Number.isInteger(nx) && Number.isInteger(ny) && ny >= 0 && ny < SH && nx >= 0 && nx < SW) grid[ny][nx] = ch;
+  }
   for (const [x, y] of F.a || []) { const [nx, ny] = tfm(x, y); grid[ny][nx] = "b"; }
   for (let y = 0; y < SH; y++) {
     for (let x = 0; x < SW; x++) {
@@ -1358,11 +1390,74 @@ let jelly = 100;
 let owned = ["sprout"];
 let active = 0;
 let dirty = false;
+let saveReady = false;
+let loadFailed = false;
 let pityRare = 0;
 let pityLeg = 0;
+const MAX_HYBRID_SEQ = Number.MAX_SAFE_INTEGER;
 let hybSeq = 0;
+const canMintHybrid = () => Number.isSafeInteger(hybSeq) && hybSeq >= 0 && hybSeq < MAX_HYBRID_SEQ;
 let accOwned = ["cap"]; // starter freebie + cosmetics the player owns (ACCS ids)
 let accEquip = {};
+
+const MAX_SAVED_COUNTER = Number.MAX_SAFE_INTEGER - 1;
+function sanitizeSavedInt(value, fallback = 0, max = MAX_SAVED_COUNTER) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return fallback;
+  return Math.min(max, Math.floor(value));
+}
+function addSavedInt(value, amount, max = MAX_SAVED_COUNTER) {
+  const base = sanitizeSavedInt(value, 0, max);
+  if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) return base;
+  return Math.min(max, base + Math.floor(amount));
+}
+function addSavedMeasure(value, amount, max = MAX_SAVED_COUNTER) {
+  const base = typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.min(max, value) : 0;
+  if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) return base;
+  return Math.min(max, base + amount);
+}
+function sanitizeSavedTimestamp(value) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return 0;
+  return Math.min(Math.floor(value), Date.now());
+}
+function sanitizeSavedDeadline(value, maxAhead) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return 0;
+  return Math.min(Math.floor(value), Date.now() + maxAhead);
+}
+function sanitizePropFill(value) {
+  // Bowl/jar stock is consumed one item at a time. Legacy saves omit this
+  // field (half-full = 2); malformed numeric values must not create fractional
+  // or negative live stock that gets persisted again before the next reload.
+  if (typeof value !== "number" || !Number.isFinite(value)) return 2;
+  return Math.max(0, Math.min(3, Math.floor(value)));
+}
+const sanitizeLocalDayKey = (value) =>
+  typeof value === "string" && /^\d{4}-\d{1,2}-\d{1,2}$/.test(value) && value.length <= 10 ? value : "";
+const sanitizeIsoDayKey = (value) =>
+  typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : "";
+const localIsoDayKey = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const localDayKeyMatches = (value, d = new Date()) => {
+  const m = typeof value === "string" && /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(value);
+  return !!m && Number(m[1]) === d.getFullYear()
+    && Number(m[2]) === d.getMonth() + 1 && Number(m[3]) === d.getDate();
+};
+const dailySelfieDue = (last, d = new Date()) => last !== localIsoDayKey(d);
+function sanitizePanelPositions(value) {
+  const clean = {};
+  const resolution = `${winW}x${winH}`;
+  if (!value || typeof value !== "object" || Array.isArray(value) || value._res !== resolution) return clean;
+  clean._res = resolution;
+  for (const key of ["ranch", "nursery", "card"]) {
+    const point = value[key];
+    if (!point || typeof point !== "object" || Array.isArray(point)
+        || !Number.isFinite(point.x) || !Number.isFinite(point.y)) continue;
+    clean[key] = {
+      x: Math.round(Math.max(0, Math.min(winW, point.x))),
+      y: Math.round(Math.max(0, Math.min(winH, point.y))),
+    };
+  }
+  return clean;
+}
 
 let state = "idle";
 let lastKey = Date.now();   // last keystroke — feed timing only, not sleep
@@ -1464,9 +1559,27 @@ let infoPick = null;    // species index with the bestiary panel open
 let albumOpen = false;  // photo album overlay browsing saved PNGs
 let albumList = [];
 let albumIdx = 0;
-const albumImgs = {};   // name -> Image, loaded lazily
+const albumImgs = {};   // current/previous/next only: name -> Image/loading
+let albumLoadQueue = [];
+let albumLoadName = null; // one large base64 IPC at a time
 let albumDelArm = 0;    // delete two-tap confirm: armed until this time
+let albumDeleteName = null; // serialize delete IPC and bind completion to its file
+let albumListRequest = null; // repeated ALBUM clicks share one catalog IPC
+let albumOpenWanted = false; // Escape/close invalidates a late catalog response
+let albumFolderRequest = null; // one OS folder launch at a time
 let stats = { pulls: 0, breeds: 0, shiny: 0, treats: 0, plays: 0 };
+function sanitizeStats(value) {
+  const clean = { pulls: 0, breeds: 0, shiny: 0, treats: 0, plays: 0, focusSec: 0 };
+  if (!value || typeof value !== "object" || Array.isArray(value)) return clean;
+  for (const key of ["pulls", "breeds", "shiny", "treats", "plays"]) {
+    const n = value[key];
+    if (Number.isFinite(n) && n >= 0) clean[key] = Math.min(Number.MAX_SAFE_INTEGER - 1, Math.floor(n));
+  }
+  if (Number.isFinite(value.focusSec) && value.focusSec >= 0) {
+    clean.focusSec = Math.min(Number.MAX_SAFE_INTEGER - 1, value.focusSec);
+  }
+  return clean;
+}
 // collection milestones: [owned-base-count, gem reward] — pays out once each
 const DEX_MILES = [[10, 15], [20, 25], [30, 40], [40, 60], [50, 80], [58, 150]];
 let dexMile = 0;
@@ -1486,6 +1599,16 @@ let stepDustT = 0;         // footstep dust cadence while walking
 let nextFidget = 0;        // idle micro-squash timer
 let pokeStreak = 0, pokeLast = 0;   // belly-poke combo counter
 let heldStretch = 0, heldStretchAng = 0;   // jelly elongation while dragged
+function cancelPetDrag() {
+  if (!held && !webHeld) return false;
+  held = false;
+  heldStretch = 0;
+  if (webHeld) { webHeld = false; webbing = false; }
+  // A cancelled grab drops the pet where it is instead of leaving it hovering.
+  flying = true;
+  petVY = 0;
+  return true;
+}
 const ripples = [];        // ground ripple rings on landing
 
 let curX = -9999, curY = -9999, curV = 0, curVX = 0;
@@ -1529,7 +1652,36 @@ let propHeld = null;       // furniture kind string — the prop being dragged
 // prop half-widths — also the grab radius; platform clamps use these so a
 // wide prop (box/mat) can't sit with its edge hanging off-screen
 const PROP_HW = { bowl: 30, cushion: 34, box: 36, plant: 28, music: 30, mirror: 26, mat: 32, jar: 24 };
+function clampPlatformX(x, plat, edge) {
+  // When the support is narrower than the requested footprint/margin there is
+  // no fully-contained answer. Balance the overhang around its center instead
+  // of biasing everything to the right edge.
+  if (plat.w < edge * 2) return plat.x + plat.w / 2;
+  return Math.max(plat.x + edge, Math.min(plat.x + plat.w - edge, x));
+}
+function clampPropX(kind, x, plat) {
+  const pw = PROP_HW[kind] || 30;
+  return clampPlatformX(x, plat, pw);
+}
 let propGrabX = 0, propGrabY = 0; // grab origin — a tap (not a drag) refills/fluffs
+let propOriginX = 0, propOriginY = 0; // durable position restored if the OS cancels the drag
+function restoreHeldPropOrigin() {
+  if (!propHeld) return;
+  const q = { bowl, cushion, box, plant, music, mirror, mat, jar }[propHeld];
+  if (!q) return;
+  q.x = propOriginX; q.y = propOriginY;
+  // A window can close during a hold. Platform reconciliation deliberately
+  // skips the held prop, so a cancelled gesture must not resurrect its old
+  // platform object and strand static furniture in mid-air.
+  if (q.plat && !plats.includes(q.plat) && !monPlats.includes(q.plat)) {
+    const u0 = platUnder(q.x, q.y);
+    const live = plats.includes(u0) || monPlats.includes(u0) ? u0 : (plats[0] || u0);
+    q.plat = live;
+    q.y = live.y;
+    q.x = clampPropX(propHeld, q.x, live);
+    dirty = true;
+  }
+}
 let grabT0 = 0;            // when any hold started — watchdog frees a stuck grab
 let cushionPoof = 0;       // fluff-burst timestamp for the tap interaction
 let matPoof = 0;           // bounce-mat over-inflate timestamp
@@ -1587,7 +1739,11 @@ function bondGain(id, n) {
   const now = performance.now();
   if (!id || now < bondLast) return;
   bondLast = now + 12000; // one trickle per 12s across all sources
-  bond[id] = (bond[id] || 0) + n;
+  // Keep the live value inside the same safe persisted range enforced on
+  // load. A repaired/hand-edited save can start at the cap, and one normal
+  // interaction must not push it beyond exact integer precision before the
+  // next save/reload cycle has a chance to sanitize it again.
+  bond[id] = addSavedInt(bond[id], n);
   dirty = true;
 }
 let hintUntil = 0, hintText = "", hintDrip = 60000; // first non-contextual hint at ~1min
@@ -1607,6 +1763,79 @@ const HINTS = [
   { id: "pal2", t: "PALS PLAY TOGETHER - WATCH THEM", trig: () => pals.length > 1 },
   { id: "ball", t: "BALL BUTTON UP TOP - THEY'LL PUSH IT AROUND", trig: () => ball !== null },
 ];
+function sanitizeHints(value) {
+  const clean = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return clean;
+  // The app persists numeric 1; accept the older boolean form too. Other
+  // truthy values must not permanently suppress onboarding after a damaged
+  // or hand-edited save (notably the string "false").
+  for (const hint of HINTS) {
+    if (value[hint.id] === 1 || value[hint.id] === true) clean[hint.id] = 1;
+  }
+  return clean;
+}
+const MAX_SAVED_COLLECTION_SCAN = 4096;
+function* boundedSavedEntries(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+  let scanned = 0;
+  for (const key in value) {
+    if (!Object.prototype.hasOwnProperty.call(value, key)) continue;
+    if (scanned++ >= MAX_SAVED_COLLECTION_SCAN) break;
+    yield [key, value[key]];
+  }
+}
+function sanitizeOwnedList(value) {
+  if (!Array.isArray(value) || !value.length) return ["sprout"];
+  const known = new Set(SPECIES.map((sp) => sp.id));
+  const clean = [], seenIds = new Set();
+  for (const id of value.slice(0, MAX_SAVED_COLLECTION_SCAN)) {
+    if (typeof id !== "string" || !known.has(id) || seenIds.has(id)) continue;
+    seenIds.add(id);
+    clean.push(id);
+  }
+  return clean.length ? clean : ["sprout"];
+}
+function sanitizeAccOwnedList(value) {
+  const known = new Set(ACCS.map((acc) => acc.id));
+  const clean = [], seenIds = new Set();
+  for (const id of value.slice(0, MAX_SAVED_COLLECTION_SCAN)) {
+    if (typeof id !== "string" || !known.has(id) || seenIds.has(id)) continue;
+    seenIds.add(id);
+    clean.push(id);
+  }
+  return clean;
+}
+function sanitizeAccEquip(value) {
+  const clean = {};
+  const ownedSpecies = new Set(owned);
+  const ownedAccessories = new Set(accOwned);
+  for (const [id, accessory] of boundedSavedEntries(value)) {
+    if (ownedSpecies.has(id) && ownedAccessories.has(accessory)) clean[id] = accessory;
+  }
+  return clean;
+}
+function sanitizeSavedPals(value) {
+  if (!Array.isArray(value)) return [];
+  const ownedSpecies = new Set(owned);
+  const known = new Set(SPECIES.map((sp) => sp.id));
+  const clean = [], seenSpecies = new Set();
+  for (const id of value.slice(0, MAX_SAVED_COLLECTION_SCAN)) {
+    if (clean.length >= MAX_PALS) break;
+    if (typeof id !== "string" || !ownedSpecies.has(id) || !known.has(id) || seenSpecies.has(id)) continue;
+    seenSpecies.add(id);
+    clean.push(id);
+  }
+  return clean;
+}
+function sanitizeBond(value) {
+  const clean = {};
+  const ownedSpecies = new Set(owned);
+  for (const [id, raw] of boundedSavedEntries(value)) {
+    if (!ownedSpecies.has(id) || !Number.isFinite(raw) || raw < 0) continue;
+    clean[id] = Math.min(Number.MAX_SAFE_INTEGER - 1, Math.floor(raw));
+  }
+  return clean;
+}
 let jigX = 0, jigV = 0;    // verlet-lite shear spring: top lags the feet
 let jigPX = 0;             // last-frame petX for velocity estimation
 
@@ -1614,11 +1843,34 @@ let plats = [{ x: 0, y: winH, w: winW }];
 // multi-monitor floors: each display contributes its own bottom-edge
 // platform so a slime can stroll from one screen onto the next
 let monPlats = [{ x: 0, y: winH, w: winW }];
-invoke("get_monitors").then((mons) => {
-  if (Array.isArray(mons) && mons.length > 1) {
-    monPlats = mons.map(([x, y, w, h]) => ({ x, y: y + h, w }));
-    plats = [...monPlats];
+let runtimePlats = [];
+function rebuildPlatforms() {
+  plats = [...monPlats, ...runtimePlats];
+}
+function sanitizeMonitorPlatforms(value) {
+  if (!Array.isArray(value)) return null;
+  const clean = [];
+  for (const row of value.slice(0, 64)) {
+    if (!Array.isArray(row) || row.length < 4) continue;
+    const [x, y, w, h] = row;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(w) || !Number.isFinite(h)
+        || Math.abs(x) > 1000000 || Math.abs(y) > 1000000
+        || w <= 0 || h <= 0 || w > 1000000 || h > 1000000) continue;
+    const floorY = y + h;
+    if (!Number.isFinite(floorY) || Math.abs(floorY) > 2000000) continue;
+    clean.push({ x, y: floorY, w });
   }
+  return clean.length ? clean : null;
+}
+invokeAsync("get_monitors").then((mons) => {
+  const floors = sanitizeMonitorPlatforms(mons);
+  if (!floors) return;
+  monPlats = floors;
+  // This boot IPC can resolve after the first live window scan. Preserve that
+  // newer geometry instead of briefly dropping every window platform until
+  // the native poll emits again.
+  rebuildPlatforms();
+  reconcileAnchoredPlatforms(performance.now());
 }).catch(() => {});
 let ranchOpen = false;
 let settingsOpen = false;
@@ -1649,26 +1901,38 @@ const POMO_BREAKS = [5, 10, 15];
 // code is verified by the Rust binary against an embedded public key;
 // redeemed codes are one-shot per save file
 const GEM_PACKS = { A: 250, B: 500, C: 1000, D: 2500 };
+const GEM_PACK_AMOUNTS = new Set(Object.values(GEM_PACKS));
+const validGemGrant = (v) => Number.isSafeInteger(v) && GEM_PACK_AMOUNTS.has(v);
+const redeemErrorText = (error) => String((error && error.message) || error || "BAD CODE").toUpperCase();
+const redeemPending = new Set();
 // redeem codes are Ed25519 signatures checked in the Rust binary — the
 // client ships only the public key, so unpacked exes can never mint codes
 async function tryRedeem(raw) {
-  const jpFmt = ("JELLYPAL" + raw.toUpperCase().replace(/^JELLYPAL-?/, "").replace(/[^A-Z2-7]/g, ""))
+  const entered = String(raw ?? "").trim();
+  const jpFmt = ("JELLYPAL" + entered.toUpperCase().replace(/^JELLYPAL-?/, "").replace(/[^A-Z2-7]/g, ""))
     .replace(/^JELLYPAL([A-D])([A-Z2-7]{8})([A-Z2-7]+)$/, "JELLYPAL-$1-$2-$3");
   // JELLYPAL-* codes verify locally too; anything else is a store-issued
   // license key (Gumroad) that only the shop server can check — pass it
   // through untouched so its dashes/spacing survive
   const isJP = /^JELLYPAL-[A-D]-[A-Z2-7]{8}-[A-Z2-7]+$/.test(jpFmt);
-  const fmt = isJP ? jpFmt : raw.trim().toUpperCase();
+  const fmt = isJP ? jpFmt : entered.toUpperCase();
   if (!fmt) return "BAD CODE";
-  if (redeemed.includes(fmt)) return "CODE USED";
+  // A value that explicitly starts like one of our signed codes must be a
+  // valid signed-code shape.  Do not send malformed JELLYPAL-* strings to
+  // the store-license endpoint and misreport them as a network failure.
+  if (/^JELLYPAL(?:-|$)/i.test(entered) && !isJP) return "BAD CODE";
+  if (redeemed.includes(fmt) || redeemPending.has(fmt)) return "CODE USED";
+  redeemPending.add(fmt);
+  try {
   // preferred path: the shop server verifies the signature (or the store's
   // license api) and binds the code to this uid — a code already claimed
   // by another install dies here instead of paying out again
   try {
-    const gems = await invoke("redeem_bound", { uid, code: fmt });
+    const gems = await invokeAsync("redeem_bound", { uid, code: fmt });
+    if (!validGemGrant(gems)) throw "bad response";
     redeemed.push(fmt);
     redeemedBound.push(fmt);
-    jelly += gems;
+    jelly = addSavedInt(jelly, gems);
     dirty = true;
     return `+${gems} JELLY!`;
   } catch (e) {
@@ -1676,21 +1940,25 @@ async function tryRedeem(raw) {
       // license keys have no offline path — a network failure isn't a bad
       // code, it just couldn't be checked yet
       return ["offline", "bad response", "server busy"].includes(e)
-        ? "SERVER BUSY — TRY AGAIN" : (e || "BAD CODE").toUpperCase();
+        ? "SERVER BUSY — TRY AGAIN" : redeemErrorText(e);
     }
     // fall back to the local signature check only when the server never
     // gave a real answer — a real refusal (bad/already-claimed code) is final
     if (!["offline", "bad response", "server busy"].includes(e))
-      return (e || "BAD CODE").toUpperCase();
+      return redeemErrorText(e);
   }
   try {
-    const gems = await invoke("verify_gem_code", { code: fmt });
+    const gems = await invokeAsync("verify_gem_code", { code: fmt });
+    if (!validGemGrant(gems)) return "BAD CODE";
     redeemed.push(fmt);
-    jelly += gems;
+    jelly = addSavedInt(jelly, gems);
     dirty = true;
     return `+${gems} JELLY!`;
-  } catch {
-    return "BAD CODE";
+    } catch {
+      return "BAD CODE";
+    }
+  } finally {
+    redeemPending.delete(fmt);
   }
 }
 // an offline-redeemed code never reached the server, so it paid out without
@@ -1699,27 +1967,59 @@ async function tryRedeem(raw) {
 // unbound code through /redeem just to claim the binding; the grant it
 // returns is discarded (the gems were already credited locally).
 async function bindRedeemed() {
-  if (!uid) return;
-  for (const code of redeemed) {
-    if (redeemedBound.includes(code)) continue;
-    try {
-      await invoke("redeem_bound", { uid, code });
-      redeemedBound.push(code);
-      dirty = true;
-    } catch (e) {
-      // a real refusal means another uid holds it now — stop retrying.
-      // offline-ish errors just wait for the next sweep
-      if (!["offline", "bad response", "server busy"].includes(e)) {
+  if (!uid || bindRedeemedBusy) return;
+  bindRedeemedBusy = true;
+  try {
+    let attempted = 0;
+    for (const code of redeemed) {
+      if (redeemedBound.includes(code)) continue;
+      if (attempted++ >= 8) break; // bound boot/network work; later polls drain the rest
+      try {
+        await invokeAsync("redeem_bound", { uid, code });
         redeemedBound.push(code);
         dirty = true;
+      } catch (e) {
+        // a real refusal means another uid holds it now — stop retrying.
+        // offline-ish errors just wait for the next sweep
+        if (!["offline", "bad response", "server busy"].includes(e)) {
+          redeemedBound.push(code);
+          dirty = true;
+        }
       }
     }
+  } finally {
+    bindRedeemedBusy = false;
   }
 }
 let redeemMode = false;
 let redeemBuf = "";
 let redeemed = [];
 let redeemedBound = []; // codes confirmed bound to this uid on the server
+let bindRedeemedBusy = false;
+function sanitizeRedeemHistory(value) {
+  if (!Array.isArray(value)) return [];
+  const clean = [], seenCodes = new Set();
+  // Two thousand purchases is far beyond normal use but keeps a corrupt save
+  // from retaining an unbounded boot-time work queue.
+  for (const raw of value.slice(-2000)) {
+    if (typeof raw !== "string") continue;
+    const code = raw.trim().toUpperCase();
+    if (!code || code.length > 160 || !/^[A-Z0-9-]+$/.test(code) || seenCodes.has(code)) continue;
+    seenCodes.add(code);
+    clean.push(code);
+  }
+  return clean;
+}
+function sanitizeClaimedNonces(value) {
+  if (!Array.isArray(value)) return [];
+  const clean = [], seenNonces = new Set();
+  for (const nonce of value.slice(-1000)) {
+    if (typeof nonce !== "string" || !/^[A-Z2-7]{8}$/.test(nonce) || seenNonces.has(nonce)) continue;
+    seenNonces.add(nonce);
+    clean.push(nonce);
+  }
+  return clean.slice(-300);
+}
 // per-install user id — generated once, kept in the save, shown under
 // MY ID in settings. the shop backend stores only sha256(uid) and binds
 // grants to a tag taken from it, so a leaked grant is useless to strangers
@@ -1751,25 +2051,60 @@ async function claimGrants() {
   // the early return below so an empty grant queue can't starve it
   bindRedeemed();
   try {
-    const res = await invoke("claim_grants", { uid });
+    const res = await invokeAsync("claim_grants", { uid });
     const grants = JSON.parse(res);
-    const fresh = grants.filter((g) => !claimedNonces.includes(g.nonce));
-    if (!fresh.length) return;
-    let add = 0;
-    for (const g of fresh) { jelly += g.gems; claimedNonces.push(g.nonce); add += g.gems; }
-    claimedNonces = claimedNonces.slice(-300);
-    dirty = true;
-    bangs.push({ x: winW / 2, y: 100, life: 2.2, t: `+${add} JELLY!` });
-    sfx.reveal();
-    invoke("ack_grants", { uid, nonces: fresh.map((g) => g.nonce) }).catch(() => {});
+    if (!Array.isArray(grants)) return;
+    // Rust has already verified each grant signature. Still validate the
+    // compact frontend wire shape and dedupe within this single response:
+    // checking only claimedNonces allowed a repeated nonce in one payload
+    // to credit twice before the loop appended it.
+    const known = new Set(claimedNonces);
+    const batch = new Set();
+    const valid = grants.filter((g) => {
+      if (!g || !/^[A-Z2-7]{8}$/.test(g.nonce) || !validGemGrant(g.gems) || batch.has(g.nonce)) return false;
+      batch.add(g.nonce);
+      return true;
+    });
+    const fresh = valid.filter((g) => !known.has(g.nonce));
+    if (fresh.length) {
+      let add = 0;
+      for (const g of fresh) { jelly = addSavedInt(jelly, g.gems); claimedNonces.push(g.nonce); add += g.gems; }
+      claimedNonces = claimedNonces.slice(-300);
+      dirty = true;
+      bangs.push({ x: winW / 2, y: 100, life: 2.2, t: `+${add} JELLY!` });
+      sfx.reveal();
+    }
+    // ACK every verified nonce the server still has, not only newly paid
+    // ones. If an earlier ACK was lost, the next poll now retries cleanup
+    // without crediting the wallet a second time.
+    if (valid.length) invokeAsync("ack_grants", { uid, nonces: valid.map((g) => g.nonce) }).catch(() => {});
   } catch {}
 }
 setInterval(claimGrants, 10 * 60 * 1000);
-// weekly spotlight species — deterministic pick from the ISO week key
+// weekly spotlight species — deterministic ISO week in the player's local
+// calendar. UTC arithmetic keeps DST from stretching a local week.
 const weekKey = (d = new Date()) => {
+  const thursday = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const weekday = thursday.getUTCDay() || 7;
+  thursday.setUTCDate(thursday.getUTCDate() + 4 - weekday);
+  const isoYear = thursday.getUTCFullYear();
+  const yearStart = Date.UTC(isoYear, 0, 1);
+  const week = Math.ceil(((thursday.getTime() - yearStart) / 86400000 + 1) / 7);
+  return `${isoYear}-W${String(week).padStart(2, "0")}`;
+};
+const legacyWeekKey = (d) => {
   const jan1 = new Date(d.getFullYear(), 0, 1);
   return `${d.getFullYear()}W${Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7)}`;
 };
+function weeklyKeyMatches(value, now = new Date(), savedAt = 0) {
+  const current = weekKey(now);
+  if (value === current) return true;
+  if (typeof value !== "string" || !/^\d{4}W\d{1,2}$/.test(value)
+      || !Number.isFinite(savedAt) || savedAt <= 0) return false;
+  const savedDate = new Date(savedAt);
+  return Number.isFinite(savedDate.getTime())
+    && legacyWeekKey(savedDate) === value && weekKey(savedDate) === current;
+}
 const spotIdx = () => {
   const base = SPECIES.filter((p) => !p.id.startsWith("hyb"));
   let h = 0;
@@ -1786,7 +2121,9 @@ const SIZE_STEPS = [0.8, 1, 1.2];
 // inside a clipped viewport — footer stats stay pinned to the bottom
 let setScroll = 0;
 function settingsRect() {
-  const ph = Math.min(424, Math.max(220, winH - 70));
+  // 474px exposes all 16 rows plus the pinned footer on roomy screens;
+  // shorter desktops still get the same clipped, scrollable panel.
+  const ph = Math.min(474, Math.max(220, winH - 70));
   return [Math.round(winW / 2 - 95), Math.round(winH / 2 - ph / 2), 190, ph];
 }
 const SET_VIEW_TOP = 26, SET_VIEW_BOT = 34; // title gap + footer reserve
@@ -1831,20 +2168,64 @@ const packUrl = (id) => {
   if (!u || /gumroad\.com|gum\.road|l\.gumroad/i.test(u) || u === GEM_SHOP_URL) return u;
   return withUid(u);
 };
+function openExternalUrl(url) {
+  return invokeAsync("open_url", { url }).then(
+    () => true,
+    () => {
+      bangs.push({ x: winW / 2, y: 100, life: 1.6, t: "OPEN FAILED" });
+      return false;
+    },
+  );
+}
 // update probe: a tiny text file hosting the newest version string
 // (e.g. "0.2.1") — any static host works; leave empty to disable
 const UPDATE_URL = "https://jellypal.fun/version.txt";
 let newVer = ""; // set when the probe reports a newer version
 let resetArm = 0; // settings RESET arms for 3s — second tap wipes the save
+let resetBusy = false;
 // local weather — cosmetic only: umbrella in rain, snowflakes in snow.
 // polled every 30min; the Rust side resolves coarse ip geo -> open-meteo
 let weatherOn = true;
 let wxCode = -1;
 let wxAt = 0;
-const wxFresh = () => wxCode >= 0 && Date.now() - wxAt < 45 * 60000;
+let weatherRequest = 0;
+let weatherBootProbeWaiting = true;
+// WEATHER historically defaulted on when old saves omitted the field. Keep
+// that migration path, but never turn on an IP-based probe for a malformed
+// persisted value such as the string "false".
+const savedDefaultOn = (value) => value === undefined || value === true;
+const isWeatherCode = (value) => Number.isInteger(value) && value >= 0 && value <= 99;
+const wxFresh = () => weatherOn && wxCode >= 0 && Date.now() - wxAt < 45 * 60000;
 const wxRainy = () => wxFresh() && ((wxCode >= 51 && wxCode <= 67) || (wxCode >= 80 && wxCode <= 82) || wxCode >= 95);
 const wxSnowy = () => wxFresh() && ((wxCode >= 71 && wxCode <= 77) || wxCode === 85 || wxCode === 86);
 let bootOn = false; // launch at Windows startup (HKCU Run key)
+let autostartRequest = 0;
+let autostartQueue = Promise.resolve();
+function requestAutostart(enable, fallback, notify) {
+  const request = ++autostartRequest;
+  // Serialize OS mutations too: a slow older success must not land after a
+  // newer choice and leave the registry disagreeing with the displayed UI.
+  const apply = () => invokeAsync("set_autostart", { enable });
+  autostartQueue = autostartQueue.then(apply, apply).catch(() => {
+      // An older failure must not undo a newer user choice.
+      if (request !== autostartRequest) return;
+      bootOn = fallback;
+      dirty = true;
+      if (notify) bangs.push({ x: winW / 2, y: 100, life: 2, t: "STARTUP FAILED" });
+    });
+  return autostartQueue;
+}
+function copyInstallId(rowY) {
+  const failed = () => bangs.push({ x: winW / 2, y: rowY, life: 1.8, t: "COPY FAILED" });
+  try {
+    Promise.resolve(navigator.clipboard.writeText(uid)).then(
+      () => bangs.push({ x: winW / 2, y: rowY, life: 1.2, t: "ID COPIED" }),
+      failed,
+    );
+  } catch {
+    failed();
+  }
+}
 // tuck-in: a cursor left alone for 5min gets a tiny blanket. lastCurMove
 // only advances on real movement so idle detection survives the poll stream
 let lastCurMove = Date.now();
@@ -1873,9 +2254,29 @@ function packBuyRect(i) {
   return [gx + 16 + 248 - 54, gy + 62 + i * 26, 54, 20];
 }
 
+function saveCanvasPng(canvas, name) {
+  try {
+    const encoded = canvas.toDataURL("image/png");
+    const prefix = "data:image/png;base64,";
+    if (typeof encoded !== "string" || !encoded.startsWith(prefix) || encoded.length <= prefix.length) {
+      throw new Error("canvas did not produce PNG data");
+    }
+    return invokeAsync("save_png", { data: encoded.slice(prefix.length), name });
+  } catch (error) {
+    // Canvas serialization and the Tauri bridge can throw before returning a
+    // Promise. Normalize both so every caller has one reliable failure path.
+    return Promise.reject(error);
+  }
+}
+
 // share card: a pretty 800x450 collection snapshot saved to the photos
 // folder — gives players something worth posting
 function shareCard() {
+  const failed = () => {
+    bangs.push({ x: winW / 2, y: 100, life: 2, t: "CARD FAILED" });
+    return false;
+  };
+  try {
   const W = 800, H = 450;
   const oc = document.createElement("canvas");
   oc.width = W; oc.height = H;
@@ -1925,17 +2326,21 @@ function shareCard() {
   }
   const tag = "A TINY SLIME RANCH ON YOUR DESKTOP";
   drawText(c, tag, W / 2 - textW(tag, 1) / 2, H - 18, 1, dim);
-  const data = oc.toDataURL("image/png").split(",")[1];
-  invoke("save_png", { data, name: `share_${Date.now()}` }).then(() => {
+  return saveCanvasPng(oc, `share_${Date.now()}`).then(() => {
     bangs.push({ x: winW / 2, y: 100, life: 2, t: "CARD SAVED!" });
     sfx.reveal();
-    invoke("open_photos").catch(() => {});
-  }).catch(() => {});
+    invokeQuiet("open_photos");
+    return true;
+  }).catch(failed);
+  } catch {
+    return Promise.resolve(failed());
+  }
 }
 
 // daily selfie: once per day the pet poses for a dated photo card that
 // lands in the album — a slow drip of shareable shots
 function dailySelfie() {
+  try {
   const W = 440, H = 320;
   const oc = document.createElement("canvas");
   oc.width = W; oc.height = H;
@@ -1946,7 +2351,8 @@ function dailySelfie() {
   drawText(c, "JELLYPAL", W / 2 - textW("JELLYPAL", 3) / 2 + 2, 24, 3, "#c9a06c");
   drawText(c, "JELLYPAL", W / 2 - textW("JELLYPAL", 3) / 2, 20, 3, gold);
   const d = new Date();
-  const ds = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+  const selfieDay = localIsoDayKey(d);
+  const ds = selfieDay.replace(/-/g, ".");
   drawText(c, ds, W / 2 - textW(ds, 1) / 2, 52, 1, dim);
   const sp = SPECIES[active];
   const img = sprite(Math.random() < 0.5 ? "wink" : "happy", active);
@@ -1960,17 +2366,23 @@ function dailySelfie() {
   for (let i = 0; i < 4; i++) drawSpr(c, "heart", 60 + i * 106, 40 + (i % 2) * 8, 1.4);
   drawSpr(c, "star5", W - 40, H - 34, 1.6);
   drawText(c, "DAILY SELFIE", 22, H - 24, 1, dim);
-  const data = oc.toDataURL("image/png").split(",")[1];
-  invoke("save_png", { data, name: `selfie_${Date.now()}` }).then(() => {
+  return saveCanvasPng(oc, `selfie_${Date.now()}`).then(() => {
     bangs.push({ x: petX, y: petY - 110, life: 2, t: "SELFIE!" });
     hearts.push({ x: petX + 18, y: petY - 70, life: 1.4 });
     sfx.reveal();
-    lastSelfie = ds.slice(0, 10).replace(/\./g, "-");
+    lastSelfie = selfieDay;
     dirty = true;
-  }).catch(() => {});
+    return true;
+  }).catch(() => false);
+  } catch {
+    // Daily capture is ambient: fail quietly and leave lastSelfie untouched so
+    // a later launch can retry instead of persisting a photo that never saved.
+    return Promise.resolve(false);
+  }
 }
 
-invoke("is_demo").then((v) => { DEMO = !!v; });
+const isDemoResponse = (value) => value === true;
+invokeAsync("is_demo").then((v) => { DEMO = isDemoResponse(v); }).catch(() => {});
 // update probe: compare the remote version file against APP_VER once at
 // boot; a newer remote lights the NEW VER badge in settings
 function verNewer(a, b) {
@@ -1983,38 +2395,122 @@ function verNewer(a, b) {
   return false;
 }
 if (UPDATE_URL) {
-  invoke("check_update", { url: UPDATE_URL }).then((v) => {
+  invokeAsync("check_update", { url: UPDATE_URL }).then((v) => {
     if (verNewer(v, APP_VER)) { newVer = v; sfx.reveal(); }
   }).catch(() => {});
 }
 function pollWeather() {
-  if (!weatherOn) return;
-  invoke("get_weather").then((c) => {
-    if (typeof c === "number") { wxCode = c; wxAt = Date.now(); }
+  // Do not let the default-on value outrun a delayed load of WEATHER OFF.
+  // The native command performs coarse IP geolocation, so the persisted
+  // privacy choice must be known before any boot or interval probe can run.
+  if (!saveReady || !weatherOn) return;
+  const request = ++weatherRequest;
+  invokeAsync("get_weather").then((c) => {
+    // The response crosses two remote JSON boundaries. Ignore malformed or
+    // out-of-range values instead of turning any value >=95 into fake rain.
+    // A late response must also not undo WEATHER OFF or a newer poll.
+    if (request === weatherRequest && weatherOn && isWeatherCode(c)) {
+      wxCode = c; wxAt = Date.now();
+    }
   }).catch(() => {});
 }
+function setWeatherEnabled(enabled) {
+  weatherOn = enabled === true;
+  if (weatherOn) pollWeather();
+  else {
+    weatherRequest++; // invalidate every request already in flight
+    wxCode = -1;
+    wxAt = 0;
+  }
+}
 setInterval(pollWeather, 30 * 60000);
-setTimeout(pollWeather, 4000); // let the network settle first
-invoke("load_state").then((txt) => {
-  let s = {};
-  try { s = JSON.parse(txt) || {}; } catch {} // a literal "null" save parses fine but isn't an object
-  xp = s.xp | 0;
+setTimeout(() => {
+  weatherBootProbeWaiting = false;
+  pollWeather();
+}, 4000); // let the network and state load settle first
+
+const HYB_PAL_FALLBACK = {
+  o: "#5c4632", b: "#a8845c", l: "#f7ecd7", s: "#8a6b4a",
+  e: "#23332c", w: "#ffffff", m: "#23332c", k: "#8a6b4a",
+};
+const HYB_TOP_CHARS = new Set(["o", "b", "l", "s", "e", "w", "m", "k", "c", "g", "v", "d"]);
+function sanitizeSavedHybrid(raw, seenIds) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const idMatch = typeof raw.id === "string" ? /^hyb(\d+)$/.exec(raw.id) : null;
+  const idNum = idMatch ? Number(idMatch[1]) : NaN;
+  if (!idMatch || !Number.isSafeInteger(idNum) || idNum >= Number.MAX_SAFE_INTEGER
+      || String(idNum) !== idMatch[1] || seenIds.has(raw.id)) return null;
+  if (!raw.pal || typeof raw.pal !== "object" || Array.isArray(raw.pal)) return null;
+  const pal = {};
+  for (const [key, fallback] of Object.entries(HYB_PAL_FALLBACK)) {
+    const value = raw.pal[key];
+    pal[key] = typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : fallback;
+  }
+  const top = Array.isArray(raw.top) ? raw.top.slice(0, 64).filter((px) =>
+    Array.isArray(px) && px.length >= 3
+      && Number.isInteger(px[0]) && px[0] >= 0 && px[0] < SW
+      && Number.isInteger(px[1]) && px[1] >= 0 && px[1] < SH
+      && typeof px[2] === "string" && HYB_TOP_CHARS.has(px[2])
+  ).map((px) => [px[0], px[1], px[2]]) : [];
+  let name = typeof raw.name === "string" ? raw.name.trim().replace(/\s+/g, " ").slice(0, 16) : "";
+  if (!name || !/^[a-z0-9 ]+$/i.test(name)) name = "Hybrid";
+  const safe = {
+    id: raw.id,
+    name,
+    r: Math.min(2, Math.max(0, Number.isFinite(raw.r) ? Math.trunc(raw.r) : 0)),
+    shape: typeof raw.shape === "string" && Object.prototype.hasOwnProperty.call(SHAPES, raw.shape) ? raw.shape : "round",
+    bornAt: sanitizeSavedTimestamp(raw.bornAt),
+    pal,
+    top,
+  };
+  for (const [key, allowed] of [["trait", TRAIT_INFO], ["mv", MV_INFO], ["sig", SIG_INFO], ["ps", PSYCH]]) {
+    if (typeof raw[key] === "string" && Object.prototype.hasOwnProperty.call(allowed, raw[key])) safe[key] = raw[key];
+  }
+  if (raw.kr === "REACTS TO TYPING") safe.kr = raw.kr;
+  seenIds.add(safe.id);
+  return safe;
+}
+
+function handleLoadFailure() {
+  saveReady = false;
+  loadFailed = true;
+  dirty = true;
+  bangs.push({ x: winW / 2, y: 100, life: 4, t: "LOAD FAILED" });
+}
+
+function parseLoadedState(txt) {
+  // The Rust command returns an object-shaped JSON string, including "{}"
+  // after it has preserved rejected generations. Keep the historical textual
+  // "null" first-boot fallback, but fail closed on bridge type confusion,
+  // malformed JSON, arrays, and scalar roots so defaults cannot overwrite an
+  // existing profile after an invalid load response.
+  if (typeof txt !== "string") throw new Error("state response is not text");
+  const parsed = JSON.parse(txt);
+  if (parsed === null) return {};
+  if (typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("state response root is not an object");
+  }
+  return parsed;
+}
+
+invokeAsync("load_state").then((txt) => {
+  const s = parseLoadedState(txt);
+  saveReady = true;
+  loadFailed = false;
+  xp = sanitizeSavedInt(s.xp);
   level = Math.min(3, Math.floor(xp / KEYS_PER_LEVEL));
-  if (typeof s.jelly === "number") jelly = s.jelly | 0;
-  pityRare = s.pityRare | 0;
-  pityLeg = s.pityLeg | 0;
-  hybSeq = s.hybSeq | 0;
+  if (typeof s.jelly === "number") jelly = sanitizeSavedInt(s.jelly, 100);
+  pityRare = sanitizeSavedInt(s.pityRare, 0, 12);
+  pityLeg = sanitizeSavedInt(s.pityLeg, 0, 50);
+  // The next hybrid id is derived from accepted hybrid records below. The
+  // saved counter is only a cache and must not be able to disable breeding or
+  // jump future ids after a corrupt/hand-edited save.
+  hybSeq = 0;
   if (Array.isArray(s.hybrids)) {
-    for (const h of s.hybrids) {
-      // validate saved hybrids — a bad shape/pal would crash the frame loop
-      if (!h || typeof h !== "object" || typeof h.id !== "string" || typeof h.name !== "string") continue;
-      if (!h.pal || typeof h.pal !== "object") continue;
-      h.shape = SHAPES[h.shape] ? h.shape : "round";
-      for (const k of ["o", "b", "l", "s", "e", "w", "m", "k"]) {
-        if (typeof h.pal[k] !== "string") h.pal[k] = "#8a6b4a";
-      }
-      if (typeof h.r !== "number") h.r = 0;
-      h.bornAt = Number(h.bornAt) || 0;
+    const seenHybridIds = new Set(SPECIES.map((p) => p.id));
+    for (const raw of s.hybrids.slice(0, 1000)) {
+      const h = sanitizeSavedHybrid(raw, seenHybridIds);
+      if (!h) continue;
       SPECIES.push(h);
       slotPh.push(Math.random() * 5);
     }
@@ -2023,81 +2519,72 @@ invoke("load_state").then((txt) => {
   // (or a hand-edited one) would otherwise mint a duplicate "hybN"
   for (const p of SPECIES) {
     const m = /^hyb(\d+)$/.exec(p.id);
-    if (m) hybSeq = Math.max(hybSeq, +m[1] + 1);
+    if (m) hybSeq = Math.max(hybSeq, Number(m[1]) + 1);
   }
-  if (Array.isArray(s.owned) && s.owned.length) owned = s.owned;
-  owned = [...new Set(owned)];
-  owned = owned.filter((id) => SPECIES.some((p) => p.id === id));
-  if (!owned.length) owned = ["sprout"];
-  if (Array.isArray(s.accOwned)) accOwned = s.accOwned.filter((id) => ACCS.some((a) => a.id === id));
-  if (s.accEquip && typeof s.accEquip === "object") {
-    // gear is authoritative through ownership: strip equips that reference
-    // an accessory the player never bought or a species they don't own, so
-    // a stale/doctored save can't show every doodad as equipped
-    for (const k of Object.keys(s.accEquip)) {
-      const v = s.accEquip[k];
-      if (accOwned.includes(v) && owned.includes(k)) accEquip[k] = v;
-    }
-  }
-  breedReadyAt = Number(s.breedReadyAt) || 0;
+  owned = sanitizeOwnedList(s.owned);
+  if (Array.isArray(s.accOwned)) accOwned = sanitizeAccOwnedList(s.accOwned);
+  // Gear is authoritative through both ownership sets and its scan is
+  // bounded so a malformed legacy object cannot stall boot enumeration.
+  accEquip = sanitizeAccEquip(s.accEquip);
+  breedReadyAt = sanitizeSavedDeadline(s.breedReadyAt, BREED_CD);
   // offline earnings: 1 gem per 10 minutes away, capped at 20
-  const awayMin = (Date.now() - (Number(s.savedAt) || 0)) / 60000;
-  const awayGems = s.savedAt ? Math.min(20, Math.floor(awayMin / 10)) : 0;
+  const savedAt = sanitizeSavedTimestamp(s.savedAt);
+  const awayMin = (Date.now() - savedAt) / 60000;
+  const awayGems = savedAt ? Math.min(20, Math.floor(awayMin / 10)) : 0;
   if (awayGems > 0) {
-    jelly += awayGems;
+    jelly = addSavedInt(jelly, awayGems);
     awayReport = { mins: Math.floor(awayMin), gems: awayGems, until: performance.now() + 9000 };
     setTimeout(() => sfx.reveal(), 800);
     dirty = true;
   }
-  muted = !!s.muted;
-  volStep = Math.min(3, Math.max(0, s.volStep | 0));
+  muted = s.muted === true;
+  volStep = sanitizeSavedInt(s.volStep, 0, 3);
   if (muted) volStep = 3;
   // new continuous volume wins when present; legacy saves migrate via
   // their old discrete step
-  if (typeof s.vol === "number") vol = Math.min(1, Math.max(0, s.vol));
+  if (Number.isFinite(s.vol)) vol = Math.min(1, Math.max(0, s.vol));
   else vol = VOL_STEPS[volStep];
   muted = vol <= 0.001;
   volStep = Math.round((1 - vol) * 3); // keep the shim field coherent
-  pomo = !!s.pomo;
+  pomo = s.pomo === true;
   if (POMO_FOCI.includes(s.pomoFocusMin)) pomoFocusMin = s.pomoFocusMin;
   if (POMO_BREAKS.includes(s.pomoBreakMin)) pomoBreakMin = s.pomoBreakMin;
   if (pomo) { pomoPhase = "focus"; pomoLen = pomoFocusMin * 60000; pomoUntil = Date.now() + pomoLen; }
   if (SIZE_STEPS.includes(s.sizeMul)) sizeMul = s.sizeMul;
-  reduceMotion = !!s.reduceMotion;
-  treatKind = Math.min(TREATS.length - 1, Math.max(0, s.treatKind | 0));
-  if (s.stats && typeof s.stats === "object") stats = { ...stats, ...s.stats };
-  dexMile = Math.min(DEX_MILES.length, Math.max(0, s.dexMile | 0));
-  seen = !!s.seen;
-  hintsSeen = s.hints || {};
-  if (Array.isArray(s.redeemed)) redeemed = s.redeemed;
-  if (Array.isArray(s.redeemedBound)) redeemedBound = s.redeemedBound.filter((c) => redeemed.includes(c));
+  reduceMotion = s.reduceMotion === true;
+  treatKind = sanitizeSavedInt(s.treatKind, 0, TREATS.length - 1);
+  stats = sanitizeStats(s.stats);
+  dexMile = sanitizeSavedInt(s.dexMile, 0, DEX_MILES.length);
+  seen = s.seen === true;
+  hintsSeen = sanitizeHints(s.hints);
+  redeemed = sanitizeRedeemHistory(s.redeemed);
+  if (Array.isArray(s.redeemedBound)) redeemedBound = sanitizeRedeemHistory(s.redeemedBound).filter((c) => redeemed.includes(c));
   // older saves can't prove a code was server-bound (the offline fallback
   // already shipped) — leave them unbound so the sweep re-posts once; an
   // already-bound code just returns a grant we discard
   else redeemedBound = [];
   if (typeof s.uid === "string" && /^JP[A-Z2-7]{24}$/.test(s.uid)) uid = s.uid;
-  if (Array.isArray(s.claimed)) claimedNonces = s.claimed.slice(-300);
+  claimedNonces = sanitizeClaimedNonces(s.claimed);
   ensureUid();
   claimGrants(); // any shop purchases waiting for this install pay out now
   // dragged panel positions — validated so a bad save can't park a
   // window off-screen; ignored entirely when the viewport changed
   // (a position saved on a different resolution is a wrong position)
-  if (s.panelPos && typeof s.panelPos === "object" && s.panelPos._res === `${winW}x${winH}`) {
-    for (const k of ["ranch", "nursery", "card"]) {
-      const pp = s.panelPos[k];
-      if (pp && typeof pp.x === "number" && typeof pp.y === "number") panelPos[k] = pp;
-    }
-  }
-  if (s.names && typeof s.names === "object") customNames = s.names;
-  if (s.shiny && typeof s.shiny === "object") shinyOwned = s.shiny;
-  weatherOn = s.weatherOn !== false; // default on — cosmetic only
-  bootOn = !!s.bootOn;
-  lastSelfie = s.lastSelfie || "";
-  if (bootOn) invoke("set_autostart", { enable: true }).catch(() => {}); // heal a moved exe path
+  panelPos = sanitizePanelPositions(s.panelPos);
+  customNames = sanitizeCustomNames(s.names);
+  shinyOwned = sanitizeShinyOwned(s.shiny);
+  weatherOn = savedDefaultOn(s.weatherOn);
+  // If an unusually slow load outlived the four-second boot timer, resume the
+  // one missed probe now that the persisted privacy choice is authoritative.
+  if (!weatherBootProbeWaiting) pollWeather();
+  bootOn = s.bootOn === true;
+  lastSelfie = sanitizeIsoDayKey(s.lastSelfie);
+  if (bootOn) requestAutostart(true, false, false); // heal a moved exe path; fail back to truthful OFF
   // daily selfie: once per calendar day, ~12s in so the boot settles
-  const todayKey = new Date().toISOString().slice(0, 10);
-  if (lastSelfie !== todayKey) setTimeout(() => { if (lastSelfie !== todayKey) dailySelfie(); }, 12000);
-  if (typeof s.x === "number") petX = Math.max(60, Math.min(winW - 60, s.x));
+  if (dailySelfieDue(lastSelfie)) {
+    setTimeout(() => { if (dailySelfieDue(lastSelfie)) dailySelfie(); }, 12000);
+  }
+  if (Number.isFinite(s.x)) petX = Math.max(60, Math.min(winW - 60, s.x));
   const ai = SPECIES.findIndex((p) => p.id === s.active);
   if (ai >= 0 && owned.includes(SPECIES[ai].id)) active = ai;
   if (s.petHome === true) petHome = true;
@@ -2113,8 +2600,7 @@ invoke("load_state").then((txt) => {
       }, null);
       const plat = pl ? pl.q : plats[0];
       if (!plat) return null;
-      const pw = PROP_HW[kind] || 30;
-      return { x: Math.max(plat.x + pw, Math.min(plat.x + plat.w - pw, pp.x)), y: plat.y, plat };
+      return { x: clampPropX(kind, pp.x, plat), y: plat.y, plat };
     };
     bowl = reanchor(s.props.bowl, "bowl");
     cushion = reanchor(s.props.cushion, "cushion");
@@ -2124,64 +2610,68 @@ invoke("load_state").then((txt) => {
     mirror = reanchor(s.props.mirror, "mirror");
     mat = reanchor(s.props.mat, "mat");
     jar = reanchor(s.props.jar, "jar");
-    if (bowl && typeof s.props.bowl.fill === "number") bowl.fill = Math.max(0, Math.min(3, s.props.bowl.fill));
-    if (jar && typeof s.props.jar.fill === "number") jar.fill = Math.max(0, Math.min(3, s.props.jar.fill));
+    if (bowl) bowl.fill = sanitizePropFill(s.props.bowl.fill);
+    if (jar) jar.fill = sanitizePropFill(s.props.jar.fill);
   }
-  if (s.bond && typeof s.bond === "object") bond = s.bond;
-  if (typeof s.lastEgg === "string") lastEgg = s.lastEgg;
-  if (Array.isArray(s.fab) && s.fab.every((v) => typeof v === "number" && v > -9000)) {
+  bond = sanitizeBond(s.bond);
+  lastEgg = sanitizeLocalDayKey(s.lastEgg);
+  if (Array.isArray(s.fab) && s.fab.length === 2 && s.fab.every((v) => Number.isFinite(v) && v > -9000)) {
     fabX = Math.max(24, Math.min(winW - 24, s.fab[0]));
     fabY = Math.max(24, Math.min(winH - 24, s.fab[1]));
   }
   // restore summoned companions so the desktop crew survives restarts
-  if (Array.isArray(s.pals)) {
-    for (const id of s.pals) {
-      const pi = SPECIES.findIndex((p) => p.id === id);
-      if (pi >= 0 && owned.includes(id)) spawnPal(pi);
-    }
+  for (const id of sanitizeSavedPals(s.pals)) {
+    const pi = SPECIES.findIndex((p) => p.id === id);
+    if (pi >= 0) spawnPal(pi);
   }
   // pay any milestones the collection already earned (pre-feature saves)
   checkDex();
   // daily login: a gem stipend that grows with consecutive-day streaks.
   // a brand-new save (no savedAt) skips both stipends so day one is a flat 100
-  const isFresh = !s.savedAt;
-  const dayKey = (d) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-  const today = dayKey(new Date());
-  const wk = weekKey();
+  const isFresh = !savedAt;
+  // Capture the local day once: crossing midnight between separate Date
+  // reads must not compare one day and persist another. Accept the original
+  // unpadded key on read, but always persist the padded canonical form.
+  const dailyNow = new Date();
+  const today = localIsoDayKey(dailyNow);
+  const weeklyNow = new Date();
+  const wk = weekKey(weeklyNow);
   if (isFresh) {
     lastDaily = today;
     lastWeekly = wk;
     dirty = true;
   } else {
-    if (s.lastDaily !== today) {
-      const yd = new Date();
+    if (!localDayKeyMatches(s.lastDaily, dailyNow)) {
+      const yd = new Date(dailyNow);
       yd.setDate(yd.getDate() - 1);
-      dailyStreak = s.lastDaily === dayKey(yd) ? (s.dailyStreak | 0) + 1 : 1;
+      dailyStreak = localDayKeyMatches(s.lastDaily, yd)
+        ? Math.min(36500, sanitizeSavedInt(s.dailyStreak, 0, 36500) + 1)
+        : 1;
       lastDaily = today;
       const gift = 10 + Math.min(6, dailyStreak - 1) * 3;
-      jelly += gift;
+      jelly = addSavedInt(jelly, gift);
       bangs.push({ x: petX, y: petY - 110, life: 2.4, t: `DAY ${dailyStreak}! +${gift}` });
       setTimeout(() => sfx.reveal(), 400);
       dirty = true;
     } else {
-      dailyStreak = s.dailyStreak | 0;
-      lastDaily = s.lastDaily || "";
+      dailyStreak = sanitizeSavedInt(s.dailyStreak, 0, 36500);
+      lastDaily = today;
     }
     // weekly bonus + spotlight species rotation
-    if (s.lastWeekly !== wk) {
+    if (!weeklyKeyMatches(s.lastWeekly, weeklyNow, savedAt)) {
       lastWeekly = wk;
-      jelly += 30;
+      jelly = addSavedInt(jelly, 30);
       bangs.push({ x: petX, y: petY - 130, life: 2.6, t: `WEEK +30` });
       dirty = true;
-    } else lastWeekly = s.lastWeekly || wk;
+    } else lastWeekly = wk;
   }
-});
+}).catch(handleLoadFailure);
 
 // pays the next collection milestone whenever the dex count crosses it
 function checkDex() {
   const n = owned.filter((id) => !id.startsWith("hyb")).length;
   while (dexMile < DEX_MILES.length && n >= DEX_MILES[dexMile][0]) {
-    jelly += DEX_MILES[dexMile][1];
+    jelly = addSavedInt(jelly, DEX_MILES[dexMile][1]);
     bangs.push({ x: petX, y: petY - 120, life: 2, t: `DEX ${DEX_MILES[dexMile][0]}! +${DEX_MILES[dexMile][1]}` });
     sfx.reveal();
     dexMile++;
@@ -2190,9 +2680,15 @@ function checkDex() {
 }
 
 function persist() {
+  if (!saveReady) {
+    dirty = true;
+    return Promise.reject(new Error("save blocked until state load succeeds"));
+  }
   dirty = false;
-  return invoke("save_state", {
-    json: JSON.stringify({
+  let request;
+  try {
+    request = invokeAsync("save_state", {
+      json: JSON.stringify({
       ver: 2, xp, x: petX, jelly, owned, active: SPECIES[active].id,
       pityRare, pityLeg, hybSeq, accOwned, accEquip, breedReadyAt,
       muted, vol, sizeMul, seen, savedAt: Date.now(),
@@ -2205,10 +2701,22 @@ function persist() {
       names: customNames, shiny: shinyOwned,
       pals: pals.map((p) => (SPECIES[p.sp] ? SPECIES[p.sp].id : null)).filter(Boolean),
       hybrids: SPECIES.filter((p) => p.id.startsWith("hyb")),
-    }),
+      }),
+    });
+  } catch (error) {
+    // JSON serialization and the Tauri bridge can both fail before a Promise
+    // exists. Preserve this batch for the same retry path as async failures.
+    dirty = true;
+    return Promise.reject(error);
+  }
+  return Promise.resolve(request).catch((error) => {
+    // A transient filesystem/registry failure must remain eligible for the
+    // next autosave instead of silently dropping every change in this batch.
+    dirty = true;
+    throw error;
   });
 }
-setInterval(() => { if (dirty) persist(); }, 5000);
+setInterval(() => { if (dirty && saveReady) persist().catch(() => {}); }, 5000);
 
 // bred hybrids hatch as babies: half-size + pacifier for their first hour
 const BABY_MS = 3600000;
@@ -2299,6 +2807,14 @@ function propArrive(g, now) {
     // best hiding spot on any desk
     petX = box.x;
     boxHide = now + 4500 + Math.random() * 5000;
+    // Hiding is a fully parked state, just like a cushion nap.  Clear any
+    // forced or nearly-complete act that happened to overlap the arrival;
+    // otherwise its next scripted step can move an invisible pet.
+    accAct = null; propSpin = 0; sigT0 = 0; sigId = null; danceT0 = 0;
+    spinT0 = 0; huntT0 = 0; huntPounce = false; blanketT0 = 0;
+    yawnT = 0; stretchUntil = 0;
+    hopTarget = null; hopWind = 0; climbing = false; climbPhase = 0;
+    webbing = false; webHeld = false; flying = false; petVX = 0; petVY = 0;
     boxCd = boxHide + 30000;
     lookDir = 1;
     squashV += 4;
@@ -2378,6 +2894,10 @@ function propArrive(g, now) {
       bangs.push({ x: jar.x, y: jar.y - 36, life: 1, t: "?" });
     } else {
       jar.fill--;
+      // Stock is persisted independently of bond gain. The global bond
+      // cooldown can reject this interaction, but the eaten cookie must not
+      // reappear after a restart just because no other state became dirty.
+      dirty = true;
       jar.raidUntil = Date.now() + 1500;
       munchUntil = now + 1300;
       contentUntil = now + 1600;
@@ -2460,7 +2980,7 @@ function dropEgg() {
   if (!sup) return;
   const side = petX < sup.x + sup.w / 2 ? 1 : -1;
   egg = {
-    x: Math.max(sup.x + 50, Math.min(sup.x + sup.w - 50, petX + side * (120 + Math.random() * 60))),
+    x: clampPlatformX(petX + side * (120 + Math.random() * 60), sup, 50),
     y: sup.y, plat: sup, t0: performance.now(), wob: Math.random() * 5,
   };
   bangs.push({ x: egg.x, y: egg.y - 44, life: 1.4, t: "!" });
@@ -2479,7 +2999,7 @@ function hatchEgg() {
     bangs.push({ x: ex, y: ey - 50, life: 2, t: "NEW!" });
     setTimeout(() => bangs.push({ x: ex, y: ey - 66, life: 1.6, t: (spName(g) || g.id).toUpperCase() }), 500);
   } else {
-    jelly += 60;
+    jelly = addSavedInt(jelly, 60);
     bangs.push({ x: ex, y: ey - 50, life: 1.6, t: "+60" });
   }
   hearts.push({ x: ex, y: ey - 40, life: 1.2 });
@@ -2489,15 +3009,15 @@ function hatchEgg() {
 
 // place a prop on the pet's current deck, a little to the side so it
 // doesn't spawn inside the slime
-function spawnProp() {
+function spawnProp(kind) {
   const sup = plats.find((p) => petX > p.x - 20 && petX < p.x + p.w + 20 && Math.abs(petY - p.y) < 14) || plats[0] || { x: 0, y: winH, w: winW };
   const side = petX < sup.x + sup.w / 2 ? 110 : -110;
-  let x = Math.max(sup.x + 40, Math.min(sup.x + sup.w - 40, petX + side));
+  let x = clampPropX(kind, petX + side, sup);
   // don't stack furniture — nudge off an existing prop on the same deck
   for (const q of [bowl, cushion, box, plant, music, mirror, mat, jar]) {
     if (q && Math.abs(q.y - sup.y) < 10 && Math.abs(q.x - x) < 46) {
       x = q.x + (x < q.x ? -70 : 70);
-      x = Math.max(sup.x + 40, Math.min(sup.x + sup.w - 40, x));
+      x = clampPropX(kind, x, sup);
     }
   }
   return { x, y: sup.y, plat: sup };
@@ -2522,7 +3042,7 @@ function removePal(p) {
   const i = pals.indexOf(p);
   if (i < 0) return false;
   pals.splice(i, 1);
-  if (p === palHeld) { palHeld = null; invoke("set_dragging", { on: false }); }
+  if (p === palHeld) { palHeld = null; cv.style.cursor = "default"; invokeQuiet("set_dragging", { on: false }); }
   for (const q of pals) {
     if (q.chatMate === p) { q.chatMate = null; q.chatUntil = 0; }
     if (q.follow === p) q.follow = null;
@@ -2555,14 +3075,54 @@ function sendPetHome() {
   bangs.push({ x: petX, y: petY - 76, life: 1.4, t: "BYE!" });
   petHome = true;
   held = false;
+  cuddleT = 0;
+  cuddleUntil = 0;
   flying = false;
+  startleFall = false;
+  landPeak = 0;
   climbing = false;
+  climbPhase = 0;
+  climbEdge = 0;
+  accAct = null;
+  propSpin = 0;
   webbing = false;
+  webHeld = false;
   sigT0 = 0; sigId = null;
   danceT0 = 0;
-  huntT0 = 0; huntPounce = false;
-  walkTarget = null; hopTarget = null;
+  huntT0 = 0; huntPounce = false; huntScore = 0;
+  circScore = 0; circAng = null;
+  boopT = 0;
+  noticeT = 0;
+  pokeStreak = 0; pokeLast = 0;
+  lastClickT = 0;
+  blanketT0 = 0;
+  spinT0 = 0;
+  munchUntil = 0;
+  starUntil = 0;
+  winkUntil = 0;
+  smugUntil = 0;
+  blepUntil = 0;
+  contentUntil = 0;
+  shockUntil = 0;
+  splatUntil = 0;
+  dizzyUntil = 0;
+  annoyedUntil = 0;
+  poutUntil = 0;
+  cryUntil = 0;
+  tickleUntil = 0;
+  wiggleBuf.length = 0;
+  petUntil = 0;
+  rubDir = 0;
+  rubCount = 0;
+  yawnT = 0;
+  stretchUntil = 0;
+  begUntil = 0;
+  walkTarget = null; walkGoal = null; hopTarget = null; hopWind = 0;
+  snack = null;
   treat = null;
+  treatFly = null;
+  treatFlySeen = false;
+  treatAim = false;
   sfx.drop();
   dirty = true;
 }
@@ -2570,12 +3130,25 @@ function sendPetHome() {
 // screen and falls to wherever it was hanging out before
 function bringPetHome() {
   petHome = false;
+  state = "idle";
+  // Returning is a fresh airborne entrance, never a continuation of a wall
+  // approach or climb that was active when the pet was parked.
+  climbing = false;
+  climbPhase = 0;
+  climbEdge = 0;
+  accAct = null;
+  propSpin = 0;
+  cushionNap = 0;
+  cushionNapW = 0;
+  sitUntil = 0;
+  boxHide = 0;
   petX = Math.max(60, Math.min(winW - 60, curX > -9000 ? curX : winW / 2));
   petY = 60;
   petVX = 0;
   petVY = 120;
   flying = true;
   awakeAt = Date.now();
+  ignoreT = 0;
   for (let k = 0; k < 10; k++) {
     fx.push({ x: petX + Math.random() * 40 - 20, y: petY - Math.random() * 30, vx: Math.random() * 60 - 30, vy: -Math.random() * 40, life: 0.7, c: "#e8e0c8" });
   }
@@ -2904,6 +3477,16 @@ let palHeld = null;
 let palDX = 0, palDY = 0, palVX = 0, palVY = 0;
 let palLX = 0, palLY = 0, palLT = 0, palDownX = 0, palDownY = 0, palDownT = 0;
 let palRevX = null;
+function cancelPalDrag() {
+  if (!palHeld) return false;
+  // Grabbing pauses companion physics. A cancelled/lost terminal event must
+  // resume a gentle fall or the pal remains frozen at the cursor forever.
+  palHeld.fly = true;
+  palHeld.vx = 0;
+  palHeld.vy = 0;
+  palHeld = null;
+  return true;
+}
 
 function blobSize() {
   const scale = (1.3 + level * 0.4) * sizeMul * (isBaby(SPECIES[active]) ? 0.55 : 1);
@@ -2917,36 +3500,38 @@ function petRect() {
 }
 
 function hitTest(mx, my) {
-  // parked at the ranch: the pet has no body on the desktop — without this
-  // gate its last position leaves a ghost hitbox that eats prop clicks
-  if (petHome) return false;
+  // Parked or hidden pets have no visible body on the desktop. Without
+  // these gates their stale rectangle steals the box click that should
+  // rattle them back out (and can open an invisible status card).
+  if (petHome || performance.now() < boxHide) return false;
   const [x, y, w, h] = petRect();
   return mx >= x && mx <= x + w && my >= y && my <= y + h;
 }
 
 function eat() {
   const now = Date.now();
+  const visiblePet = !petHome && performance.now() >= boxHide;
   // typing feeds the wallet, not the pet: xp/gems always tick, but only
   // key-eating species react visibly — everyone else just stays awake.
   // typing IS waking activity for all species though: a slime that nods
   // off mid-workday reads as dead, not peaceful
   const kr = SPECIES[active].kr;
   awakeAt = now;
-  if (kr && now - lastKey > 360000 && !petHome) {
+  if (kr && now - lastKey > 360000 && visiblePet) {
     // welcome back: first keystroke after 6+ idle minutes gets a heart
     contentUntil = performance.now() + 1500;
     hearts.push({ x: petX, y: petY - 70, life: 1 });
     sfx.heart();
   }
   lastKey = now;
-  xp += 1;
+  xp = addSavedInt(xp, 1);
   if (!seen && xp >= 50) { seen = true; dirty = true; }
   const every = SPECIES[active].r >= 3 ? JELLY_EVERY / 2 : JELLY_EVERY;
   if (xp % every === 0) {
-    jelly += 1;
+    jelly = addSavedInt(jelly, 1);
     // parked at the ranch = invisible pet: skip spot-anchored effects so
     // nothing rains where the pet used to stand
-    if (!petHome) {
+    if (visiblePet) {
       bangs.push({ x: petX + 20, y: petY - 80, life: 1, t: "💎" });
       starUntil = performance.now() + 900; // starry-eyed over the gem
       sfx.heart();
@@ -2964,17 +3549,17 @@ function eat() {
   for (const p of pals) {
     if (SPECIES[p.sp].kr) { p.faceId = "munch"; p.faceT = performance.now() + 150; }
   }
-  if (now > lastMunchSfx + 600) { lastMunchSfx = now; sfx.munch(); }
+  if (visiblePet && now > lastMunchSfx + 600) { lastMunchSfx = now; sfx.munch(); }
   if (state !== "idle") state = "idle";
-  if (!petHome && Math.random() < 0.35 && crumbs.length < 12) {
+  if (visiblePet && Math.random() < 0.35 && crumbs.length < 12) {
     // anchor each crumb's landing floor at spawn — the old live-petY
     // check let crumbs sink mid-air if the pet moved off mid-fall
     crumbs.push({ x: petX + (Math.random() * 60 - 30), y: petY - 80, vy: 0, life: 1, floor: petY });
   }
 }
 
-listen("keystroke", eat);
-listen("summon", () => recall());
+listenQuiet("keystroke", eat);
+listenQuiet("summon", () => recall());
 
 // clipboard mischief: the backend spots Ctrl+C/X/V combos (combo only —
 // never the content). the pet perks up like it noticed you pocketing
@@ -2982,7 +3567,7 @@ listen("summon", () => recall());
 let copyCd = 0;
 function copyPeek(intense) {
   const now = performance.now();
-  if (now < copyCd || petHome || held) return;
+  if (now < copyCd || petHome || held || now < boxHide) return;
   copyCd = now + (intense ? 6000 : 8000);
   // the perk is always visible — the ? pops even mid-flight; the look and
   // the investigative hop only apply when it's actually standing around
@@ -3000,7 +3585,8 @@ function copyPeek(intense) {
   let np = null, nd = 340;
   for (const p of pals) {
     const d = Math.hypot(curX - p.x, curY - p.y);
-    if (d < nd && !p.fly && now > (p.faceT || 0)) { nd = d; np = p; }
+    if (d < nd && !p.fly && now > (p.faceT || 0) &&
+        now > (p.restUntil || 0) && now > (p.hideUntil || 0)) { nd = d; np = p; }
   }
   if (np) {
     np.faceId = "shock"; np.faceT = now + 700;
@@ -3012,9 +3598,9 @@ function copyPeek(intense) {
 // count raw clipboard events into crash.log so "did the combo even
 // reach the app?" is answerable without guessing — first 20 only
 let copyEvts = 0;
-const copyLog = (k) => { copyEvts++; if (copyEvts <= 20) invoke("log_crash", { msg: `clip-${k}#${copyEvts}` }); };
-listen("copy", () => { copyLog("copy"); copyPeek(true); });
-listen("paste", () => { copyLog("paste"); copyPeek(false); });
+const copyLog = (k) => { copyEvts++; if (copyEvts <= 20) invokeQuiet("log_crash", { msg: `clip-${k}#${copyEvts}` }); };
+listenQuiet("copy", () => { copyLog("copy"); copyPeek(true); });
+listenQuiet("paste", () => { copyLog("paste"); copyPeek(false); });
 
 // ---------- accessory routines ----------
 // the doodad occasionally inspires its own little act — a propeller flyby
@@ -3176,13 +3762,73 @@ function startAccAct(run, now) {
 }
 
 // ---------- platforms ----------
-listen("platforms", (e) => {
-  plats = [...monPlats];
-  for (const [x, y, w] of e.payload) {
-    // ignore the topmost screen strip so thrown slimes always come back down
-    if (y > 60) plats.push({ x, y, w });
+function sanitizeRuntimePlatforms(value) {
+  if (!Array.isArray(value)) return null;
+  const clean = [];
+  for (const row of value.slice(0, 4096)) {
+    if (!Array.isArray(row) || row.length < 3) continue;
+    const [x, y, w] = row;
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(w)
+        || Math.abs(x) > 1000000 || Math.abs(y) > 1000000 || w <= 0 || w > 1000000) continue;
+    clean.push([x, y, w]);
   }
-  if (!held && !flying && !climbing) {
+  // An actually empty array is a valid "no windows" scan. A non-empty array
+  // with zero usable rows is corruption, not the disappearance of every
+  // window: preserve the last good platforms instead of dropping occupants.
+  return clean.length || value.length === 0 ? clean : null;
+}
+function reconcileAnchoredPlatforms(platformNow = performance.now()) {
+  const mainInBox = platformNow < boxHide && !!box;
+  // Furniture and eggs can still reference a platform object from the
+  // previous monitor/window generation. Re-seat every such anchor immediately
+  // so an async source update cannot leave it floating until another poll.
+  const propMap = { bowl, cushion, box, plant, music, mirror, mat, jar };
+  for (const k in propMap) {
+    const p = propMap[k];
+    if (!p || k === propHeld) continue;
+    const dead = !p.plat || (!plats.includes(p.plat) && !monPlats.includes(p.plat));
+    if (!dead && Math.abs(p.plat.y - p.y) < 6) continue;
+    const u0 = platUnder(p.x, p.y);
+    const live = plats.includes(u0) || monPlats.includes(u0) ? u0 : (plats[0] || u0);
+    p.plat = live;
+    p.y = live.y;
+    p.x = clampPropX(k, p.x, live);
+    dirty = true;
+  }
+  // A box occupant moves with the furniture, not with the vanished shelf.
+  if (mainInBox && box) {
+    petX = box.x; petY = box.y;
+    flying = false; petVX = 0; petVY = 0;
+  }
+  if (egg && egg.plat && !plats.includes(egg.plat) && !monPlats.includes(egg.plat)) {
+    const u0 = platUnder(egg.x, egg.y);
+    const live = plats.includes(u0) || monPlats.includes(u0) ? u0 : (plats[0] || u0);
+    egg.plat = live;
+    egg.y = live.y;
+    egg.x = clampPlatformX(egg.x, live, 40);
+    dirty = true;
+  }
+  // Landed snacks/treats keep only a y coordinate, no platform reference.
+  for (const p of [snack, treat]) {
+    if (!p) continue;
+    if (!plats.some((q) => Math.abs(q.y - p.y) < 8 && p.x > q.x - 8 && p.x < q.x + q.w + 8))
+      p.y = platUnder(p.x, p.y).y;
+  }
+}
+listenQuiet("platforms", (e) => {
+  const runtimePlatforms = sanitizeRuntimePlatforms(e && e.payload);
+  // A malformed whole event is not an empty scan: preserve the last known
+  // platforms instead of dropping every window and throwing the pet/furniture.
+  if (!runtimePlatforms) return;
+  const platformNow = performance.now();
+  const mainInBox = platformNow < boxHide && !!box;
+  runtimePlats = [];
+  for (const [x, y, w] of runtimePlatforms) {
+    // ignore the topmost screen strip so thrown slimes always come back down
+    if (y > 60) runtimePlats.push({ x, y, w });
+  }
+  rebuildPlatforms();
+  if (!mainInBox && !held && !flying && !climbing) {
     const sup = plats.find(
       (p) => petX > p.x - 20 && petX < p.x + p.w + 20 && Math.abs(petY - p.y) < 14
     );
@@ -3199,54 +3845,39 @@ listen("platforms", (e) => {
       }
     }
   }
-  // furniture and eggs ride the same scan: a prop anchored to a window
-  // that closed or moved would hover at its old height forever — and a
-  // pointercancel mid-drag leaves the prop parked at the cursor with a
-  // stale plat ref. re-seat anything whose deck is gone or whose y no
-  // longer matches its deck onto whatever platform is underneath it now
-  const propMap = { bowl, cushion, box, plant, music, mirror, mat, jar };
-  for (const k in propMap) {
-    const p = propMap[k];
-    if (!p || k === propHeld) continue;
-    const dead = !p.plat || (!plats.includes(p.plat) && !monPlats.includes(p.plat));
-    if (!dead && Math.abs(p.plat.y - p.y) < 6) continue;
-    // platUnder's last-ditch fallback is a fresh literal each call — park
-    // the prop on plats[0] (a monitor bottom = the floor) instead so the
-    // stored ref stays live across scans
-    const u0 = platUnder(p.x, p.y);
-    const live = plats.includes(u0) || monPlats.includes(u0) ? u0 : (plats[0] || u0);
-    p.plat = live;
-    p.y = live.y;
-    p.x = Math.max(live.x + 30, Math.min(live.x + live.w - 30, p.x));
-    dirty = true;
-  }
-  if (egg && egg.plat && !plats.includes(egg.plat) && !monPlats.includes(egg.plat)) {
-    const u0 = platUnder(egg.x, egg.y);
-    const live = plats.includes(u0) || monPlats.includes(u0) ? u0 : (plats[0] || u0);
-    egg.plat = live;
-    egg.y = live.y;
-    egg.x = Math.max(live.x + 40, Math.min(live.x + live.w - 40, egg.x));
-    dirty = true;
-  }
-  // landed snacks/treats keep only a y coordinate, no plat ref — if the
-  // shelf under them vanished, slide them down to the live surface too
-  for (const p of [snack, treat]) {
-    if (!p) continue;
-    if (!plats.some((q) => Math.abs(q.y - p.y) < 8 && p.x > q.x - 8 && p.x < q.x + q.w + 8))
-      p.y = platUnder(p.x, p.y).y;
-  }
+  reconcileAnchoredPlatforms(platformNow);
 });
 
 // tray Quit asks us to flush first — persist, then quit_app. a wedged
 // save is capped so the exit can't hang (rust force-exits at 2s anyway)
-listen("quit-request", () => {
+listenQuiet("quit-request", () => {
   Promise.race([persist().catch(() => {}), new Promise((r) => setTimeout(r, 1500))])
-    .then(() => invoke("quit_app"));
+    .then(() => invokeQuiet("quit_app"));
+});
+
+// macOS: the backend reports false when Input Monitoring isn't granted —
+// without it the global key tap stays silent so typing earns no jelly.
+// Nag once per launch until it's granted; the site explains the toggle.
+let inputMon = true;
+listenQuiet("input-mon", (e) => {
+  inputMon = e && e.payload !== false;
+  if (!inputMon) bangs.push({
+    x: winW / 2, y: 100, life: 5,
+    t: "TYPING NEEDS INPUT MONITORING - SEE jellypal.fun",
+  });
 });
 
 // ---------- cursor tracking (from backend) ----------
-listen("cursor", (e) => {
-  const [x, y] = e.payload;
+function sanitizeCursorPayload(value) {
+  if (!Array.isArray(value) || value.length < 2) return null;
+  const [x, y] = value;
+  return Number.isFinite(x) && Number.isFinite(y)
+    && Math.abs(x) <= 1000000 && Math.abs(y) <= 1000000 ? [x, y] : null;
+}
+listenQuiet("cursor", (e) => {
+  const point = sanitizeCursorPayload(e && e.payload);
+  if (!point) return;
+  const [x, y] = point;
   const now = performance.now();
   if (lastCurT > 0) {
     const dt = Math.max(1, now - lastCurT);
@@ -3260,10 +3891,15 @@ listen("cursor", (e) => {
 
 // focused-window [title, exe] from the backend (2s poll) — mood biases by
 // app kind: editors = calm focus, media/games = playful energy
-listen("focus", (e) => {
-  const p = e.payload;
-  focusTitle = String(Array.isArray(p) ? p[0] : p || "").toLowerCase();
-  focusExe = String(Array.isArray(p) ? p[1] : p || "").toLowerCase();
+function sanitizeFocusPayload(value) {
+  if (!Array.isArray(value) || value.length < 2
+      || typeof value[0] !== "string" || typeof value[1] !== "string") return null;
+  return [value[0].slice(0, 512).toLowerCase(), value[1].slice(0, 256).toLowerCase()];
+}
+listenQuiet("focus", (e) => {
+  const focused = sanitizeFocusPayload(e && e.payload);
+  if (!focused) return;
+  [focusTitle, focusExe] = focused;
 });
 function focusKind() {
   // media shows up in titles first (youtube in a chrome window is still media)
@@ -3284,15 +3920,31 @@ function canvasPos(e) {
 }
 
 function recall() {
+  // Discard a previous physical/social grievance before treating the summon
+  // as new contact. touch() may immediately earn a fresh grumpy greeting when
+  // the real absence itself was long enough, which is intentional.
+  annoyedUntil = 0;
   touch();
+  const releasedPetDrag = cancelPetDrag();
+  const releasedPalDrag = cancelPalDrag();
+  if (releasedPetDrag || releasedPalDrag) {
+    cv.style.cursor = "default";
+    invokeQuiet("set_dragging", { on: false });
+  }
   if (petHome) bringPetHome(); // parked at the ranch — summon wakes it up
+  state = "idle";
   held = false;
+  cuddleT = 0;
+  cuddleUntil = 0;
   flying = true;
   startleFall = false;
+  landPeak = 0;
   climbing = false;
   climbPhase = 0;
   walkTarget = null;
+  walkGoal = null;
   hopTarget = null;
+  hopWind = 0;
   snack = null;
   treat = null;
   treatFly = null;
@@ -3304,9 +3956,40 @@ function recall() {
   accAct = null;
   propSpin = 0;
   danceT0 = 0;
+  huntT0 = 0;
+  huntPounce = false;
+  huntScore = 0;
+  circScore = 0;
+  circAng = null;
+  boopT = 0;
+  noticeT = 0;
+  pokeStreak = 0;
+  pokeLast = 0;
+  lastClickT = 0;
+  blanketT0 = 0;
+  cushionNap = 0;
+  cushionNapW = 0;
   sitUntil = 0;
+  boxHide = 0;
   spinT0 = 0;
+  munchUntil = 0;
+  starUntil = 0;
+  winkUntil = 0;
+  smugUntil = 0;
+  blepUntil = 0;
+  contentUntil = 0;
+  splatUntil = 0;
+  dizzyUntil = 0;
+  poutUntil = 0;
+  cryUntil = 0;
+  tickleUntil = 0;
+  wiggleBuf.length = 0;
+  petUntil = 0;
+  rubDir = 0;
+  rubCount = 0;
+  yawnT = 0;
   stretchUntil = 0;
+  begUntil = 0;
   petX = Math.max(70, Math.min(winW - 70, curX > -9000 ? curX : winW / 2));
   petY = 70;
   petVX = 0;
@@ -3317,11 +4000,32 @@ function recall() {
     p.y = 60;
     p.vx = 0;
     p.vy = 120;
+    p.fallPk = 0;
+    p.squash = 0;
+    p.squashV = 0;
     p.fly = true;
     p.plat = null;
     p.stackOn = null;
     p.walkT = null;
+    p.walkV = 0;
+    p.hopWind = 0;
+    p.propGoal = null;
     p.tag = null;
+    p.sigT = 0;
+    p.sigId = null;
+    p.sigDid = 0;
+    p.accAct = null;
+    p.boopT = 0;
+    p.rubDir = 0;
+    p.rubCount = 0;
+    p.faceId = null;
+    p.faceT = 0;
+    p.lookUntil = 0;
+    p.web = 0;
+    p.webA = 0;
+    p.webAV = 0;
+    p.hideUntil = 0;
+    p.restUntil = 0;
   });
   shockUntil = performance.now() + 350;
   for (let i = 0; i < 10; i++) {
@@ -3368,14 +4072,14 @@ cv.addEventListener("pointerdown", (e) => {
     for (let i = 0; i < packIds.length; i++) {
       if (inR(packBuyRect(i))) {
         const u = packUrl(packIds[i]);
-        if (u) invoke("open_url", { url: u }).catch(() => {});
+        if (u) openExternalUrl(u);
         else bangs.push({ x: winW / 2, y: 100, life: 1.6, t: "STORE LINK TBD" });
         sfx.pop();
         return;
       }
     }
     if (inR(rows[0])) {
-      if (GEM_SHOP_URL) invoke("open_url", { url: GEM_SHOP_URL }).catch(() => {});
+      if (GEM_SHOP_URL) openExternalUrl(GEM_SHOP_URL);
       else bangs.push({ x: winW / 2, y: 100, life: 1.6, t: "STORE LINK TBD" });
       sfx.pop();
     } else if (inR(rows[1])) {
@@ -3401,8 +4105,9 @@ cv.addEventListener("pointerdown", (e) => {
       volStep = Math.round((1 - vol) * 3);
       grabT0 = performance.now();
       dirty = true;
-      try { cv.setPointerCapture(e.pointerId); } catch {}
-      invoke("set_dragging", { on: true }).catch(() => {});
+      capturePointer(cv, e.pointerId);
+      cv.style.cursor = "grabbing";
+      invokeAsync("set_dragging", { on: true }).catch(() => {});
       sfx.pop();
     }
     else if (inRow(rows[1])) {
@@ -3423,25 +4128,32 @@ cv.addEventListener("pointerdown", (e) => {
       cardEl.style.opacity = "0";
       infoEl.style.opacity = "0";
       setTimeout(() => {
-        const data = cv.toDataURL("image/png").split(",")[1];
-        const name = `jellypal_${Date.now()}`;
-        invoke("save_png", { data, name }).then(() => {
-          bangs.push({ x: winW / 2, y: 100, life: 2, t: "SAVED" });
-          sfx.reveal();
-          // if the album was left open under the hide, fold the new
-          // shot in and jump to it
-          if (albumOpen) {
-            albumList.push(`${name}.png`);
-            albumList.sort();
-            albumIdx = albumList.indexOf(`${name}.png`);
-            loadAlbumImg(`${name}.png`);
-          }
-        }).catch(() => {});
-        photoHide = false;
-        ranch.style.opacity = "";
-        nursery.style.opacity = "";
-        cardEl.style.opacity = "";
-        infoEl.style.opacity = "";
+        const failed = () => bangs.push({ x: winW / 2, y: 100, life: 2, t: "PHOTO FAILED" });
+        try {
+          const name = `jellypal_${Date.now()}`;
+          saveCanvasPng(cv, name).then(() => {
+            bangs.push({ x: winW / 2, y: 100, life: 2, t: "SAVED" });
+            sfx.reveal();
+            // if the album was left open under the hide, fold the new
+            // shot in and jump to it
+            if (albumOpen) {
+              albumList.push(`${name}.png`);
+              albumList.sort();
+              albumIdx = albumList.indexOf(`${name}.png`);
+              loadAlbumWindow();
+            }
+          }).catch(failed);
+        } catch {
+          failed();
+        } finally {
+          // Canvas serialization and the Tauri bridge can both throw before
+          // returning a Promise. Never leave photo mode hiding the entire UI.
+          photoHide = false;
+          ranch.style.opacity = "";
+          nursery.style.opacity = "";
+          cardEl.style.opacity = "";
+          infoEl.style.opacity = "";
+        }
       }, 160);
     }
     else if (inRow(rows[4])) {
@@ -3480,13 +4192,13 @@ cv.addEventListener("pointerdown", (e) => {
       sfx.pop();
     }
     else if (inRow(rows[9])) {
-      weatherOn = !weatherOn;
-      if (weatherOn) pollWeather(); else { wxCode = -1; wxAt = 0; }
+      setWeatherEnabled(!weatherOn);
       dirty = true; sfx.pop();
     }
     else if (inRow(rows[10])) {
-      bootOn = !bootOn;
-      invoke("set_autostart", { enable: bootOn }).catch(() => {});
+      const previous = bootOn;
+      bootOn = !previous;
+      requestAutostart(bootOn, previous, true);
       dirty = true; sfx.pop();
     }
     else if (inRow(rows[11])) {
@@ -3505,16 +4217,20 @@ cv.addEventListener("pointerdown", (e) => {
     else if (inRow(rows[13])) {
       // MY ID — the buyer pastes this at checkout so grants find their way
       // home; clicking copies it to the clipboard
-      try { navigator.clipboard.writeText(uid); } catch {}
-      bangs.push({ x: winW / 2, y: rows[13][1], life: 1.2, t: "ID COPIED" });
+      copyInstallId(rows[13][1]);
       sfx.pop();
     }
     else if (inRow(rows[14])) {
       // wipe save — two-tap confirm, then rust deletes state.json and
       // restarts the process so the next boot is a true first run
+      if (resetBusy) return;
       if (Date.now() < resetArm) {
         resetArm = 0;
-        try { invoke("reset_save"); } catch {}
+        resetBusy = true;
+        invokeAsync("reset_save").catch(() => {
+          resetBusy = false;
+          bangs.push({ x: winW / 2, y: rows[14][1], life: 2, t: "RESET FAILED" });
+        });
       } else {
         resetArm = Date.now() + 3000;
         sfx.pop();
@@ -3524,7 +4240,7 @@ cv.addEventListener("pointerdown", (e) => {
       // land the save before exit — a bare invoke races the write; but a
       // wedged save must not hold the quit hostage either, hence the cap
       Promise.race([persist().catch(() => {}), new Promise((r) => setTimeout(r, 1500))])
-        .then(() => invoke("quit_app"));
+        .then(() => invokeQuiet("quit_app"));
     }
     else if (mx < px || mx > px + pw || my < py || my > py + ph) settingsOpen = false;
     return;
@@ -3533,8 +4249,12 @@ cv.addEventListener("pointerdown", (e) => {
   // the release decides click-vs-move (handled in pointerup)
   const [fbx, fby] = fabPos();
   if (Math.hypot(mx - fbx, my - fby) < 22) {
-    fabDrag = { ox: mx - fbx, oy: my - fby, sx: mx, sy: my, moved: false };
+    fabDrag = { ox: mx - fbx, oy: my - fby, sx: mx, sy: my,
+      startX: fabX, startY: fabY, moved: false };
     grabT0 = performance.now();
+    capturePointer(cv, e.pointerId);
+    cv.style.cursor = "grabbing";
+    invokeQuiet("set_dragging", { on: true });
     return;
   }
   // accordion items — only while the menu is unfolded
@@ -3584,7 +4304,7 @@ cv.addEventListener("pointerdown", (e) => {
             else if (kind === "music") music = null; else if (kind === "mirror") mirror = null;
             else if (kind === "mat") mat = null; else jar = null;
           } else {
-            const p = spawnProp();
+            const p = spawnProp(kind);
             if (kind === "bowl") { p.fill = 3; bowl = p; }
             else if (kind === "cushion") cushion = p;
             else if (kind === "box") box = p;
@@ -3631,11 +4351,12 @@ cv.addEventListener("pointerdown", (e) => {
       if (q && Math.hypot(mx - q.x, my - (q.y - oy)) < rad) {
         propHeld = kind;
         propGrabX = mx; propGrabY = my;
+        propOriginX = q.x; propOriginY = q.y;
         grabT0 = performance.now();
         touch();
-        cv.setPointerCapture(e.pointerId);
+        capturePointer(cv, e.pointerId);
         cv.style.cursor = "grabbing";
-        invoke("set_dragging", { on: true });
+        invokeQuiet("set_dragging", { on: true });
         return;
       }
     }
@@ -3648,9 +4369,10 @@ cv.addEventListener("pointerdown", (e) => {
     ballDX = mx - ball.x; ballDY = my - ball.y;
     ballLX = mx; ballLY = my; ballLT = e.timeStamp;
     ballVX = 0; ballVY = 0;
-    cv.setPointerCapture(e.pointerId);
+    ball.vx = 0; ball.vy = 0;
+    capturePointer(cv, e.pointerId);
     cv.style.cursor = "grabbing";
-    invoke("set_dragging", { on: true });
+    invokeQuiet("set_dragging", { on: true });
     return;
   }
   // companions are grabbable: drag to throw, tap to poke. the pet wins
@@ -3682,9 +4404,9 @@ cv.addEventListener("pointerdown", (e) => {
     palLX = mx; palLY = my; palLT = e.timeStamp;
     palVX = 0; palVY = 0;
     palRevX = mx;
-    cv.setPointerCapture(e.pointerId);
+    capturePointer(cv, e.pointerId);
     cv.style.cursor = "grabbing";
-    invoke("set_dragging", { on: true });
+    invokeQuiet("set_dragging", { on: true });
     return;
   }
   if (!hitTest(mx, my) || petHome) return;
@@ -3715,9 +4437,9 @@ cv.addEventListener("pointerdown", (e) => {
   heldSince = e.timeStamp;
   lastRevX = mx;
   dragVX = 0; dragVY = 0;
-  cv.setPointerCapture(e.pointerId);
+  capturePointer(cv, e.pointerId);
   cv.style.cursor = "grabbing";
-  invoke("set_dragging", { on: true });
+  invokeQuiet("set_dragging", { on: true });
   // double-tap: a delighted little trick — spin + happy once released
   if (e.detail >= 2 && !sigT0) {
     if (SPECIES[active].r >= 2 && !reduceMotion) spinT0 = performance.now();
@@ -3731,7 +4453,7 @@ cv.addEventListener("pointerdown", (e) => {
 
 cv.addEventListener("pointermove", (e) => {
   const [mx, my] = canvasPos(e);
-  cv.style.cursor = held || palHeld || ballHeld || fabDrag ? "grabbing" : hitTest(mx, my) || palAt(mx, my) || (ball && Math.hypot(mx - ball.x, my - (ball.y - ball.r)) < ball.r + 12) ? "grab" : "default";
+  cv.style.cursor = held || palHeld || ballHeld || propHeld || fabDrag || volDrag ? "grabbing" : hitTest(mx, my) || palAt(mx, my) || (ball && Math.hypot(mx - ball.x, my - (ball.y - ball.r)) < ball.r + 12) ? "grab" : "default";
   const now = performance.now();
 
   // volume slider: follows the cursor while the settings row is held
@@ -3827,12 +4549,13 @@ cv.addEventListener("pointermove", (e) => {
 
   if (palHeld) {
     const pdt = Math.max(1, e.timeStamp - palLT);
+    const palMoveX = mx - palLX;
     palVX = palVX * 0.7 + ((mx - palLX) / pdt) * 1000 * 0.3;
     palVY = palVY * 0.7 + ((my - palLY) / pdt) * 1000 * 0.3;
-    palLX = mx; palLY = my; palLT = e.timeStamp;
     palHeld.x = mx - palDX;
     palHeld.y = my - palDY;
-    palHeld.lookDir = mx > palLX + 1 ? 1 : mx < palLX - 1 ? -1 : palHeld.lookDir;
+    palHeld.lookDir = palMoveX > 1 ? 1 : palMoveX < -1 ? -1 : palHeld.lookDir;
+    palLX = mx; palLY = my; palLT = e.timeStamp;
     // slow strokes while held = head pat, same as the main pet
     if (e.timeStamp - palDownT > 700 && Math.hypot(palVX, palVY) < 320) {
       if (palRevX !== null && Math.sign(mx - palRevX) !== 0 && Math.abs(mx - palRevX) > 18) {
@@ -3897,7 +4620,8 @@ cv.addEventListener("pointerup", (e) => {
   if (volDrag) {
     volDrag = null;
     dirty = true;
-    invoke("set_dragging", { on: false }).catch(() => {});
+    cv.style.cursor = "default";
+    invokeQuiet("set_dragging", { on: false });
     return;
   }
   // menu circle release: a still press toggles the accordion, a moved
@@ -3907,15 +4631,18 @@ cv.addEventListener("pointerup", (e) => {
     else { fabOpen = !fabOpen; sfx.pop(); }
     fabDrag = null;
     cv.style.cursor = "default";
+    invokeQuiet("set_dragging", { on: false });
     return;
   }
   if (propHeld) {
     const [mx, my] = canvasPos(e);
     const kind = propHeld;
     const q = { bowl, cushion, box, plant, music, mirror, mat, jar }[kind];
+    const isTap = !!q && Math.hypot(mx - propGrabX, my - propGrabY) < 10;
+    if (isTap) restoreHeldPropOrigin();
     propHeld = null;
     cv.style.cursor = "default";
-    invoke("set_dragging", { on: false });
+    invokeQuiet("set_dragging", { on: false });
     // dropped into the HOME slot: the prop goes back in the toybox.
     // no velocity guard — props ride the cursor, they can't be flung
     if (q && my <= 50 && Math.abs(mx - winW / 2) <= 66) {
@@ -3931,7 +4658,7 @@ cv.addEventListener("pointerup", (e) => {
     }
     // a tap that didn't go anywhere isn't a move — it's a poke at the
     // furniture: refill the kibble, fluff the pillow
-    if (q && Math.hypot(mx - propGrabX, my - propGrabY) < 10) { propTap(kind, q); return; }
+    if (isTap) { propTap(kind, q); return; }
     if (q) {
       // settle onto the deck under the drop point — like the ball landing
       let best = null, bs = 1e9;
@@ -3949,8 +4676,7 @@ cv.addEventListener("pointerup", (e) => {
       if (best) {
         q.plat = best;
         q.y = best.y;
-        const pw = PROP_HW[kind] || 30;
-        q.x = Math.max(best.x + pw, Math.min(best.x + best.w - pw, mx));
+        q.x = clampPropX(kind, mx, best);
       }
       for (let i = 0; i < 5; i++) fx.push({ x: q.x + Math.random() * 20 - 10, y: q.y - Math.random() * 8, vx: Math.random() * 50 - 25, vy: -Math.random() * 40, life: 0.4, c: "#c8b8a0" });
       sfx.pop();
@@ -3961,7 +4687,7 @@ cv.addEventListener("pointerup", (e) => {
   if (ballHeld) {
     ballHeld = false;
     cv.style.cursor = "default";
-    invoke("set_dragging", { on: false });
+    invokeQuiet("set_dragging", { on: false });
     const [mx, my] = canvasPos(e);
     // dropped into the top slot: back in the toybox — gentle release only,
     // so a hard fling sailing through the strip doesn't pocket it
@@ -3984,7 +4710,8 @@ cv.addEventListener("pointerup", (e) => {
   if (palHeld) {
     const p = palHeld;
     palHeld = null;
-    invoke("set_dragging", { on: false });
+    cv.style.cursor = "default";
+    invokeQuiet("set_dragging", { on: false });
     const [mx, my] = canvasPos(e);
     // dropped into the HOME slot at the top of the screen: back to the ranch.
     // requires a gentle release — a fling passing through the strip doesn't count
@@ -4009,7 +4736,7 @@ cv.addEventListener("pointerup", (e) => {
   held = false;
   if (performance.now() < petUntil) contentUntil = performance.now() + 2000;
   cv.style.cursor = "default";
-  invoke("set_dragging", { on: false });
+  invokeQuiet("set_dragging", { on: false });
   const [mx, my] = canvasPos(e);
   // dropped into the HOME slot: the main pet goes back to its ranch
   // room — bring it out again from its cell's + button. gentle release only,
@@ -4114,21 +4841,25 @@ cv.addEventListener("pointerup", (e) => {
 
 // if the OS cancels a drag mid-hold, release cleanly or clicks get swallowed
 cv.addEventListener("pointercancel", () => {
-  fabDrag = null;
-  if (volDrag) { volDrag = null; invoke("set_dragging", { on: false }); }
-  if (propHeld) { propHeld = null; invoke("set_dragging", { on: false }); }
-  if (ballHeld) { ballHeld = false; invoke("set_dragging", { on: false }); }
-  if (palHeld) { palHeld = null; invoke("set_dragging", { on: false }); }
-  if (!held) { cv.style.cursor = "default"; return; } // a cancelled pal/prop grab still lets go of the grabbing cursor
-  held = false;
-  heldStretch = 0;
-  if (webHeld) { webHeld = false; webbing = false; }
+  if (fabDrag) {
+    if (fabDrag.moved) { fabX = fabDrag.startX; fabY = fabDrag.startY; }
+    fabDrag = null;
+    invokeQuiet("set_dragging", { on: false });
+  }
+  if (volDrag) { volDrag = null; invokeQuiet("set_dragging", { on: false }); }
+  if (propHeld) {
+    restoreHeldPropOrigin();
+    propHeld = null;
+    invokeQuiet("set_dragging", { on: false });
+  }
+  if (ballHeld) { ballHeld = false; invokeQuiet("set_dragging", { on: false }); }
+  if (cancelPalDrag()) invokeQuiet("set_dragging", { on: false });
+  if (!held && !webHeld) { cv.style.cursor = "default"; return; } // a cancelled pal/prop grab still lets go of the grabbing cursor
+  cancelPetDrag();
   // a cancelled grab drops the pet where it is — without this it hovered
   // mid-air until the next platform scan noticed the missing floor
-  flying = true;
-  petVY = 0;
   cv.style.cursor = "default";
-  invoke("set_dragging", { on: false });
+  invokeQuiet("set_dragging", { on: false });
 });
 
 // ---------- pixel font (5x7) ----------
@@ -4651,7 +5382,31 @@ let customNames = {};
 let shinyOwned = {};
 let nameEdit = null;    // { i, buf } — ranch cell name being typed
 let awayReport = null;  // offline-earnings panel { mins, gems, until }
-const spName = (sp) => customNames[sp.id] || sp.name;
+function sanitizeCustomNames(value) {
+  const clean = {};
+  const ownedSpecies = new Set(owned);
+  for (const [id, raw] of boundedSavedEntries(value)) {
+    // Rename input only creates owned-species names made from these glyphs.
+    // Re-establish that invariant on load so a corrupt/doctored value cannot
+    // reach localeCompare/drawText and take down the ranch frame loop.
+    if (!ownedSpecies.has(id) || typeof raw !== "string") continue;
+    const name = raw.trim().replace(/\s+/g, " ").toUpperCase().slice(0, 10);
+    if (name && /^[A-Z0-9 ]+$/.test(name)) clean[id] = name;
+  }
+  return clean;
+}
+function sanitizeShinyOwned(value) {
+  const clean = {};
+  const ownedSpecies = new Set(owned);
+  for (const [id, shiny] of boundedSavedEntries(value)) {
+    if (ownedSpecies.has(id) && (shiny === true || shiny === 1)) clean[id] = true;
+  }
+  return clean;
+}
+const spName = (sp) => {
+  const name = customNames[sp.id];
+  return typeof name === "string" && name ? name : sp.name;
+};
 const SHINY_PAL = (pal) => ({ ...pal, b: "#fff2b8", l: "#fffbe8", s: "#ffe27a" });
 // ranch room wall tint per slime trait
 const ROOM_THEME = {
@@ -4817,7 +5572,8 @@ function drawRanch(ms) {
 
   // BREED button (5h cooldown between breedings)
   const breedCd = Math.max(0, breedReadyAt - Date.now());
-  const canBreed = jelly >= BREED_COST && owned.length >= 2 && !pullAnim && !shopMode && breedCd <= 0 && !DEMO;
+  const canBreed = jelly >= BREED_COST && owned.length >= 2 && !pullAnim && !shopMode
+    && breedCd <= 0 && !DEMO && canMintHybrid();
   rctx.fillStyle = breedMode ? "#e05a6e" : canBreed ? "#c48fd9" : "#cbb896";
   rctx.fillRect(BREED_R[0], BREED_R[1], BREED_R[2], BREED_R[3]);
   rctx.strokeStyle = "#5c4632";
@@ -5029,26 +5785,80 @@ function fitNursery() {
 }
 // photo album: fullscreen overlay browsing photo-mode PNGs saved on disk
 function openAlbum() {
-  invoke("list_photos").then((names) => {
+  albumOpenWanted = true;
+  if (albumListRequest) return albumListRequest;
+  albumListRequest = invokeAsync("list_photos").then((names) => {
+    if (!albumOpenWanted) return false;
     albumList = (names || []).slice().sort();
     if (!albumList.length) {
+      albumOpenWanted = false;
       bangs.push({ x: petX, y: petY - 100, life: 2, t: "NO PHOTOS YET - USE PHOTO MODE" });
-      return;
+      return false;
     }
     albumIdx = albumList.length - 1;   // newest photo first (names sort by timestamp)
     albumOpen = true;
-    for (const n of albumList) loadAlbumImg(n);
+    loadAlbumWindow();
     sfx.reveal();
-  }).catch(() => {});
+    return true;
+  }).catch(() => {
+    if (albumOpenWanted) {
+      albumOpenWanted = false;
+      bangs.push({ x: petX, y: petY - 100, life: 2, t: "ALBUM FAILED" });
+    }
+    return false;
+  }).finally(() => { albumListRequest = null; });
+  return albumListRequest;
 }
-function loadAlbumImg(n) {
-  if (albumImgs[n]) return;
+function albumWindowNames() {
+  const n = albumList.length;
+  if (!n) return [];
+  albumIdx = Math.max(0, Math.min(n - 1, albumIdx));
+  const idx = new Set([albumIdx, (albumIdx - 1 + n) % n, (albumIdx + 1) % n]);
+  return [...idx].map((i) => albumList[i]).filter(Boolean);
+}
+function loadAlbumWindow() {
+  const keep = new Set(albumWindowNames());
+  for (const name of Object.keys(albumImgs)) if (!keep.has(name)) delete albumImgs[name];
+  // Replace pending work on every navigation. The one active IPC is allowed
+  // to finish, but its result is discarded unless it is still in the window.
+  albumLoadQueue = [...keep].filter((name) => !albumImgs[name] && name !== albumLoadName);
+  pumpAlbumLoads();
+}
+function pumpAlbumLoads() {
+  if (albumLoadName) return;
+  let n = null;
+  const keep = new Set(albumWindowNames());
+  while (albumLoadQueue.length && !n) {
+    const candidate = albumLoadQueue.shift();
+    if (keep.has(candidate) && !albumImgs[candidate]) n = candidate;
+  }
+  if (!n) return;
+  albumLoadName = n;
   albumImgs[n] = "loading";
-  invoke("load_photo", { name: n }).then((b64) => {
+  invokeAsync("load_photo", { name: n }).then((b64) => {
+    if (!albumWindowNames().includes(n)) { delete albumImgs[n]; return; }
     const img = new Image();
-    img.src = "data:image/png;base64," + b64;
     albumImgs[n] = img;
-  }).catch(() => { delete albumImgs[n]; });
+    // Rust validates the PNG container, but the browser is authoritative for
+    // the actual image decode. Surface a corrupt IDAT/CRC as the same retryable
+    // state as an IPC read failure instead of leaving LOADING on screen forever.
+    img.onerror = () => {
+      if (albumImgs[n] !== img) return;
+      if (albumWindowNames().includes(n)) albumImgs[n] = "failed";
+      else delete albumImgs[n];
+    };
+    img.src = "data:image/png;base64," + b64;
+  }).catch(() => {
+    // Keep an explicit terminal state for the current cache window. Deleting
+    // the entry made a failed photo indistinguishable from an in-flight one,
+    // leaving the album on LOADING forever with no way to retry a one-photo
+    // album. Off-window failures can still be discarded normally.
+    if (albumWindowNames().includes(n)) albumImgs[n] = "failed";
+    else delete albumImgs[n];
+  }).finally(() => {
+    albumLoadName = null;
+    pumpAlbumLoads();
+  });
 }
 function drawAlbum(c, W, H) {
   c.fillStyle = "rgba(24,18,14,0.6)";
@@ -5066,7 +5876,10 @@ function drawAlbum(c, W, H) {
   const img = n ? albumImgs[n] : null;
   c.fillStyle = "#241b2e";
   c.fillRect(bx, by, bw, bh);
-  if (img && img.complete && img.naturalWidth) {
+  if (img === "failed") {
+    drawText(c, "PHOTO LOAD FAILED", W / 2 - textW("PHOTO LOAD FAILED", 1) / 2, by + bh / 2 - 10, 1, "#e05a6e");
+    drawText(c, "CLICK TO RETRY", W / 2 - textW("CLICK TO RETRY", 1) / 2, by + bh / 2 + 8, 1, "#b09a78");
+  } else if (img && img.complete && img.naturalWidth) {
     const s = Math.min(bw / img.naturalWidth, bh / img.naturalHeight);
     const dw = img.naturalWidth * s, dh = img.naturalHeight * s;
     c.imageSmoothingEnabled = false;
@@ -5081,8 +5894,9 @@ function drawAlbum(c, W, H) {
   drawText(c, ">", bx + bw - 14, by + bh + 12, 2, "#5c4632", null, true);
   drawText(c, "OPEN FOLDER", W / 2 - textW("OPEN FOLDER", 1) / 2, by + bh + 30, 1, "#4a90c4");
   // delete is a two-tap confirm — first tap arms it, second executes
-  const armed = n && performance.now() < albumDelArm;
-  drawText(c, armed ? "SURE?" : "DELETE", bx + bw - 14 - textW(armed ? "SURE?" : "DELETE", 1), by + bh + 30, 1, armed ? "#e05a6e" : "#b09a78", null, armed);
+  const armed = n && !albumDeleteName && performance.now() < albumDelArm;
+  const deleteLabel = albumDeleteName ? "DELETING" : armed ? "SURE?" : "DELETE";
+  drawText(c, deleteLabel, bx + bw - 14 - textW(deleteLabel, 1), by + bh + 30, 1, armed ? "#e05a6e" : "#b09a78", null, armed);
   if (n) drawText(c, n.slice(0, 26), bx + 26, by + bh + 16, 1, "#b09a78");
 }
 // album card geometry shared by draw + hit-testing
@@ -5095,36 +5909,60 @@ function albumRect() {
 function albumClick(mx, my) {
   const [bx, by, bw, bh] = albumRect();
   const n = albumList.length;
-  if (mx >= bx + bw - 20 && mx <= bx + bw + 4 && my >= by - 30 && my <= by - 6) { albumOpen = false; sfx.pop(); return; }
+  if (mx >= bx + bw - 20 && mx <= bx + bw + 4 && my >= by - 30 && my <= by - 6) { albumOpenWanted = false; albumOpen = false; sfx.pop(); return; }
   if (mx >= bx - 8 && mx <= bx + bw + 8 && my >= by - 30 && my <= by + bh + 46) {
     if (my >= by + bh + 24 && my <= by + bh + 44 && mx >= bx + bw - 76) {
       // DELETE — two taps within 3s: first arms, second removes the file
       const name = albumList[albumIdx];
       if (!name) return;
+      if (albumDeleteName) return;
       if (performance.now() < albumDelArm) {
         albumDelArm = 0;
-        invoke("delete_photo", { name }).then(() => {
-          albumList.splice(albumIdx, 1);
+        albumDeleteName = name;
+        invokeAsync("delete_photo", { name }).then(() => {
+          // Navigation remains usable while disk I/O is pending. Remove by
+          // the captured filename, not the now-current index, and compensate
+          // the index only when an earlier row shifted beneath it.
+          const removedIdx = albumList.indexOf(name);
+          if (removedIdx >= 0) {
+            albumList.splice(removedIdx, 1);
+            if (removedIdx < albumIdx) albumIdx--;
+          }
           delete albumImgs[name];
-          if (!albumList.length) albumOpen = false;
-          else albumIdx = Math.min(albumIdx, albumList.length - 1);
+          if (!albumList.length) { albumOpenWanted = false; albumOpen = false; }
+          else {
+            albumIdx = Math.min(albumIdx, albumList.length - 1);
+            loadAlbumWindow();
+          }
           sfx.pop();
-        }).catch(() => {});
+        }).catch(() => {
+          bangs.push({ x: winW / 2, y: 100, life: 1.8, t: "DELETE FAILED" });
+        }).finally(() => {
+          if (albumDeleteName === name) albumDeleteName = null;
+        });
       } else {
         albumDelArm = performance.now() + 3000;
         sfx.pop();
       }
     } else if (my >= by + bh + 24 && my <= by + bh + 44 && Math.abs(mx - winW / 2) < 60) {
-      invoke("open_photos").catch(() => {});
+      if (albumFolderRequest) return;
+      albumFolderRequest = invokeAsync("open_photos").catch(() => {
+        bangs.push({ x: winW / 2, y: 100, life: 1.8, t: "OPEN FOLDER FAILED" });
+      }).finally(() => { albumFolderRequest = null; });
+    } else if (my >= by && my <= by + bh && albumImgs[albumList[albumIdx]] === "failed") {
+      delete albumImgs[albumList[albumIdx]];
+      loadAlbumWindow();
+      sfx.pop();
     } else if (my >= by + bh + 4 && mx <= bx + 30) {
-      albumIdx = (albumIdx - 1 + n) % n; sfx.pop();
+      albumIdx = (albumIdx - 1 + n) % n; loadAlbumWindow(); sfx.pop();
     } else if (my >= by + bh + 4 && mx >= bx + bw - 30) {
-      albumIdx = (albumIdx + 1) % n; sfx.pop();
+      albumIdx = (albumIdx + 1) % n; loadAlbumWindow(); sfx.pop();
     } else if (my <= by + bh) {
-      albumIdx = (albumIdx + (mx < winW / 2 ? -1 : 1) + n) % n; sfx.pop();
+      albumIdx = (albumIdx + (mx < winW / 2 ? -1 : 1) + n) % n; loadAlbumWindow(); sfx.pop();
     }
     return;
   }
+  albumOpenWanted = false;
   albumOpen = false;
 }
 
@@ -5220,7 +6058,7 @@ nc.addEventListener("pointerdown", (e) => {
   // header grip: drag the title strip to move the nursery window
   if (my < 42 && !inR(NC_CLOSE)) {
     const ox = e.clientX - nursery.offsetLeft, oy = e.clientY - nursery.offsetTop;
-    nc.setPointerCapture(e.pointerId);
+    capturePointer(nc, e.pointerId);
     const move = (ev) => {
       nursery.style.left = `${Math.max(4, Math.min(winW - nursery.offsetWidth - 4, ev.clientX - ox))}px`;
       nursery.style.top = `${Math.max(4, Math.min(winH - nursery.offsetHeight - 4, ev.clientY - oy))}px`;
@@ -5340,9 +6178,10 @@ function cardMood(t2, now) {
 function cardStatus(t2, now) {
   if (t2 === "pet") {
     if (held) return "BEING HELD";
+    if (now < boxHide) return "HIDING";
     if (webbing) return "SWINGING";
     if (climbing) return "CLIMBING";
-    if (state === "sleeping") return "NAPPING";
+    if (state === "sleeping" || now < cushionNap) return "NAPPING";
     if (flying) return "AIRBORNE";
     if (danceT0 && now - danceT0 < 1700) return "DANCING";
     if (sigT0 || spinT0) return "SHOWING OFF";
@@ -5354,6 +6193,8 @@ function cardStatus(t2, now) {
     return "IDLE";
   }
   if (t2 === palHeld) return "BEING HELD";
+  if (now < (t2.hideUntil || 0)) return "HIDING";
+  if (now < (t2.restUntil || 0)) return "NAPPING";
   if (t2.web && now < t2.web) return "SWINGING";
   if (t2.stackOn) return `RIDING ${spName(SPECIES[t2.stackOn.sp])}`;
   if (t2.tag) return t2.tag.it ? "PLAYING TAG" : "FLEEING!";
@@ -5544,7 +6385,7 @@ kc.addEventListener("pointerdown", (e) => {
   // header grip: drag the title strip to move the card
   if (my < 30 && !inR(KC_CLOSE)) {
     const ox = e.clientX - cardEl.offsetLeft, oy = e.clientY - cardEl.offsetTop;
-    kc.setPointerCapture(e.pointerId);
+    capturePointer(kc, e.pointerId);
     const move = (ev) => {
       cardEl.style.left = `${Math.max(4, Math.min(winW - cardEl.offsetWidth - 4, ev.clientX - ox))}px`;
       cardEl.style.top = `${Math.max(4, Math.min(winH - cardEl.offsetHeight - 4, ev.clientY - oy))}px`;
@@ -5702,7 +6543,7 @@ rc.addEventListener("pointerdown", (e) => {
   // window; the nursery rides along when it's stacked below
   if (my < 42 && ![PULL_R, BREED_R, SHOP_R, RESET_R, CLOSE_R].some(inR)) {
     const ox = e.clientX - ranch.offsetLeft, oy = e.clientY - ranch.offsetTop;
-    rc.setPointerCapture(e.pointerId);
+    capturePointer(rc, e.pointerId);
     const move = (ev) => {
       const nl = Math.max(4, Math.min(winW - ranch.offsetWidth - 4, ev.clientX - ox));
       const nt = Math.max(4, Math.min(winH - ranch.offsetHeight - 4, ev.clientY - oy));
@@ -5918,15 +6759,15 @@ function doPull() {
     return;
   }
   jelly -= PULL_COST;
-  stats.pulls++;
+  stats.pulls = addSavedInt(stats.pulls, 1);
   const sp = rollSpecies();
   const idx = SPECIES.indexOf(sp);
   const isNew = !owned.includes(sp.id);
   if (isNew) owned.push(sp.id);
-  else jelly += DUP_REFUND;
+  else jelly = addSavedInt(jelly, DUP_REFUND);
   // 8% shiny (gold-tinted) variant on new species — Chillquarium-style tint
   const shiny = isNew && Math.random() < 0.08;
-  if (shiny) { shinyOwned[sp.id] = true; stats.shiny++; }
+  if (shiny) { shinyOwned[sp.id] = true; stats.shiny = addSavedInt(stats.shiny, 1); }
   // 18% bonus accessory drop
   let acc = null;
   const locked = ACCS.filter((a) => !accOwned.includes(a.id));
@@ -5950,6 +6791,7 @@ function mixHex(h1, h2) {
 }
 
 function makeHybrid(A, B) {
+  if (!canMintHybrid()) return null;
   const pal = {
     o: mixHex(A.pal.o, B.pal.o), b: mixHex(A.pal.b, B.pal.b),
     l: mixHex(A.pal.l, B.pal.l), s: mixHex(A.pal.s, B.pal.s),
@@ -5974,22 +6816,23 @@ function makeHybrid(A, B) {
 }
 
 function doBreed() {
-  if (breedSel.length !== 2 || jelly < BREED_COST || Date.now() < breedReadyAt) return;
-  jelly -= BREED_COST;
-  stats.breeds++;
-  breedReadyAt = Date.now() + BREED_CD;
+  if (breedSel.length !== 2 || jelly < BREED_COST || Date.now() < breedReadyAt || !canMintHybrid()) return;
   const A = SPECIES[breedSel[0]];
   const B = SPECIES[breedSel[1]];
   // breeding always yields a hybrid baby — the old 25% "surprise adult
   // species" read as 'breeding didn't work' to players
   const child = makeHybrid(A, B);
+  if (!child) return;
+  jelly -= BREED_COST;
+  stats.breeds = addSavedInt(stats.breeds, 1);
+  breedReadyAt = Date.now() + BREED_CD;
   SPECIES.push(child);
   slotPh.push(Math.random() * 5);
   fitRanch();
   owned.push(child.id);
   // shiny parents pass the spark down: 15% when either parent is shiny
   const bShiny = (shinyOwned[A.id] || shinyOwned[B.id]) && Math.random() < 0.15;
-  if (bShiny) { shinyOwned[child.id] = true; stats.shiny++; }
+  if (bShiny) { shinyOwned[child.id] = true; stats.shiny = addSavedInt(stats.shiny, 1); }
   breedMode = false;
   breedSel = [];
   dirty = true;
@@ -6036,6 +6879,9 @@ addEventListener("keydown", (e) => {
       tryRedeem(code).then((msg) => {
         bangs.push({ x: winW / 2, y: winH / 2 - 60, life: 2.4, t: msg });
         if (msg.startsWith("+")) sfx.reveal(); else sfx.pop();
+      }, () => {
+        bangs.push({ x: winW / 2, y: winH / 2 - 60, life: 2.4, t: "REDEEM FAILED" });
+        sfx.pop();
       });
       return;
     }
@@ -6070,7 +6916,7 @@ addEventListener("keydown", (e) => {
     if (/^[a-zA-Z0-9 ]$/.test(e.key) && nameEdit.buf.length < 10) nameEdit.buf += e.key.toUpperCase();
     return;
   }
-  if (e.key === "Escape") { treatAim = false; settingsOpen = false; gemShop = false; shopMode = false; breedMode = false; accPick = null; infoPick = null; albumOpen = false; if (cardTarget) closeCard(); if (nurseryOpen) toggleNursery(false); }
+  if (e.key === "Escape") { treatAim = false; settingsOpen = false; gemShop = false; shopMode = false; breedMode = false; accPick = null; infoPick = null; albumOpenWanted = false; albumOpen = false; if (cardTarget) closeCard(); if (nurseryOpen) toggleNursery(false); }
 });
 
 // ---------- clickable regions ----------
@@ -6079,10 +6925,18 @@ addEventListener("keydown", (e) => {
 // batch lands. send immediately at boot, then keep refreshing; the interval
 // alone left a dead window long enough to read as "pals can't be grabbed"
 function sendClickable() {
-  const rects = petHome ? [] : [petRect()];
+  const clickNow = performance.now();
+  // The main box dweller is as invisible as a hidden pal.  Keep its stale
+  // body rectangle from swallowing desktop clicks through the box sprite.
+  const rects = petHome || clickNow < boxHide ? [] : [petRect()];
   { const [fx, fy] = fabPos(); rects.push([fx - 20, fy - 20, 40, 40]); }
   if (fabOpen) for (let k = 0; k < FAB_ITEMS.length; k++) rects.push(fabItemRect(k));
-  for (const p of pals) rects.push(palRect(p));
+  for (const p of pals) {
+    // Box dwellers are invisible and palAt() already ignores them. Their
+    // backend hitboxes must disappear too or an empty patch of desktop eats
+    // clicks until the pal climbs back out.
+    if (clickNow >= (p.hideUntil || 0)) rects.push(palRect(p));
+  }
   if (ball) rects.push([ball.x - 14, ball.y - 22, 28, 24]); // the toy is grabbable
   // furniture grab zones — sized to the sprite bounds: top covers the
   // lifted floor position, bottom covers the unlifted overhang on decks
@@ -6104,7 +6958,7 @@ function sendClickable() {
   if (ranchOpen) rects.push([ranch.offsetLeft, ranch.offsetTop, ranch.offsetWidth, ranch.offsetHeight]);
   if (nurseryOpen) rects.push([nursery.offsetLeft, nursery.offsetTop, nursery.offsetWidth, nursery.offsetHeight]);
   if (cardTarget) rects.push([cardEl.offsetLeft, cardEl.offsetTop, cardEl.offsetWidth, cardEl.offsetHeight]);
-  invoke("set_clickable", { rects });
+  invokeQuiet("set_clickable", { rects });
 }
 sendClickable();
 setInterval(sendClickable, 250);
@@ -6199,7 +7053,7 @@ function frame(now) {
     const k = String((e && e.message) || e).slice(0, 100);
     if (!crashSeen[k]) {
       crashSeen[k] = 1;
-      try { invoke("log_crash", { msg: "FRAME " + String(e.stack || e).slice(0, 2400) }); } catch {}
+      invokeQuiet("log_crash", { msg: "FRAME " + String(e.stack || e).slice(0, 2400) });
     }
   }
   // heartbeat every 20s: if the user reports a freeze and ticks stop,
@@ -6208,16 +7062,16 @@ function frame(now) {
   // never needs a restart
   if (now - lastBeat > 20000) {
     lastBeat = now;
-    try { invoke("log_crash", { msg: "tick" }); } catch {}
+    invokeQuiet("log_crash", { msg: "tick" });
     // NaN watchdog: a poisoned position makes the pet silently invisible
     // (drawImage(NaN) is a no-op) — that reads as "frozen". snap it back.
     if (!isFinite(petX) || !isFinite(petY) || !isFinite(squash) || !isFinite(squashV)) {
-      try { invoke("log_crash", { msg: `NAN-GUARD petX=${petX} petY=${petY} sq=${squash} sqV=${squashV}` }); } catch {}
+      invokeQuiet("log_crash", { msg: `NAN-GUARD petX=${petX} petY=${petY} sq=${squash} sqV=${squashV}` });
       petX = winW / 2; petY = winH; petVX = 0; petVY = 0; squash = 0; squashV = 0;
     }
     // offscreen rescue: flung past the frame edge → drop back in view
     if (!petHome && isFinite(petX) && (petX < -140 || petX > winW + 140 || petY < -300 || petY > winH + 240)) {
-      try { invoke("log_crash", { msg: `OFFSCREEN petX=${petX} petY=${petY}` }); } catch {}
+      invokeQuiet("log_crash", { msg: `OFFSCREEN petX=${petX} petY=${petY}` });
       petX = Math.max(80, Math.min(winW - 80, petX));
       petY = Math.min(Math.max(petY, 120), winH - 80);
       petVX = 0; petVY = 0; flying = true; accAct = null; propSpin = 0;
@@ -6225,44 +7079,43 @@ function frame(now) {
     // wedged act: a routine older than 12s (all scripts end ≤ 6s) is a
     // stuck step-runner — drop it so the next routine can roll
     if (accAct && now - accAct.t0 > 12000) {
-      try { invoke("log_crash", { msg: `ACT-WEDGED id=${accAct.id}` }); } catch {}
+      invokeQuiet("log_crash", { msg: `ACT-WEDGED id=${accAct.id}` });
       accAct = null; propSpin = 0;
     }
     if (!accAct && propSpin !== 0) propSpin = 0; // stray blades parked
-    if (sigT0 && now - sigT0 > 20000) { sigT0 = 0; sigInit = 0; try { invoke("log_crash", { msg: `SIG-WEDGED id=${sigId}` }); } catch {} }
+    if (sigT0 && now - sigT0 > 20000) { sigT0 = 0; sigInit = 0; invokeQuiet("log_crash", { msg: `SIG-WEDGED id=${sigId}` }); }
     // stuck-grab watchdog: if a pointerup is ever lost (capture dropped,
     // click-through flip mid-gesture) the held flag would pin DRAGGING on
     // forever and the overlay would eat every click — looks like a freeze.
     // 20s of uninterrupted hold is longer than any real gesture here
-    if ((held || palHeld || ballHeld || propHeld || fabDrag || volDrag) && grabT0 && now - grabT0 > 20000) {
-      try { invoke("log_crash", { msg: `GRAB-STUCK held=${held} pal=${!!palHeld} ball=${ballHeld} prop=${propHeld} fab=${!!fabDrag} vol=${!!volDrag}` }); } catch {}
-      if (held) { flying = true; petVY = 0; } // a force-released pet falls, not hovers
-      held = false; palHeld = null; ballHeld = false; propHeld = null; fabDrag = null; volDrag = null;
+    if ((held || webHeld || palHeld || ballHeld || propHeld || fabDrag || volDrag) && grabT0 && now - grabT0 > 20000) {
+      invokeQuiet("log_crash", { msg: `GRAB-STUCK held=${held} pal=${!!palHeld} ball=${ballHeld} prop=${propHeld} fab=${!!fabDrag} vol=${!!volDrag}` });
+      if (fabDrag && fabDrag.moved) { fabX = fabDrag.startX; fabY = fabDrag.startY; }
+      restoreHeldPropOrigin();
+      cancelPetDrag();
+      cancelPalDrag();
+      ballHeld = false; propHeld = null; fabDrag = null; volDrag = null;
       cv.style.cursor = "default";
-      try { invoke("set_dragging", { on: false }); } catch {}
+      invokeQuiet("set_dragging", { on: false });
     }
     if (spinT0 && now - spinT0 > 4000) spinT0 = 0;
     for (const p of pals) {
       if (!isFinite(p.x) || !isFinite(p.y) || !isFinite(p.squash)) {
-        try { invoke("log_crash", { msg: `NAN-PAL sp=${p.sp} x=${p.x} y=${p.y} sq=${p.squash}` }); } catch {}
+        invokeQuiet("log_crash", { msg: `NAN-PAL sp=${p.sp} x=${p.x} y=${p.y} sq=${p.squash}` });
         p.x = winW / 2; p.y = winH; p.vx = 0; p.vy = 0; p.squash = 0; p.squashV = 0;
       } else if (p.x < -140 || p.x > winW + 140 || p.y < -300 || p.y > winH + 240) {
-        try { invoke("log_crash", { msg: `PAL-OFFSCREEN sp=${p.sp} x=${p.x} y=${p.y}` }); } catch {}
+        invokeQuiet("log_crash", { msg: `PAL-OFFSCREEN sp=${p.sp} x=${p.x} y=${p.y}` });
         p.x = Math.max(80, Math.min(winW - 80, p.x)); p.y = winH - 60;
         p.vx = 0; p.vy = 0; p.fly = true; p.accAct = null;
       }
       if (p.accAct && now - p.accAct.t0 > 8000) p.accAct = null;
     }
-    // furniture anchored to a platform object from an old poll re-snaps
-    // to the nearest live deck instead of floating where it vanished
-    for (const q of [bowl, cushion, egg]) {
-      if (q && q.plat && !plats.includes(q.plat) && !monPlats.includes(q.plat)) {
-        const live = platUnder(q.x, q.y) || plats[0];
-        if (live) { q.plat = live; q.y = live.y; q.x = Math.max(live.x + 26, Math.min(live.x + live.w - 26, q.x)); }
-      }
-    }
+    // Reuse the authoritative event-time repair instead of an older partial
+    // bowl/cushion/egg sweep with a one-size clamp. This is the safety net for
+    // every furniture kind, eggs, and landed food if an event path was missed.
+    reconcileAnchoredPlatforms(now);
     if (ball && (!isFinite(ball.x) || !isFinite(ball.y))) {
-      try { invoke("log_crash", { msg: `NAN-BALL x=${ball.x} y=${ball.y}` }); } catch {}
+      invokeQuiet("log_crash", { msg: `NAN-BALL x=${ball.x} y=${ball.y}` });
       ball.x = winW / 2; ball.y = 60; ball.vx = 0; ball.vy = 0;
     }
     // memory caps: particle arrays only grow via bugs — trim the oldest
@@ -6293,7 +7146,10 @@ function frameBody(now) {
   const petBusy = now < cushionNap || now < boxHide;
   // a pet hiding in the box rides it — dragging the box used to leave the
   // hidden pet behind, then it popped out where the box no longer was
-  if (now < boxHide && box) petX = box.x;
+  if (now < boxHide && box) {
+    petX = box.x; petY = box.y;
+    flying = false; petVX = 0; petVY = 0;
+  }
 
   // jelly spring: slower + looser than a rigid bounce — the squash unfolds
   // over ~100ms and keeps a little overshoot instead of snapping flat
@@ -6388,7 +7244,7 @@ function frameBody(now) {
 
   // sleeping pets stir when the cursor gets really close — half-open
   // eyes for a beat, then settle back unless it lingers closer still
-  if (state === "sleeping" && cdist < 150 && now > stirT) {
+  if (!petHome && state === "sleeping" && cdist < 150 && now > stirT) {
     stirT = now + 2400;
     // waking to a friendly face: a beat of surprise, then content
     if (cdist < 85) { awakeAt = Date.now(); state = "idle"; contentUntil = now + 1700; bangs.push({ x: petX, y: petY - bh - 14, life: 0.9, t: "!?" }); }
@@ -6480,7 +7336,8 @@ function frameBody(now) {
           // nearby pals join the hunt — a chase pack hopping after the
           // same cursor with a lighter arc. ~40% sit it out
           for (const p of pals) {
-            if (p === palHeld || p.fly || now < p.web || p.stackOn || p.tag || now < p.restUntil) continue;
+            if (p === palHeld || p.fly || now < p.web || p.stackOn || p.tag ||
+                now < (p.restUntil || 0) || now < (p.hideUntil || 0)) continue;
             if (Math.abs(p.x - petX) > 340 || Math.random() > 0.6) continue;
             p.fly = true;
             p.walkT = null;
@@ -6631,17 +7488,27 @@ function frameBody(now) {
   // walkTarget, which read as stuttering during the performance
   if (onGround && !climbing && state === "idle" && !sigT0 && !petBusy) {
     const baseSpd = 55 * (psy.spd || 1) * (isBaby(sp) ? 0.8 : 1) * (now < hyperUntil ? 1.5 : 1);
+    // Re-evaluate wall connectivity throughout a gravity-free climb approach:
+    // window tops can move or resize after the initial wander decision.
+    const climbLeft = sup.x <= petEdge && sup.x + sup.w > 0;
+    const climbRight = sup.x < winW && sup.x + sup.w >= winW - petEdge;
     if (climbPhase === 1) {
-      const dx = climbEdge - petX;
-      if (Math.abs(dx) < 34) {
+      const edgeConnected = climbEdge <= winW / 2 ? climbLeft : climbRight;
+      if (!edgeConnected) {
         climbPhase = 0;
-        climbing = true;
-        climbUntil = now + 3200;
-        sfx.pop();
+        climbEdge = 0;
       } else {
-        petX += Math.sign(dx) * 70 * dt;
-        lookDir = Math.sign(dx);
-        lookUntil = now + 200;
+        const dx = climbEdge - petX;
+        if (Math.abs(dx) < 34) {
+          climbPhase = 0;
+          climbing = true;
+          climbUntil = now + 3200;
+          sfx.pop();
+        } else {
+          petX += Math.sign(dx) * 70 * dt;
+          lookDir = Math.sign(dx);
+          lookUntil = now + 200;
+        }
       }
     } else if (snack && state !== "sleeping" && !petBusy) {
       const dx = snack.x - petX;
@@ -6652,7 +7519,7 @@ function frameBody(now) {
         munchUntil = now + 600;
         contentUntil = now + 2200;
         bondGain(SPECIES[active].id, 3); // fed a snack — the good stuff
-        jelly += 1;
+        jelly = addSavedInt(jelly, 1);
         starUntil = now + 900;
         dirty = true;
         squashV += 5;
@@ -6870,9 +7737,19 @@ function frameBody(now) {
       else if (roll < 0.56 + sitB) { sitUntil = now + 2000 + Math.random() * 2000; lookFlipT = now; }
       else if (roll < 0.66) stretchUntil = now + 700;
       else if (roll < 0.78 + danceB) { danceT0 = now; sfx.heart(); }
-      else if (roll < 0.9 && sp.trait === "climb" && !isBaby(sp)) { climbPhase = 1; climbEdge = petX < winW / 2 ? 24 : winW - 24; }
+      else if (roll < 0.9 && sp.trait === "climb" && !isBaby(sp) && (climbLeft || climbRight)) {
+        climbPhase = 1;
+        climbEdge = climbLeft && (!climbRight || Math.abs(petX - petEdge) <= Math.abs(petX - (winW - petEdge)))
+          ? petEdge : winW - petEdge;
+      }
       else if (roll < 0.9 && sp.trait === "chomp" && !isBaby(sp)) {
-        const sx2 = Math.max(lo + 30, Math.min(hi - 30, petX + dir * (120 + Math.random() * 180)));
+        // Preserve the generous inner margin on roomy decks, but collapse to
+        // center when the support cannot fit body width plus that margin.
+        // The old lo+30 / hi-30 clamp inverted there and spawned the snack
+        // beyond the only place the pet could safely stand.
+        const sx2 = clampPlatformX(
+          petX + dir * (120 + Math.random() * 180), sup, petEdge + 30
+        );
         snack = { x: sx2, y: sup.y, kind: Math.random() < 0.5 ? "file" : "folder", t0: now };
       }
       else if (roll < 0.9 && sp.trait === "web" && !isBaby(sp) && now > webCd && curX > -9000 &&
@@ -6963,7 +7840,7 @@ function frameBody(now) {
 
   // first-launch hello: one hop toward the cursor + a wave — the whole
   // onboarding fits in a second and never repeats once seen
-  if (!introDone && !seen && !petHome && now > 1500 && petX > 0 && onGround) {
+  if (!introDone && !seen && !petHome && !petBusy && now > 1500 && petX > 0 && onGround) {
     introDone = true;
     flying = true; petVY = -240; petVX = 0;
     lookDir = Math.sign(curX - petX) || 1;
@@ -6974,7 +7851,7 @@ function frameBody(now) {
   }
   // bond greeting: a well-bonded slime notices you coming back — one
   // happy hop with a heart, once per boot, only if it's on the desktop
-  if (!greeted && seen && !petHome && now > 2200 && petX > 0 && onGround && bondLvl(SPECIES[active].id) >= 3) {
+  if (!greeted && seen && !petHome && !petBusy && now > 2200 && petX > 0 && onGround && bondLvl(SPECIES[active].id) >= 3) {
     greeted = true;
     flying = true; petVY = -200; petVX = 0;
     lookDir = Math.sign(curX - petX) || 1;
@@ -6987,9 +7864,9 @@ function frameBody(now) {
 
   // mystery egg: once a day a spotted egg drops on the deck — marked at
   // spawn, so closing the app before the hatch costs the day's egg
-  const eggDay = `${new Date().getFullYear()}-${new Date().getMonth() + 1}-${new Date().getDate()}`;
-  if (!egg && lastEgg !== eggDay && seen && now > 20000 && plats.length) {
-    lastEgg = eggDay;
+  const eggDate = new Date();
+  if (!egg && !localDayKeyMatches(lastEgg, eggDate) && seen && now > 20000 && plats.length) {
+    lastEgg = localIsoDayKey(eggDate);
     dirty = true;
     dropEgg();
   }
@@ -6998,7 +7875,7 @@ function frameBody(now) {
   // discovery hints: one move at a time — a contextual pop the moment
   // the user is mid-gesture, or a 150s drip for moves they haven't
   // bumped into. never while a modal is up or a hand is on a slime
-  if (now > hintUntil && !petHome && !held && !palHeld && !settingsOpen && !ranchOpen &&
+  if (now > hintUntil && !petHome && !petBusy && !held && !palHeld && !settingsOpen && !ranchOpen &&
       !gemShop && !albumOpen && !redeemMode && !treatAim && !photoHide) {
     for (const h of HINTS) {
       if (hintsSeen[h.id]) continue;
@@ -7044,7 +7921,7 @@ function frameBody(now) {
 
   // species ambient trait particles
   const trait = SPECIES[active].trait;
-  if (trait && !held && !petHome && now > nextTraitFx) {
+  if (trait && !held && !petHome && now >= boxHide && now > nextTraitFx) {
     nextTraitFx = now + 1400 + Math.random() * 1600;
     if (trait === "spark") fx.push({ x: petX + Math.random() * 24 - 12, y: petY - 8, vx: 0, vy: -32, life: 1, c: "#f0a05c" });
     if (trait === "drip") fx.push({ x: petX + Math.random() * 20 - 10, y: petY - 4, vx: 0, vy: 55, life: 0.6, c: "#69b7ec" });
@@ -7053,7 +7930,7 @@ function frameBody(now) {
     if (trait === "bubble") fx.push({ x: petX + Math.random() * 24 - 12, y: petY - 20, vx: Math.random() * 8 - 4, vy: -35, life: 1.2, c: "#b8e8f5" });
   }
   // legendary ambient quirks — trails, embers, notes, drool
-  if (!petHome) legTick(sp, petX, petY, dt, walkTarget !== null, flying, (v) => { squashV += v; });
+  if (!petHome && now >= boxHide) legTick(sp, petX, petY, dt, walkTarget !== null, flying, (v) => { squashV += v; });
   // idle fidgets: a menu of micro-animations so standing still never
   // looks static — weighted by mood: lazy pets yawn and sigh, lively
   // ones shuffle and peek around
@@ -7110,16 +7987,16 @@ function frameBody(now) {
   // held stretch eases off between pointermove updates
   if (!held && heldStretch > 0) heldStretch = Math.max(0, heldStretch - dt * 2.2);
   // chili rush: little flames while the treat buzz lasts
-  if (now < hyperUntil && Math.random() < dt * 4) {
+  if (!petHome && now < hyperUntil && now >= boxHide && Math.random() < dt * 4) {
     fx.push({ x: petX + Math.random() * 24 - 12, y: petY - 12, vx: Math.random() * 16 - 8, vy: -46, life: 0.55, c: "#ff7a3f" });
   }
   // pomodoro focus sprint: periodic cheer to keep you going
   // focus time accrues into lifetime stats while a sprint runs
   if (pomo && pomoPhase === "focus") {
-    stats.focusSec = (stats.focusSec || 0) + dt;
+    stats.focusSec = addSavedMeasure(stats.focusSec, dt);
     dirty = true;
   }
-  if (pomo && pomoPhase === "focus" && now > pomoHeartNext) {
+  if (pomo && pomoPhase === "focus" && !petHome && now >= boxHide && now > pomoHeartNext) {
     pomoHeartNext = now + 40000 + Math.random() * 30000;
     hearts.push({ x: petX + (Math.random() * 40 - 20), y: petY - 80, life: 1 });
     if (Math.random() < 0.3) bangs.push({ x: petX + 24, y: petY - 90, life: 1.4, t: "GO!" });
@@ -7257,9 +8134,15 @@ function frameBody(now) {
     }
     if (petVY > 0) {
       let landY = null;
+      let landPlat = null, landShift = Infinity;
       for (const p of plats) {
         if (petX > p.x - 20 && petX < p.x + p.w + 20 && p.y >= prevY - 2 && p.y <= petY + 4) {
-          if (landY === null || p.y < landY) landY = p.y;
+          const shift = Math.abs(clampPlatformX(petX, p, petEdge) - petX);
+          if (landY === null || p.y < landY || (p.y === landY && shift < landShift)) {
+            landY = p.y;
+            landPlat = p;
+            landShift = shift;
+          }
         }
       }
       if (landY !== null) {
@@ -7280,6 +8163,10 @@ function frameBody(now) {
           flying = false;
           petVY = 0;
           petVX = 0;
+          // Collision accepts a little body overlap so ledges are catchable;
+          // a settled pet must still finish fully supported. On an impossibly
+          // narrow ledge, the shared clamp balances it over the center.
+          petX = clampPlatformX(petX, landPlat, petEdge);
           if (accAct && accAct.id === "flyby") { accAct = null; propSpin = 0; }
           // landing settles in proportion to the fall — a hop lands light,
           // a screen-high drop slams down and throws a second dust ring
@@ -7414,7 +8301,7 @@ function frameBody(now) {
       }
     }
     for (const p of pals) {
-      if (p.fly || p.stackOn || p === palHeld || now < p.restUntil) continue;
+      if (p.fly || p.stackOn || p === palHeld || now < (p.restUntil || 0) || now < (p.hideUntil || 0)) continue;
       const pl = p.plat;
       if (!pl || Math.abs(ball.y - pl.y) > 16 || Math.abs(ball.x - p.x) > 26) continue;
       if (Math.abs(ball.vx) > 190) {
@@ -7457,12 +8344,22 @@ function frameBody(now) {
   const treatBelow = treat && treat.y > sup.y + 20 && Math.abs(treat.x - petX) < 600;
   if (treat && !held && !climbing && !flying && !webbing && !petHome && state === "idle" && !petBusy && (Math.abs(treat.y - sup.y) < 20 || treatBelow)) {
     const dx = treat.x - petX;
-    if (Math.abs(dx) > 16 || treatBelow) {
+    // At an edge, the closest legal center can still be farther than the
+    // usual bite radius. Once the pet has reached that legal target, let its
+    // body reach a snack on the same support; never extend this to another
+    // same-height platform or to a snack that it can still walk closer to.
+    const treatOnSupport = Math.abs(treat.y - sup.y) < 20
+      && treat.x > sup.x - 8 && treat.x < sup.x + sup.w + 8;
+    const treatTarget = Math.max(lo, Math.min(hi, treat.x));
+    const reachedEdgeTreat = treatOnSupport
+      && Math.abs(petX - treatTarget) < 8
+      && Math.abs(treat.x - treatTarget) <= petEdge + 8;
+    if ((Math.abs(dx) > 16 && !reachedEdgeTreat) || treatBelow) {
       const tlo = Math.max(40, sup.x + 30);
       const thi = Math.min(winW - 40, sup.x + sup.w - 30);
       // below: aim past the edge on the snack's side so it drops off
       walkTarget = treatBelow ? (treat.x < petX ? tlo - 40 : thi + 40)
-                              : Math.max(tlo, Math.min(thi, treat.x));
+                              : treatTarget;
       // bites lunges at snacks — a chomp-trait slime charges harder
       walkSpd = (LEG[sp.id] && LEG[sp.id].lunge ? 300 : 170) * (psy.spd || 1);
       if (LEG[sp.id] && LEG[sp.id].lunge && Math.random() < dt * 10) {
@@ -7472,13 +8369,13 @@ function frameBody(now) {
     } else {
       const tk = TREATS[treat.kind || 0];
       treat = null;
-      stats.treats++;
+      stats.treats = addSavedInt(stats.treats, 1);
       const prevXp = xp;
-      xp += tk.xp;
+      xp = addSavedInt(xp, tk.xp);
       // snacks count toward the same gem milestones as typing
       const every = SPECIES[active].r >= 3 ? JELLY_EVERY / 2 : JELLY_EVERY;
       if (Math.floor(xp / every) > Math.floor(prevXp / every)) {
-        jelly += 1;
+        jelly = addSavedInt(jelly, 1);
         bangs.push({ x: petX + 20, y: petY - 96, life: 1, t: "💎" });
         starUntil = now + 900;
       }
@@ -7691,7 +8588,7 @@ function frameBody(now) {
             if (now < (p.restUntil || 0)) continue; // a napping pal ignores the summons
             const pl = p.plat || { x: 0, w: winW };
             const pe = palEdge(p);
-            p.walkT = Math.max(pl.x + pe, Math.min(pl.x + pl.w - pe, petX + (Math.random() * 140 - 70)));
+            p.walkT = clampPlatformX(petX + (Math.random() * 140 - 70), pl, pe);
           }
           bangs.push({ x: petX, y: petY - bh - 24, life: 1.4, t: "★" });
         }
@@ -7906,7 +8803,7 @@ function frameBody(now) {
     if (!alive) {
       // Goldie's shower sometimes leaves a real gem behind — lucky!
       if (sigId === "shower" && Math.random() < 0.25) {
-        jelly += 1;
+        jelly = addSavedInt(jelly, 1);
         bangs.push({ x: petX, y: petY - bh - 30, life: 1.6, t: "LUCKY!" });
         starUntil = now + 1200;
         sfx.heart();
@@ -7973,8 +8870,8 @@ function frameBody(now) {
   ctx.clearRect(0, 0, winW, winH);
 
   const shW = SW * sx * 1.1;
-  if (!petHome) ctx.drawImage(shadowImg(), petX - shW / 2, sup.y - 4, shW, shW * 0.27);
-  if (!petHome && SPECIES[active].r >= 3) {
+  if (!petHome && now >= boxHide) ctx.drawImage(shadowImg(), petX - shW / 2, sup.y - 4, shW, shW * 0.27);
+  if (!petHome && now >= boxHide && SPECIES[active].r >= 3) {
     const hw = SW * sx * 1.24 + Math.sin(t * 3) * 4;
     ctx.globalAlpha = 0.55;
     ctx.drawImage(haloImg(), petX - hw / 2, sup.y - hw * 0.11 - 1, hw, hw * 0.33);
@@ -8140,6 +9037,22 @@ function frameBody(now) {
     // declared at loop scope — every branch below (web/fly/grounded)
     // needs to see it; nested-block scope threw ReferenceErrors
     const nappingP = now < (p.restUntil || 0) || now < (p.hideUntil || 0);
+    const hiddenInBox = now < (p.hideUntil || 0) && !!box;
+    if (hiddenInBox) {
+      p.x = box.x; p.y = box.y; p.plat = box.plat || p.plat;
+      p.fly = false; p.vx = 0; p.vy = 0; p.web = 0;
+      p.stackOn = null; p.follow = null; p.tag = null;
+    }
+    // A sleeping main pet is a quiet social anchor too: idle companions on
+    // the same deck may curl up beside it. If the pet wakes while one is on
+    // the way, cancel the stale bedtime errand instead of finishing a walk
+    // toward an awake target.
+    const petDozing = !petHome && !held && !flying &&
+      (state === "sleeping" || now < cushionNap);
+    if (p.propGoal && p.propGoal.kind === "petCuddle" && !petDozing) {
+      p.propGoal = null;
+      p.walkT = null;
+    }
     if (p === palHeld) {
       // dragged by the cursor: skip AI/physics, face the drag direction
       p.fly = false;
@@ -8184,6 +9097,7 @@ function frameBody(now) {
         for (const pl of plats) {
           if (pl.y < 60) continue;
           if (p.x > pl.x - 14 && p.x < pl.x + pl.w + 14 && prevY <= pl.y + 4 && p.y >= pl.y) {
+            p.x = clampPlatformX(p.x, pl, pEdgeFly);
             p.y = pl.y; p.fly = false; p.vy = 0; p.vx = 0; p.plat = pl;
             p.squashV += 2 + Math.min(5.5, (p.fallPk || 0) * 0.007); p.fallPk = 0;
             p.walkT = null; // the old target belongs to a different platform
@@ -8248,22 +9162,28 @@ function frameBody(now) {
         // its window just closed — a sinking deck reads as a scare, and
         // a real drop: fall through the window face (side-slide physics
         // handles the way down) instead of easing through solid window
-        if (pl.y - p.y > 40) {
+        if (!hiddenInBox && pl.y - p.y > 40) {
           p.fly = true; p.vy = 80; p.fallPk = 0;
           p.restUntil = 0; // the deck dropping out wakes a napper — no
           // sleeping-face freefall
           if (now > (p.faceT || 0)) { p.faceId = "shock"; p.faceT = now + 1000; p.squashV += 1.5; }
         }
       }
-      const plo = pl.x + palEdge(p), phi = pl.x + pl.w - palEdge(p);
+      const pEdgeGround = palEdge(p);
+      const pCenter = pl.x + pl.w / 2;
+      const pNarrow = pl.w < pEdgeGround * 2;
+      const plo = pNarrow ? pCenter : pl.x + pEdgeGround;
+      const phi = pNarrow ? pCenter : pl.x + pl.w - pEdgeGround;
       // a napping pal stays put — anything in flight gets cancelled so the
       // pal actually stays put. before this, restUntil only gated the
       // wander roll and a napping pal could be launched, dragged into tag,
       // or wander off mid-doze
       if (nappingP) { p.walkT = null; p.follow = null; p.tag = null; p.accAct = null; p.propGoal = null; p.hopWind = 0; p.chatMate = null; p.chatUntil = 0; }
-      if (now < (p.hideUntil || 0) && box) p.x = box.x; // hidden pals ride a dragged box too
+      if (hiddenInBox) {
+        p.x = box.x; p.y = box.y; p.plat = box.plat || pl;
+      }
       // soft-snap to the deck: small gaps ease in instead of teleporting
-      if (!p.fly) p.y = Math.abs(pl.y - p.y) < 3 ? pl.y : p.y + (pl.y - p.y) * Math.min(1, dt * 18);
+      else if (!p.fly) p.y = Math.abs(pl.y - p.y) < 3 ? pl.y : p.y + (pl.y - p.y) * Math.min(1, dt * 18);
       // treat race is decided in the propGoal arrival handler below —
       // a single eat path so every winner pays the same xp/gem/bond
       // cursor play on pals too — the same boop/scritch the main pet
@@ -8303,8 +9223,8 @@ function frameBody(now) {
       // walkT gate removed for the same starvation reason as the main
       // pet — a restless pal never gets an idle frame, so the bit now
       // interrupts its stroll instead of never starting
-      if (!p.accAct && !p.fly && !p.stackOn && !p.tag &&
-          !p.propGoal && !reduceMotion && now > (p.accCd || 0) && now > (p.restUntil || 0)) {
+      if (!p.accAct && !p.fly && !p.stackOn && !p.tag && !nappingP &&
+          !p.propGoal && !reduceMotion && now > (p.accCd || 0)) {
         const eq = accEquip[psp.id];
         if (eq && PAL_ACC_BITS[eq]) { p.accAct = { id: eq, t0: now, step: 0 }; p.walkT = null; }
         p.accCd = now + (100000 + Math.random() * 100000) * (ppsy.pace || 1);
@@ -8327,7 +9247,8 @@ function frameBody(now) {
         // it a chance encounter, not a loop
         if (now > (p.socCd || 0) && !p.fly && !p.chatMate && p.walkT === null && Math.random() < dt * 0.09) {
           const q = pals.find(q2 => q2 !== p && q2 !== palHeld && !q2.chatMate && !q2.propGoal && !q2.fly && !q2.stackOn && !q2.tag &&
-            now > (q2.socCd || 0) && Math.abs(q2.y - p.y) < 18 &&
+            now > (q2.socCd || 0) && now > (q2.restUntil || 0) && now > (q2.hideUntil || 0) &&
+            Math.abs(q2.y - p.y) < 18 &&
             Math.abs(q2.x - p.x) < 62 && Math.abs(q2.x - p.x) > 10);
           if (q) {
             p.socCd = q.socCd = now + 14000 + Math.random() * 12000;
@@ -8485,12 +9406,12 @@ function frameBody(now) {
               if (treat && Math.abs(treat.x - p.x) < 60 && Math.abs(treat.y - p.y) < 40) {
                 const tk = TREATS[treat.kind || 0];
                 treat = null;
-                stats.treats++;
+                stats.treats = addSavedInt(stats.treats, 1);
                 const prevXp2 = xp;
-                xp += tk.xp;
+                xp = addSavedInt(xp, tk.xp);
                 const every = SPECIES[active].r >= 3 ? JELLY_EVERY / 2 : JELLY_EVERY;
                 if (Math.floor(xp / every) > Math.floor(prevXp2 / every)) {
-                  jelly += 1;
+                  jelly = addSavedInt(jelly, 1);
                   bangs.push({ x: p.x + 14, y: p.y - 92, life: 1, t: "💎" });
                 }
                 level = Math.min(3, Math.floor(xp / KEYS_PER_LEVEL));
@@ -8547,6 +9468,17 @@ function frameBody(now) {
                 p.walkT = null;
                 p.squashV += 3;
                 if (Math.random() < 0.5) hearts.push({ x: (p.x + q.x) / 2, y: p.y - 58, life: 1 });
+              }
+            } else if (pg.kind === "petCuddle") {
+              // The main pet has no restUntil clock, so re-check its live
+              // sleep state at arrival. A late visitor simply abandons the
+              // errand if the player already woke or picked the pet up.
+              if (petDozing && Math.abs(petY - p.y) < 24 && Math.abs(petX - p.x) < 96) {
+                p.restUntil = now + 7000 + Math.random() * 5000;
+                p.restCd = p.restUntil + 25000 * (ppsy.sleep || 1);
+                p.walkT = null;
+                p.squashV += 3;
+                if (Math.random() < 0.4) hearts.push({ x: (p.x + petX) / 2, y: p.y - 58, life: 1 });
               }
             } else if (pg.kind === "cushion" && cushion && Math.abs(cushion.x - p.x) < 50) {
               if (cushionBusy(p, now)) {
@@ -8723,6 +9655,8 @@ function frameBody(now) {
         const napper = pals.find((q2) => q2 !== p && q2 !== palHeld && !q2.fly && !q2.stackOn &&
           now < (q2.restUntil || 0) && Math.abs(q2.y - p.y) < 24 &&
           Math.abs(q2.x - p.x) > 34 && Math.abs(q2.x - p.x) < 240);
+        const petNapper = petDozing && Math.abs(petY - p.y) < 24 &&
+          Math.abs(petX - p.x) > 34 && Math.abs(petX - p.x) < 280;
         // mini signature flourish: pals show off a themed ~1s version
         // of their species' act — they used to be skill-less statues
         if (psp.sig && !isBaby(psp) && !p.tag && !p.fly && Math.random() < 0.12) {
@@ -8737,6 +9671,14 @@ function frameBody(now) {
         else if (napper && now > (p.restCd || 0) && r < 0.22) {
           p.walkT = Math.max(plo, Math.min(phi, napper.x + (p.x < napper.x ? -42 : 42)));
           p.propGoal = { kind: "cuddle", mate: napper, at: now };
+        }
+        // Main-pet nap pile: stable index-based slots keep up to three pals
+        // from choosing the exact same pixel (+44, -44, +78).
+        else if (petNapper && now > (p.restCd || 0) && r < 0.22) {
+          const side = i % 2 ? -1 : 1;
+          const gap = 44 + Math.floor(i / 2) * 34;
+          p.walkT = Math.max(plo, Math.min(phi, petX + side * gap));
+          p.propGoal = { kind: "petCuddle", at: now };
         }
         else if (r < 0.5) p.walkT = Math.max(plo, Math.min(phi, p.x + (Math.random() - 0.5) * 220));
         else if (r < 0.6) { p.fly = true; p.vy = -230 * animProf(p.sp).hop; p.vx = (Math.random() - 0.5) * 140; p.hopT = now; }
@@ -8787,7 +9729,7 @@ function frameBody(now) {
           // huddle: lonely pals drift toward the nearest stackmate
           let best = null, bd = 220;
           for (const q of pals) {
-            if (q === p || q.fly || q === palHeld) continue;
+            if (q === p || q.fly || q === palHeld || now < (q.restUntil || 0) || now < (q.hideUntil || 0)) continue;
             const d = Math.abs(q.x - p.x) + Math.abs(q.y - p.y) * 2;
             if (d < bd) { bd = d; best = q; }
           }
@@ -8866,6 +9808,7 @@ function frameBody(now) {
           !isBaby(SPECIES[q2.sp]) && // babies are never mounts — a grown
           // slime clambering onto a newborn reads wrong, not cute
           now > (q2.restUntil || 0) && // no climbing onto a sleeping pal
+          now > (q2.hideUntil || 0) && // or an invisible pal inside the box
           now > (q2.chatUntil || 0) && // or mid-gossip — rude
           depth(q2) < 2 &&
           !chainHas(q2, p) &&
@@ -8937,12 +9880,12 @@ function frameBody(now) {
     }
     p.squashV += (-95 * p.squash - 6.5 * p.squashV) * dt;
     p.squash += p.squashV * dt;
-    legTick(psp, p.x, p.y, dt, p.walkT !== null, p.fly, (v) => { p.squashV += v; });
+    if (!nappingP) legTick(psp, p.x, p.y, dt, p.walkT !== null, p.fly, (v) => { p.squashV += v; });
 
     // legendary auras radiate to nearby pals: pulsar's gravity slowly
     // reels them across the platform, stella's starlight perks them up
     const lgMain = LEG[SPECIES[active].id];
-    if (lgMain && !petHome && !p.fly && p !== palHeld && Math.abs(p.y - petY) < 40) {
+    if (lgMain && !petHome && now >= boxHide && !p.fly && p !== palHeld && !nappingP && Math.abs(p.y - petY) < 40) {
       const adx = petX - p.x;
       if (lgMain.pulse && Math.abs(adx) > 60 && Math.abs(adx) < 320) {
         p.x += adx * dt * 0.05;
@@ -8961,7 +9904,7 @@ function frameBody(now) {
         now > p.playCd && now > mainPlayCd) {
       // hyper pals want to play again soon; calm/lazy take a long breather
       p.playCd = mainPlayCd = now + 6000 * (ppsy.pace || 1);
-      stats.plays++;
+      stats.plays = addSavedInt(stats.plays, 1);
       p.faceId = "happy";
       p.faceT = now + 900;
       contentUntil = now + 900;
@@ -8986,7 +9929,7 @@ function frameBody(now) {
       if (Math.abs(q.x - p.x) < 60 && now > p.playCd && now > q.playCd) {
         const qpsy = PSYCH[(SPECIES[q.sp] || {}).ps] || {};
         p.playCd = q.playCd = now + 6000 * Math.max(ppsy.pace || 1, qpsy.pace || 1);
-        stats.plays++;
+        stats.plays = addSavedInt(stats.plays, 1);
         p.faceId = q.faceId = "happy";
         p.faceT = q.faceT = now + 900;
         // face each other for the beat — without this the bump read as
@@ -9260,7 +10203,8 @@ function frameBody(now) {
 
   // status-card target: gold ring under the tracked slime + a bouncing
   // chevron overhead, so the open card's subject is unambiguous
-  if (cardTarget && ((cardTarget === "pet" && !petHome) || pals.includes(cardTarget))) {
+  if (cardTarget && ((cardTarget === "pet" && !petHome && now >= boxHide) ||
+      (pals.includes(cardTarget) && now >= (cardTarget.hideUntil || 0)))) {
     const tp = cardTarget === "pet" ? SPECIES[active] : SPECIES[cardTarget.sp];
     const csc = cardTarget === "pet" ? blobSize().scale : (1.3 + level * 0.4) * sizeMul * (isBaby(tp) ? 0.55 : 0.92);
     const tx = cardTarget === "pet" ? petX : cardTarget.x;
@@ -9274,7 +10218,7 @@ function frameBody(now) {
   }
 
   // pomodoro ring: a thin countdown arc floating over the slime
-  if (pomo && !held && !petHome) {
+  if (pomo && !held && !petHome && now >= boxHide) {
     const frac = Math.max(0, Math.min(1, 1 - (pomoUntil - Date.now()) / pomoLen));
     const ry = petY - bob - hoverBob - SH * sy - 14;
     ctx.strokeStyle = "rgba(0,0,0,0.18)";
@@ -9325,7 +10269,7 @@ function frameBody(now) {
   }
   ctx.globalAlpha = 1;
 
-  if (state === "sleeping" && !held && !flying) {
+  if (!petHome && state === "sleeping" && !held && !flying) {
     if (now > bubblePop) bubble += dt * 14;
     const br = Math.min(7, bubble);
     if (br > 0.5) {
@@ -9345,7 +10289,7 @@ function frameBody(now) {
     }
   }
   // cushion doze gets its own lazy zzz trail — shorter, drifting off the puff
-  if (now < cushionNap && now - lastZzz > 1700) {
+  if (!petHome && now < cushionNap && now - lastZzz > 1700) {
     lastZzz = now;
     zzzs.push({ x: petX + 20, y: petY - 50, life: 0.8 });
   }
@@ -9424,8 +10368,8 @@ function frameBody(now) {
     ctx.fillRect(Math.round(ball.x - 5), Math.round(ball.y - ball.r * 2 + 3), 4, 2);
   }
   // treat buffs float a small icon above the slime while they last
-  if (now < hyperUntil) drawTreat(petX - 14, petY - SH * sy - 14 + Math.sin(t * 4) * 1.5, 0, 2);
-  if (Date.now() < noSleepUntil) drawTreat(petX + 14, petY - SH * sy - 14 + Math.sin(t * 4 + 1) * 1.5, 0, 3);
+  if (!petHome && now < hyperUntil) drawTreat(petX - 14, petY - SH * sy - 14 + Math.sin(t * 4) * 1.5, 0, 2);
+  if (!petHome && Date.now() < noSleepUntil) drawTreat(petX + 14, petY - SH * sy - 14 + Math.sin(t * 4 + 1) * 1.5, 0, 3);
 
   // everything below is UI — hidden while a photo snapshot is being taken
   if (!photoHide) {
