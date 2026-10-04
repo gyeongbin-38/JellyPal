@@ -1,4 +1,4 @@
-JELLYPAL v0.2.16 - a tiny slime ranch that lives on your desktop
+JELLYPAL v0.2.17 - a tiny slime ranch that lives on your desktop
 ================================================================
 
 A small pixel slime lives on your screen while you work.
@@ -57,5 +57,7 @@ On Windows the save is sealed to your account (DPAPI) plus a rollback
 checkpoint — editing or swapping it won't parse, and pasting an old copy
 back resets to a clean ranch. Back up by exporting before a reinstall,
 then drop the file into a fresh install's folder to adopt it.
+Rejected generations are preserved under /recovery before a clean save can
+replace them. Settings > RESET removes that recovery folder too.
 
 Thanks for playing! - Cognition/Devin project
