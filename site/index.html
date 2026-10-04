@@ -367,9 +367,10 @@
         <b>jellypal.fun</b>.</div></div>
       <div class="jp-info-card"><div class="jp-info-card__title">Mac says "damaged"?</div>
         <div class="jp-info-card__body">It isn't — Apple Silicon blocks unsigned <b>browser</b> downloads.
-        The Terminal install command above never trips it. Already got the dmg? Run the
-        <b>Fix-Jellypal.command</b> inside, or once in Terminal:
-        <code>xattr -cr /Applications/Jellypal.app</code></div></div>
+        The Terminal install command above never trips it. If the <b>dmg itself</b> won't open,
+        clear its quarantine once: <code>xattr -d com.apple.quarantine ~/Downloads/Jellypal_*.dmg</code>
+        — then mount it and run the <b>Fix-Jellypal.command</b> inside. If the <b>app</b> is the one
+        called damaged: <code>xattr -cr /Applications/Jellypal.app</code></div></div>
       <div class="jp-info-card"><div class="jp-info-card__title">Mac: typing earns jelly</div>
         <div class="jp-info-card__body">macOS guards global typing — allow Jellypal under
         <b>System Settings → Privacy &amp; Security → Input Monitoring</b>, then relaunch.
@@ -410,7 +411,7 @@
     If Windows says <b>"unrecognized app"</b>, choose <b>More info → Run anyway</b> — that's normal for a small unsigned app.<br>
     <b>Mac, zero warnings:</b> paste this in Terminal —
     <code style="user-select:all">curl -L https://jellypal.fun/dl/jellypal-0.2.17-mac.tar.gz | tar xz -C /Applications &amp;&amp; open /Applications/Jellypal.app</code><br>
-    — or grab the dmg and open the <b>Fix-Jellypal.command</b> inside it if macOS calls it "damaged" (it isn't — it's just unsigned).</div>
+    — if the <b>dmg won't open</b> ("damaged"), run <code style="user-select:all">xattr -d com.apple.quarantine ~/Downloads/Jellypal_*.dmg</code> first, then open the <b>Fix-Jellypal.command</b> inside it. It's not damaged — it's unsigned.</div>
   </section>
   </main>
 
