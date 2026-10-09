@@ -422,7 +422,7 @@ const FLAVOR = {
   hyb: "BORN RIGHT ON THIS DESKTOP|ONE OF A KIND",
 };
 
-const APP_VER = "0.2.17"; // keep in sync with tauri.conf.json version
+const APP_VER = "0.2.18"; // keep in sync with tauri.conf.json version
 
 // species -> personality assignment (hybrids inherit one parent's)
 const PSY_ASSIGN = {
@@ -1168,7 +1168,7 @@ function buildSprite(faceName, pal, top, hw, sil, spIdx, opa) {
       // the rim dithers into the body: a checkerboard falloff instead of
       // a hard ellipse edge, which reads as soft pixel translucency
       if (c === "b") {
-        const gx = (x - CX) / Math.max(5, hw[y] * 0.7), gy = (y - 12) / 7.5;
+        const gx = (x - CX) / Math.max(5, hhw[y] * 0.7), gy = (y - 12) / 7.5;
         const d2 = gx * gx + gy * gy;
         if (d2 < 1 && (d2 < 0.75 || ((x + y) & 1) === 0)) c = "i";
       }
@@ -1234,9 +1234,9 @@ function buildSprite(faceName, pal, top, hw, sil, spIdx, opa) {
   const oIn = sil ? null : mixRgb(oR, mixRgb(bR, lR, 0.35), 0.45 + lift);        // soft tinted outline
   const lIn = sil ? null : mixRgb(lR, WHT, 0.16);                    // milky highlight
   const uIn = sil ? null : mixRgb(hexRgb(pal.e || "#26262e"), lR, 0.45); // iris depth row
-  // jelly translucency, raised overall — the cast was reading washed-out;
-  // pals get a second firmer bake so companions stay present (opa variant)
-  const ALPHA = opa ? { i: 235, b: 252, s: 244, l: 255 } : { i: 215, b: 242, s: 232, l: 250 };
+  // The center transmits the desktop like jelly while the shaded rim stays
+  // substantial; companions get a slightly firmer center (opa variant).
+  const ALPHA = opa ? { i: 146, b: 226, s: 238, l: 252 } : { i: 124, b: 212, s: 224, l: 246 };
   const cellAt = (x, y) => (x < 0 || y < 0 || x >= SW || y >= SH) ? "." : grid[y][x];
   for (let y = 0; y < SH; y++) {
     for (let x = 0; x < SW; x++) {
@@ -1675,8 +1675,7 @@ function restoreHeldPropOrigin() {
   // skips the held prop, so a cancelled gesture must not resurrect its old
   // platform object and strand static furniture in mid-air.
   if (q.plat && !plats.includes(q.plat) && !monPlats.includes(q.plat)) {
-    const u0 = platUnder(q.x, q.y);
-    const live = plats.includes(u0) || monPlats.includes(u0) ? u0 : (plats[0] || u0);
+    const live = anchorSupport(q.x, q.y);
     q.plat = live;
     q.y = live.y;
     q.x = clampPropX(propHeld, q.x, live);
@@ -1692,11 +1691,23 @@ let fabX = null, fabY = null;   // null = default top-right spot
 let fabOpen = false;
 let fabDrag = null;             // {ox,oy,sx,sy,moved} while held
 const FAB_ITEMS = ["recall", "snack", "toys", "barn", "gear"];
-function fabPos() { return [fabX ?? winW - 28, fabY ?? 28]; }
+function clampWorkPoint(x, y, inset = 24) {
+  const safe = usableRectAt(x, y);
+  return [
+    Math.max(safe.left + inset, Math.min(safe.right - inset, x)),
+    Math.max(safe.top + inset, Math.min(safe.bottom - inset, y)),
+  ];
+}
+function fabPos() {
+  if (fabX !== null && fabY !== null) return clampWorkPoint(fabX, fabY, 28);
+  const safe = usableRectAt(winW - 1, 0);
+  return [safe.right - 28, safe.top + 28];
+}
 // accordion item rects: stack downward, flip upward near the screen bottom
 function fabItemRect(k) {
   const [fx, fy] = fabPos();
-  const down = fy + 26 + FAB_ITEMS.length * 40 <= winH - 8;
+  const safe = usableRectAt(fx, fy);
+  const down = fy + 26 + FAB_ITEMS.length * 40 <= safe.bottom - 8;
   const iy = down ? fy + 26 + k * 40 : fy - 26 - 36 * (k + 1) - 4 * k;
   return [fx - 17, iy, 34, 34];
 }
@@ -1710,7 +1721,8 @@ function fabItemHit(mx, my) {
 // toybox prop strip: hangs left of the toys item when the chooser is open
 function toyboxStripRect() {
   const [ix, iy] = fabItemRect(2);
-  return [Math.max(8, ix - 328), iy, 324, 34]; // nine prop slots
+  const safe = usableRectAt(ix, iy);
+  return [Math.max(safe.left + 8, ix - 328), iy, 324, 34]; // nine prop slots
 }
 let egg = null;            // {x, y, plat, t0, wob} — today's mystery egg
 let lastEgg = "";          // date key of the day the egg last dropped
@@ -1843,10 +1855,41 @@ let jigPX = 0;             // last-frame petX for velocity estimation
 let plats = [{ x: 0, y: winH, w: winW }];
 // multi-monitor floors: each display contributes its own bottom-edge
 // platform so a slime can stroll from one screen onto the next
-let monPlats = [{ x: 0, y: winH, w: winW }];
+let monPlats = [{ x: 0, top: 0, y: winH, w: winW, h: winH }];
 let runtimePlats = [];
 function rebuildPlatforms() {
   plats = [...monPlats, ...runtimePlats];
+}
+function monitorPlatformAt(x, y = winH) {
+  let best = null;
+  for (const p of monPlats) {
+    const dx = x < p.x ? p.x - x : x > p.x + p.w ? x - (p.x + p.w) : 0;
+    const top = p.top ?? 0;
+    const dy = y < top ? top - y : y > p.y ? y - p.y : 0;
+    const score = dx * 4 + dy;
+    if (!best || score < best.score) best = { p, score };
+  }
+  return best ? best.p : null;
+}
+function usableRectAt(x, y = winH / 2) {
+  const p = monitorPlatformAt(x, y) || { x: 0, top: 0, y: winH, w: winW };
+  return { left: p.x, top: p.top ?? 0, right: p.x + p.w, bottom: p.y };
+}
+// ground level at x — work-area bottom, never the raw viewport edge:
+// the raw edge sits inside the Dock on auto-hide macs, so every
+// "drop back to the floor" path must land on this instead of winH
+function floorAt(x) {
+  const m = monitorPlatformAt(x, winH);
+  return m ? m.y : winH;
+}
+function clampPanelPoint(x, y, w, h) {
+  const safe = usableRectAt(x + w / 2, y + h / 2);
+  const maxX = Math.max(safe.left + 4, safe.right - w - 4);
+  const maxY = Math.max(safe.top + 4, safe.bottom - h - 4);
+  return [
+    Math.round(Math.max(safe.left + 4, Math.min(maxX, x))),
+    Math.round(Math.max(safe.top + 4, Math.min(maxY, y))),
+  ];
 }
 function sanitizeMonitorPlatforms(value) {
   if (!Array.isArray(value)) return null;
@@ -1859,18 +1902,34 @@ function sanitizeMonitorPlatforms(value) {
         || w <= 0 || h <= 0 || w > 1000000 || h > 1000000) continue;
     const floorY = y + h;
     if (!Number.isFinite(floorY) || Math.abs(floorY) > 2000000) continue;
-    clean.push({ x, y: floorY, w });
+    clean.push({ x, top: y, y: floorY, w, h });
   }
   return clean.length ? clean : null;
 }
 invokeAsync("get_monitors").then((mons) => {
   const floors = sanitizeMonitorPlatforms(mons);
   if (!floors) return;
+  const oldFloors = monPlats;
   monPlats = floors;
   // This boot IPC can resolve after the first live window scan. Preserve that
   // newer geometry instead of briefly dropping every window platform until
   // the native poll emits again.
   rebuildPlatforms();
+  // Boot starts on the raw viewport edge before this IPC resolves. Re-seat
+  // anything still grounded there onto the usable work-area floor so the
+  // Dock/taskbar cannot cover it for the rest of the session.
+  const wasOnOldFloor = (x, y) => oldFloors.some((p) =>
+    x >= p.x - 20 && x <= p.x + p.w + 20 && Math.abs(y - p.y) < 20);
+  if (!held && !flying && !climbing && wasOnOldFloor(petX, petY)) {
+    const floor = monitorPlatformAt(petX, petY);
+    if (floor) petY = floor.y;
+  }
+  for (const p of pals) {
+    if (!p.fly && p !== palHeld && wasOnOldFloor(p.x, p.y)) {
+      const floor = monitorPlatformAt(p.x, p.y);
+      if (floor) { p.y = floor.y; p.plat = floor; }
+    }
+  }
   reconcileAnchoredPlatforms(performance.now());
 }).catch(() => {});
 let ranchOpen = false;
@@ -2617,8 +2676,11 @@ invokeAsync("load_state").then((txt) => {
   bond = sanitizeBond(s.bond);
   lastEgg = sanitizeLocalDayKey(s.lastEgg);
   if (Array.isArray(s.fab) && s.fab.length === 2 && s.fab.every((v) => Number.isFinite(v) && v > -9000)) {
-    fabX = Math.max(24, Math.min(winW - 24, s.fab[0]));
-    fabY = Math.max(24, Math.min(winH - 24, s.fab[1]));
+    // work-area clamp, not raw winH — a saved spot inside the Dock strip
+    // would pin the jelly button under the dock on auto-hide macs
+    const fr = usableRectAt(s.fab[0], s.fab[1]);
+    fabX = Math.max(fr.left + 24, Math.min(fr.right - 24, s.fab[0]));
+    fabY = Math.max(fr.top + 24, Math.min(fr.bottom - 24, s.fab[1]));
   }
   // restore summoned companions so the desktop crew survives restarts
   for (const id of sanitizeSavedPals(s.pals)) {
@@ -3286,7 +3348,7 @@ function palEdge(p) {
 function palRect(p) {
   const sc = palScale(p);
   const w = SW * sc, h = SH * sc;
-  return [p.x - w / 2 - 8, p.y - h - 12, w + 16, h + 24];
+  return [p.x - w / 2 - 12, p.y - h - 16, w + 24, h + 30];
 }
 function palAt(mx, my) {
   for (const p of pals) {
@@ -3304,7 +3366,23 @@ function platUnder(x, y) {
   for (const q of plats) {
     if (x > q.x - 20 && x < q.x + q.w + 20 && q.y >= y - 4 && (!best || q.y < best.y)) best = q;
   }
-  return best || { x: 0, y: winH, w: winW };
+  return best || monitorPlatformAt(x, y) || { x: 0, top: 0, y: winH, w: winW, h: winH };
+}
+function anchorSupport(x, y) {
+  // Window platforms are replaced as a batch every scan. Follow a nearby
+  // support in either vertical direction so furniture tracks a moved window
+  // instead of being stranded at its previous top edge.
+  let nearby = null;
+  for (const q of runtimePlats) {
+    if (x < q.x - 20 || x > q.x + q.w + 20) continue;
+    const dy = Math.abs(q.y - y);
+    if (dy <= 180 && (!nearby || dy < nearby.dy)) nearby = { q, dy };
+  }
+  return nearby ? nearby.q : (platUnder(x, y) || monitorPlatformAt(x, y));
+}
+function propFloorLift(prop, overhang) {
+  const floor = prop && prop.plat && monPlats.includes(prop.plat) ? prop.plat.y : floorAt(prop ? prop.x : winW / 2);
+  return Math.min(0, floor - (prop.y + overhang));
 }
 // legendary flourish: every legendary gets a unique visible quirk on top
 // of its signature act — concept-matched, drawn live over/behind the blob
@@ -3507,8 +3585,9 @@ function blobSize() {
 
 function petRect() {
   const { w, h } = blobSize();
-  // generous padding — a moving pet is hard enough to click already
-  return [petX - w / 2 - 14, petY - h - 16, w + 28, h + 32];
+  // generous padding — a moving pet is hard enough to click already,
+  // and the backend rect feed trails the sprite by a refresh tick
+  return [petX - w / 2 - 18, petY - h - 20, w + 36, h + 40];
 }
 
 function hitTest(mx, my) {
@@ -3800,8 +3879,7 @@ function reconcileAnchoredPlatforms(platformNow = performance.now()) {
     if (!p || k === propHeld) continue;
     const dead = !p.plat || (!plats.includes(p.plat) && !monPlats.includes(p.plat));
     if (!dead && Math.abs(p.plat.y - p.y) < 6) continue;
-    const u0 = platUnder(p.x, p.y);
-    const live = plats.includes(u0) || monPlats.includes(u0) ? u0 : (plats[0] || u0);
+    const live = anchorSupport(p.x, p.y);
     p.plat = live;
     p.y = live.y;
     p.x = clampPropX(k, p.x, live);
@@ -3813,8 +3891,7 @@ function reconcileAnchoredPlatforms(platformNow = performance.now()) {
     flying = false; petVX = 0; petVY = 0;
   }
   if (egg && egg.plat && !plats.includes(egg.plat) && !monPlats.includes(egg.plat)) {
-    const u0 = platUnder(egg.x, egg.y);
-    const live = plats.includes(u0) || monPlats.includes(u0) ? u0 : (plats[0] || u0);
+    const live = anchorSupport(egg.x, egg.y);
     egg.plat = live;
     egg.y = live.y;
     egg.x = clampPlatformX(egg.x, live, 40);
@@ -4260,7 +4337,7 @@ cv.addEventListener("pointerdown", (e) => {
   // radial menu: the circle is grabbable — a press starts a potential drag,
   // the release decides click-vs-move (handled in pointerup)
   const [fbx, fby] = fabPos();
-  if (Math.hypot(mx - fbx, my - fby) < 22) {
+  if (Math.hypot(mx - fbx, my - fby) < 28) {
     fabDrag = { ox: mx - fbx, oy: my - fby, sx: mx, sy: my,
       startX: fabX, startY: fabY, moved: false };
     grabT0 = performance.now();
@@ -4482,8 +4559,7 @@ cv.addEventListener("pointermove", (e) => {
   if (fabDrag) {
     if (!fabDrag.moved && Math.hypot(mx - fabDrag.sx, my - fabDrag.sy) > 6) fabDrag.moved = true;
     if (fabDrag.moved) {
-      fabX = Math.max(24, Math.min(winW - 24, mx - fabDrag.ox));
-      fabY = Math.max(24, Math.min(winH - 24, my - fabDrag.oy));
+      [fabX, fabY] = clampWorkPoint(mx - fabDrag.ox, my - fabDrag.oy, 28);
     }
     return;
   }
@@ -4643,6 +4719,9 @@ cv.addEventListener("pointerup", (e) => {
     else { fabOpen = !fabOpen; sfx.pop(); }
     fabDrag = null;
     cv.style.cursor = "default";
+    // Publish the new menu position/state before native dragging is released;
+    // otherwise a quick second click can fall through during the refresh gap.
+    sendClickable();
     invokeQuiet("set_dragging", { on: false });
     return;
   }
@@ -4856,6 +4935,7 @@ cv.addEventListener("pointercancel", () => {
   if (fabDrag) {
     if (fabDrag.moved) { fabX = fabDrag.startX; fabY = fabDrag.startY; }
     fabDrag = null;
+    sendClickable();
     invokeQuiet("set_dragging", { on: false });
   }
   if (volDrag) { volDrag = null; invokeQuiet("set_dragging", { on: false }); }
@@ -5985,13 +6065,15 @@ function toggleNursery(force) {
   if (nurseryOpen) {
     fitNursery();
     if (panelPos.nursery) {
-      nursery.style.left = `${Math.max(4, Math.min(winW - nursery.offsetWidth - 4, panelPos.nursery.x))}px`;
-      nursery.style.top = `${Math.max(4, Math.min(winH - nursery.offsetHeight - 4, panelPos.nursery.y))}px`;
+      const [left, top] = clampPanelPoint(panelPos.nursery.x, panelPos.nursery.y, nursery.offsetWidth, nursery.offsetHeight);
+      nursery.style.left = `${left}px`;
+      nursery.style.top = `${top}px`;
     } else {
-      nursery.style.left = `${Math.max(8, Math.min(winW - NW - 20, petX - NW / 2))}px`;
       // stack below the ranch when both windows are open
       const top = ranchOpen ? ranch.offsetTop + ranch.offsetHeight + 12 : petY - nc.height - 40;
-      nursery.style.top = `${Math.max(8, Math.min(winH - nc.height - 20, top))}px`;
+      const [left, safeTop] = clampPanelPoint(petX - NW / 2, top, NW, nc.height);
+      nursery.style.left = `${left}px`;
+      nursery.style.top = `${safeTop}px`;
     }
   }
 }
@@ -6072,8 +6154,9 @@ nc.addEventListener("pointerdown", (e) => {
     const ox = e.clientX - nursery.offsetLeft, oy = e.clientY - nursery.offsetTop;
     capturePointer(nc, e.pointerId);
     const move = (ev) => {
-      nursery.style.left = `${Math.max(4, Math.min(winW - nursery.offsetWidth - 4, ev.clientX - ox))}px`;
-      nursery.style.top = `${Math.max(4, Math.min(winH - nursery.offsetHeight - 4, ev.clientY - oy))}px`;
+      const [left, top] = clampPanelPoint(ev.clientX - ox, ev.clientY - oy, nursery.offsetWidth, nursery.offsetHeight);
+      nursery.style.left = `${left}px`;
+      nursery.style.top = `${top}px`;
     };
     const up = () => {
       nc.removeEventListener("pointermove", move);
@@ -6153,13 +6236,15 @@ function openCard(target) {
   // beside whichever slime was clicked
   const saved = panelPos.card;
   if (saved) {
-    cardEl.style.left = `${Math.max(4, Math.min(winW - cardEl.offsetWidth - 4, saved.x))}px`;
-    cardEl.style.top = `${Math.max(4, Math.min(winH - cardEl.offsetHeight - 4, saved.y))}px`;
+    const [left, top] = clampPanelPoint(saved.x, saved.y, cardEl.offsetWidth, cardEl.offsetHeight);
+    cardEl.style.left = `${left}px`;
+    cardEl.style.top = `${top}px`;
   } else {
     const tx = target === "pet" ? petX : target.x;
     const ty = target === "pet" ? petY : target.y;
-    cardEl.style.left = `${Math.max(8, Math.min(winW - KW - 12, tx + 64))}px`;
-    cardEl.style.top = `${Math.max(8, Math.min(winH - KH - 12, ty - KH - 24))}px`;
+    const [left, top] = clampPanelPoint(tx + 64, ty - KH - 24, KW, KH);
+    cardEl.style.left = `${left}px`;
+    cardEl.style.top = `${top}px`;
   }
   sfx.pop();
 }
@@ -6399,8 +6484,9 @@ kc.addEventListener("pointerdown", (e) => {
     const ox = e.clientX - cardEl.offsetLeft, oy = e.clientY - cardEl.offsetTop;
     capturePointer(kc, e.pointerId);
     const move = (ev) => {
-      cardEl.style.left = `${Math.max(4, Math.min(winW - cardEl.offsetWidth - 4, ev.clientX - ox))}px`;
-      cardEl.style.top = `${Math.max(4, Math.min(winH - cardEl.offsetHeight - 4, ev.clientY - oy))}px`;
+      const [left, top] = clampPanelPoint(ev.clientX - ox, ev.clientY - oy, cardEl.offsetWidth, cardEl.offsetHeight);
+      cardEl.style.left = `${left}px`;
+      cardEl.style.top = `${top}px`;
     };
     const up = () => {
       kc.removeEventListener("pointermove", move);
@@ -6532,11 +6618,13 @@ function toggleRanch(force) {
     breedMode = false;
     breedSel = [];
     if (panelPos.ranch) {
-      ranch.style.left = `${Math.max(4, Math.min(winW - ranch.offsetWidth - 4, panelPos.ranch.x))}px`;
-      ranch.style.top = `${Math.max(4, Math.min(winH - ranch.offsetHeight - 4, panelPos.ranch.y))}px`;
+      const [left, top] = clampPanelPoint(panelPos.ranch.x, panelPos.ranch.y, ranch.offsetWidth, ranch.offsetHeight);
+      ranch.style.left = `${left}px`;
+      ranch.style.top = `${top}px`;
     } else {
-      ranch.style.left = `${Math.max(8, Math.min(winW - RW - 20, petX - RW / 2))}px`;
-      ranch.style.top = `${Math.max(8, Math.min(winH - rc.height - 20, petY - rc.height - 40))}px`;
+      const [left, top] = clampPanelPoint(petX - RW / 2, petY - rc.height - 40, RW, rc.height);
+      ranch.style.left = `${left}px`;
+      ranch.style.top = `${top}px`;
     }
   }
 }
@@ -6557,14 +6645,19 @@ rc.addEventListener("pointerdown", (e) => {
     const ox = e.clientX - ranch.offsetLeft, oy = e.clientY - ranch.offsetTop;
     capturePointer(rc, e.pointerId);
     const move = (ev) => {
-      const nl = Math.max(4, Math.min(winW - ranch.offsetWidth - 4, ev.clientX - ox));
-      const nt = Math.max(4, Math.min(winH - ranch.offsetHeight - 4, ev.clientY - oy));
+      const [nl, nt] = clampPanelPoint(ev.clientX - ox, ev.clientY - oy, ranch.offsetWidth, ranch.offsetHeight);
       const dx = nl - ranch.offsetLeft, dy = nt - ranch.offsetTop;
       ranch.style.left = `${nl}px`;
       ranch.style.top = `${nt}px`;
       if (nurseryOpen) {
-        nursery.style.left = `${Math.max(4, nursery.offsetLeft + dx)}px`;
-        nursery.style.top = `${Math.max(4, nursery.offsetTop + dy)}px`;
+        const [nurseryLeft, nurseryTop] = clampPanelPoint(
+          nursery.offsetLeft + dx,
+          nursery.offsetTop + dy,
+          nursery.offsetWidth,
+          nursery.offsetHeight,
+        );
+        nursery.style.left = `${nurseryLeft}px`;
+        nursery.style.top = `${nurseryTop}px`;
       }
     };
     const up = () => {
@@ -6941,7 +7034,7 @@ function sendClickable() {
   // The main box dweller is as invisible as a hidden pal.  Keep its stale
   // body rectangle from swallowing desktop clicks through the box sprite.
   const rects = petHome || clickNow < boxHide ? [] : [petRect()];
-  { const [fx, fy] = fabPos(); rects.push([fx - 20, fy - 20, 40, 40]); }
+  { const [fx, fy] = fabPos(); rects.push([fx - 28, fy - 28, 56, 56]); }
   if (fabOpen) for (let k = 0; k < FAB_ITEMS.length; k++) rects.push(fabItemRect(k));
   for (const p of pals) {
     // Box dwellers are invisible and palAt() already ignores them. Their
@@ -6973,7 +7066,10 @@ function sendClickable() {
   invokeQuiet("set_clickable", { rects });
 }
 sendClickable();
-setInterval(sendClickable, 250);
+// 80ms, not 250: a walking slime covers ~10px between slower refreshes,
+// leaving the backend hitbox visibly behind the sprite — clicks landed
+// on the desktop "through" the slime. Still cheap — it's one small IPC.
+setInterval(sendClickable, 80);
 
 // ---------- mood ----------
 let sleepMs = 0;
@@ -7079,13 +7175,13 @@ function frame(now) {
     // (drawImage(NaN) is a no-op) — that reads as "frozen". snap it back.
     if (!isFinite(petX) || !isFinite(petY) || !isFinite(squash) || !isFinite(squashV)) {
       invokeQuiet("log_crash", { msg: `NAN-GUARD petX=${petX} petY=${petY} sq=${squash} sqV=${squashV}` });
-      petX = winW / 2; petY = winH; petVX = 0; petVY = 0; squash = 0; squashV = 0;
+      petX = winW / 2; petY = floorAt(petX); petVX = 0; petVY = 0; squash = 0; squashV = 0;
     }
     // offscreen rescue: flung past the frame edge → drop back in view
     if (!petHome && isFinite(petX) && (petX < -140 || petX > winW + 140 || petY < -300 || petY > winH + 240)) {
       invokeQuiet("log_crash", { msg: `OFFSCREEN petX=${petX} petY=${petY}` });
       petX = Math.max(80, Math.min(winW - 80, petX));
-      petY = Math.min(Math.max(petY, 120), winH - 80);
+      petY = Math.min(Math.max(petY, 120), floorAt(petX));
       petVX = 0; petVY = 0; flying = true; accAct = null; propSpin = 0;
     }
     // wedged act: a routine older than 12s (all scripts end ≤ 6s) is a
@@ -7108,16 +7204,17 @@ function frame(now) {
       cancelPalDrag();
       ballHeld = false; propHeld = null; fabDrag = null; volDrag = null;
       cv.style.cursor = "default";
+      sendClickable();
       invokeQuiet("set_dragging", { on: false });
     }
     if (spinT0 && now - spinT0 > 4000) spinT0 = 0;
     for (const p of pals) {
       if (!isFinite(p.x) || !isFinite(p.y) || !isFinite(p.squash)) {
         invokeQuiet("log_crash", { msg: `NAN-PAL sp=${p.sp} x=${p.x} y=${p.y} sq=${p.squash}` });
-        p.x = winW / 2; p.y = winH; p.vx = 0; p.vy = 0; p.squash = 0; p.squashV = 0;
+        p.x = winW / 2; p.y = floorAt(p.x); p.vx = 0; p.vy = 0; p.squash = 0; p.squashV = 0;
       } else if (p.x < -140 || p.x > winW + 140 || p.y < -300 || p.y > winH + 240) {
         invokeQuiet("log_crash", { msg: `PAL-OFFSCREEN sp=${p.sp} x=${p.x} y=${p.y}` });
-        p.x = Math.max(80, Math.min(winW - 80, p.x)); p.y = winH - 60;
+        p.x = Math.max(80, Math.min(winW - 80, p.x)); p.y = floorAt(p.x);
         p.vx = 0; p.vy = 0; p.fly = true; p.accAct = null;
       }
       if (p.accAct && now - p.accAct.t0 > 8000) p.accAct = null;
@@ -8218,7 +8315,7 @@ function frameBody(now) {
       }
     }
     if (petY > winH + 80) {
-      petY = winH; flying = false; petVY = 0; petVX = 0;
+      petY = floorAt(petX); flying = false; petVY = 0; petVX = 0;
       if (accAct && accAct.id === "flyby") { accAct = null; propSpin = 0; }
       if (startleFall) { startleFall = false; dizzyUntil = now + 1300; poutUntil = now + 1800; }
     }
@@ -8915,7 +9012,7 @@ function frameBody(now) {
   if (bowl) {
     // lift floor-sitting props fully on-screen — center-anchored sprites
     // would otherwise spill a few px past the bottom edge
-    const lift = Math.min(0, winH - (bowl.y + 9));
+    const lift = propFloorLift(bowl, 9);
     ctx.save();
     ctx.translate(0, lift);
     drawSpr(ctx, "bowl", bowl.x, bowl.y - 5, 3);
@@ -8954,7 +9051,7 @@ function frameBody(now) {
     const poof = now < cushionPoof ? 1 + Math.sin((cushionPoof - now) / 700 * Math.PI) * 0.12 : 1;
     const csq = occupied ? 0.82 : (1 + Math.sin(t * 1.4) * 0.03) * poof;
     ctx.save();
-    ctx.translate(cushion.x, cushion.y + Math.min(0, winH - (cushion.y + 6)));
+    ctx.translate(cushion.x, cushion.y + propFloorLift(cushion, 6));
     ctx.scale(1 / csq * (2 - csq) * 0.5 + 0.5, csq); // widen a touch as it flattens
     drawSpr(ctx, "cushion", 0, -8 / csq + (occupied ? 1 : Math.sin(t * 1.4) * 0.8), 3);
     ctx.restore();
@@ -8963,7 +9060,7 @@ function frameBody(now) {
     // the lid shivers when a slime just dove in or is rustling inside
     const rustle = now < boxHide || pals.some((p) => now < (p.hideUntil || 0) && Math.abs(p.x - box.x) < 30);
     ctx.save();
-    ctx.translate(box.x + (rustle ? Math.sin(t * 23) * 1.4 : 0), box.y - 5 + Math.min(0, winH - (box.y + 9)));
+    ctx.translate(box.x + (rustle ? Math.sin(t * 23) * 1.4 : 0), box.y - 5 + propFloorLift(box, 9));
     drawSpr(ctx, "box", 0, 0, 3);
     ctx.restore();
     if (rustle && Math.random() < dt * 3) fx.push({ x: box.x + (Math.random() - 0.5) * 26, y: box.y - 12, vx: (Math.random() - 0.5) * 20, vy: -12, life: 0.5, c: "#d8c49a" });
@@ -8972,7 +9069,7 @@ function frameBody(now) {
     // leaves sway; a watering makes them perk and sparkle for a bit
     const perk = Date.now() < (plant.steamUntil || 0);
     ctx.save();
-    ctx.translate(plant.x, plant.y - 5 + Math.min(0, winH - (plant.y + 12)));
+    ctx.translate(plant.x, plant.y - 5 + propFloorLift(plant, 12));
     ctx.rotate(Math.sin(t * (perk ? 5 : 1.6)) * (perk ? 0.1 : 0.04));
     drawSpr(ctx, "plant", 0, 0, 3);
     ctx.restore();
@@ -8982,7 +9079,7 @@ function frameBody(now) {
     // the key turns while the tune plays — a small wobble sells it
     const spinning = Date.now() < (music.spinUntil || 0);
     ctx.save();
-    ctx.translate(music.x + (spinning ? Math.sin(t * 31) * 0.8 : 0), music.y - 4 + Math.min(0, winH - (music.y + 8)));
+    ctx.translate(music.x + (spinning ? Math.sin(t * 31) * 0.8 : 0), music.y - 4 + propFloorLift(music, 8));
     drawSpr(ctx, "music", 0, 0, 3);
     ctx.restore();
     if (spinning && Math.random() < dt * 7) bangs.push({ x: music.x + (Math.random() - 0.5) * 30, y: music.y - 30 - Math.random() * 12, life: 0.9, t: "♪" });
@@ -8991,7 +9088,7 @@ function frameBody(now) {
     // the glass gleams once in a while — a slow shine sweep across the pane
     const gleam = (Math.sin(t * 0.9) + 1) / 2;
     ctx.save();
-    ctx.translate(mirror.x, mirror.y - 5 + Math.min(0, winH - (mirror.y + 13)));
+    ctx.translate(mirror.x, mirror.y - 5 + propFloorLift(mirror, 13));
     drawSpr(ctx, "mirror", 0, 0, 3);
     if (gleam > 0.86) {
       ctx.globalAlpha = (gleam - 0.86) / 0.14 * 0.7;
@@ -9007,7 +9104,7 @@ function frameBody(now) {
     const poof = now < matPoof ? 1 + Math.sin((matPoof - now) / 800 * Math.PI) * 0.16 : 1;
     const msq = (1 + Math.sin(t * 1.8) * 0.025) * poof;
     ctx.save();
-    ctx.translate(mat.x, mat.y + Math.min(0, winH - (mat.y + 6)));
+    ctx.translate(mat.x, mat.y + propFloorLift(mat, 6));
     ctx.scale(1 + (1 - msq) * 0.6, msq);
     drawSpr(ctx, "mat", 0, -8 / msq, 3);
     ctx.restore();
@@ -9017,7 +9114,7 @@ function frameBody(now) {
     // lifts a crack while the spill-cooldown is fresh
     const raid = Date.now() < (jar.raidUntil || 0);
     ctx.save();
-    ctx.translate(jar.x + (raid ? Math.sin(t * 27) * 1.2 : 0), jar.y - 5 + Math.min(0, winH - (jar.y + 10)));
+    ctx.translate(jar.x + (raid ? Math.sin(t * 27) * 1.2 : 0), jar.y - 5 + propFloorLift(jar, 10));
     drawSpr(ctx, "jar", 0, 0, 3);
     if ((jar.fill ?? 2) <= 0) { // empty — dim the cookie lumps
       ctx.fillStyle = "rgba(92,70,50,0.55)";
@@ -9030,7 +9127,7 @@ function frameBody(now) {
   // hairline cracks creep in as hatch time nears
   if (egg) {
     ctx.save();
-    ctx.translate(egg.x, egg.y - 7 + Math.min(0, winH - (egg.y + 8)));
+    ctx.translate(egg.x, egg.y - 7 + propFloorLift(egg, 8));
     const wob = Math.min(0.22, 0.09 + (now - egg.t0) / 150000 * 0.2);
     ctx.rotate(Math.sin(t * (3 + (now - egg.t0) / 50000) + egg.wob) * wob);
     drawSpr(ctx, "egg", 0, 0, 3);
@@ -9133,7 +9230,7 @@ function frameBody(now) {
           }
         }
       }
-      if (p.y > winH + 60) { p.y = winH; p.fly = false; p.vy = 0; p.vx = 0; p.plat = { x: 0, y: winH, w: winW }; p.walkT = null; }
+      if (p.y > winH + 60) { p.y = floorAt(p.x); p.fly = false; p.vy = 0; p.vx = 0; p.plat = monitorPlatformAt(p.x, winH) || { x: 0, top: 0, y: winH, w: winW, h: winH }; p.walkT = null; }
     } else {
       // --- totem riding: a stacked pal sits on its mount's head and
       // ignores platform physics until it hops off or gets bucked ---
@@ -10437,7 +10534,7 @@ function frameBody(now) {
   // radial menu: one circle in the corner, press to unfold the actions —
   // five loose buttons used to camp the whole top-right edge
   const [fbx, fby] = fabPos();
-  const hovF = curX > -9000 && Math.hypot(curX - fbx, curY - fby) < 20;
+  const hovF = curX > -9000 && Math.hypot(curX - fbx, curY - fby) < 28;
   ctx.globalAlpha = hovF || fabOpen || fabDrag ? 0.95 : 0.6;
   ctx.fillStyle = "#f3e6cd";
   ctx.beginPath(); ctx.arc(fbx, fby, 17, 0, 6.29); ctx.fill();

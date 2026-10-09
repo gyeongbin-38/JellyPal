@@ -30,8 +30,8 @@ static SAVE_IO_LOCK: Mutex<()> = Mutex::new(());
 // Serialize rotation and append so neither writer can discard the other's
 // diagnostic while compacting the log.
 static CRASH_LOG_LOCK: Mutex<()> = Mutex::new(());
-// per-monitor rects in window-logical px [x, y, w, h] — filled at setup
-// when the overlay spans more than one display
+// Per-monitor usable rects in window-logical px [x, y, w, h], filled at
+// setup. Work areas exclude the macOS Dock/menu bar and Windows taskbar.
 static MON_LIST: Mutex<Vec<[f64; 4]>> = Mutex::new(Vec::new());
 const MAX_CLICKABLE_RECTS: usize = 64;
 const MAX_CLICKABLE_COORD: f64 = 1_000_000.0;
@@ -3414,6 +3414,42 @@ fn ensure_input_monitoring() -> bool {
     true
 }
 
+// macOS auto-hiding Dock: NSScreen.visibleFrame (our work_area source)
+// only excludes a VISIBLE dock — with auto-hide on, the "usable" floor
+// still sits inside the strip the Dock slides over, so slimes on the
+// bottom floor get covered every time the Dock pops. Read com.apple.dock
+// once at startup and inset the matching edge by the tile size.
+// Returns (orientation, reserve_px) — reserve 0 when dock stays hidden
+// or the lookup fails.
+#[cfg(target_os = "macos")]
+fn dock_reserve() -> (String, f64) {
+    fn dflt(key: &str) -> Option<String> {
+        std::process::Command::new("defaults")
+            .args(["read", "com.apple.dock", key])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_lowercase())
+    }
+    let autohide = matches!(dflt("autohide").as_deref(), Some("1") | Some("true"));
+    if !autohide {
+        return (String::new(), 0.0);
+    }
+    let orient = dflt("orientation").unwrap_or_else(|| "bottom".into());
+    let tiles = dflt("tilesize")
+        .and_then(|s| s.parse::<f64>().ok())
+        .unwrap_or(48.0)
+        .clamp(24.0, 128.0);
+    // magnification can swell hovered tiles well past tilesize — keep a
+    // little air so the slime's feet never sit inside the pop zone
+    (orient, tiles + 14.0)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn dock_reserve() -> (String, f64) {
+    (String::new(), 0.0)
+}
+
 // the copy/paste modifier differs per platform — Cmd on macOS, Ctrl
 // elsewhere (on Windows the Meta key is the Win key, and Win+V opens
 // clipboard history — it must not count as a paste)
@@ -3667,15 +3703,14 @@ pub fn run() {
             // screen so slimes can wander between displays. positions can
             // be negative (secondary left/up of primary) — every consumer
             // already converts via (point - mpos) / scale, so only the
-            // origin and size change. per-monitor rects go to the frontend
-            // so each display gets its own floor platform
+            // origin and size change. Per-monitor work areas go to the
+            // frontend so each display gets a system-chrome-safe floor.
             if let Ok(mons) = window.available_monitors() {
-                if mons.len() > 1 {
+                if !mons.is_empty() {
                     let mut minx = i32::MAX;
                     let mut miny = i32::MAX;
                     let mut maxx = i32::MIN;
                     let mut maxy = i32::MIN;
-                    let mut rects: Vec<[f64; 4]> = Vec::new();
                     for m in &mons {
                         let p = m.position();
                         let s = m.size();
@@ -3683,17 +3718,29 @@ pub fn run() {
                         miny = miny.min(p.y);
                         maxx = maxx.max(p.x + s.width as i32);
                         maxy = maxy.max(p.y + s.height as i32);
-                        rects.push([p.x as f64, p.y as f64, s.width as f64, s.height as f64]);
                     }
-                    *lock_recover(&MON_LIST) = rects
+                    // work_area already excludes a pinned dock; only an
+                    // auto-hiding one needs a manual reserve on its edge
+                    let (dock_side, dock_px) = dock_reserve();
+                    *lock_recover(&MON_LIST) = mons
                         .iter()
-                        .map(|r| {
-                            [
-                                (r[0] - minx as f64) / scale,
-                                (r[1] - miny as f64) / scale,
-                                r[2] / scale,
-                                r[3] / scale,
-                            ]
+                        .map(|m| {
+                            let r = m.work_area();
+                            let (mut wx, wy, mut ww, mut wh) = (
+                                (r.position.x - minx) as f64 / scale,
+                                (r.position.y - miny) as f64 / scale,
+                                r.size.width as f64 / scale,
+                                r.size.height as f64 / scale,
+                            );
+                            match dock_side.as_str() {
+                                "left" => { wx += dock_px; ww -= dock_px; }
+                                "right" => { ww -= dock_px; }
+                                "bottom" => { wh -= dock_px; }
+                                _ => {}
+                            }
+                            if ww < 50.0 { ww = 50.0; }
+                            if wh < 50.0 { wh = 50.0; }
+                            [wx, wy, ww, wh]
                         })
                         .collect();
                     mpos = tauri::PhysicalPosition::new(minx, miny);
@@ -3702,6 +3749,10 @@ pub fn run() {
             }
             window.set_size(tauri::Size::Physical(msize))?;
             window.set_position(tauri::Position::Physical(mpos))?;
+            // Explicitly clear both the native surface and WKWebView's
+            // under-page color. This prevents a white flash/background on
+            // macOS even when WebKit restores its opaque default.
+            window.set_background_color(Some(tauri::window::Color(0, 0, 0, 0)))?;
             window.set_ignore_cursor_events(true)?;
 
             // desktop companion shouldn't take a Dock slot on macOS — the
@@ -3812,9 +3863,12 @@ pub fn run() {
                 let mut flip_fail = 0u32;
                 let mut held_stall = 0u32;
                 loop {
-                    std::thread::sleep(Duration::from_millis(30));
+                    // Update within one display frame. At 30ms a quick
+                    // move-and-click could pass through before the overlay
+                    // noticed that the cursor had entered a hit target.
+                    std::thread::sleep(Duration::from_millis(12));
                     tick = next_poll_tick(tick);
-                    if tick % 66 == 1 {
+                    if tick % 166 == 1 {
                         // foreground app name + window title — cross-platform
                         // via active-win-pos-rs (title may be empty on macOS
                         // without screen-recording permission; the app name
@@ -3850,7 +3904,7 @@ pub fn run() {
                     // prompts, lock screens and fullscreen takeovers — then the
                     // slimes vanish behind work windows. re-assert every ~3s;
                     // the call is idempotent so it costs nothing while healthy
-                    if tick % 100 == 3 {
+                    if tick % 250 == 3 {
                         let _ = win_poll.set_always_on_top(true);
                     }
                     let now_inside = DRAGGING.load(Ordering::Relaxed)
@@ -3869,7 +3923,7 @@ pub fn run() {
                     let btn_held = MOUSE_HELD.load(Ordering::Relaxed) > 0;
                     let diverged = now_inside != inside;
                     held_stall = next_held_stall(held_stall, diverged, btn_held);
-                    if diverged && (!btn_held || held_stall > 66) {
+                    if diverged && (!btn_held || held_stall > 166) {
                         // only commit the state when the OS actually flipped —
                         // a swallowed error used to leave `inside` claiming
                         // enabled while the OS still ignored every event, and
@@ -3884,7 +3938,7 @@ pub fn run() {
                     // live click-state snapshot every ~1s — proves whether the
                     // frontend's rects arrived and whether the poll loop is
                     // alive, without needing the app to be instrumented
-                    if tick % 33 == 2 {
+                    if tick % 83 == 2 {
                         if let Ok(dir) = data_dir(&win_poll.app_handle()) {
                             let n = lock_recover(&CLICKABLE).len();
                             let body = format!(
