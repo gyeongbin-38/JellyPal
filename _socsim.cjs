@@ -606,6 +606,86 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
     "short-screen settings remain scrollable and clamped");
   ev("winH=1080; setScroll=0");
 
+  // --- T18: fetch errand — a bonded pal forages and delivers jelly ---
+  ev(`(function(){
+      pals.length = 0;
+      jelly = 1000; dirty = false;
+      owned.push(SPECIES[1].id); spawnPal(1);   // berry — no trait needed here
+      bond[SPECIES[1].id] = 400;                // BESTIE
+      state = 'idle'; petHome = false;
+      petX = 900; petY = plats[0].y; walkTarget = null;
+      const p = pals[0];
+      p.x = 700; p.y = petY; p.fly = false; p.plat = plats[0];
+      p.walkT = null; p.nextT = 0; p.chatMate = null; p.chatUntil = 0;
+      p.follow = null; p.tag = null; p.stackOn = null;
+      p.restUntil = 0; p.hideUntil = 0; p.carry = null; p.propGoal = null;
+      p.giftCd = 0; p.comfortCd = 0;
+    })();`);
+  ev("globalThis.__realRandom = Math.random; Math.random = () => 0.03;");
+  frame(t += 16.7);
+  check(ev("pals[0].propGoal && pals[0].propGoal.kind === 'find'"),
+    "bonded pal starts a fetch errand",
+    ev("pals[0].propGoal && pals[0].propGoal.kind"));
+  check(ev(`cardStatus(pals[0],${t})`) === "FORAGING",
+    "status card reports a foraging pal as FORAGING");
+  // let it walk to the lure, pick up, and deliver — pin the pet in place
+  let delivered = false;
+  for (let i = 0; i < 2400 && !delivered; i++) {
+    ev("petX = 900; petY = plats[0].y; walkTarget = null;");
+    t += 16.7; frame(t);
+    if (i % 40 === 0) await new Promise((r) => setImmediate(r));
+    if (ev("jelly") === 1002) delivered = true;
+  }
+  check(delivered, "fetch delivers +2 jelly to the pet",
+    ev(`JSON.stringify({jelly, carry:!!pals[0].carry, pg:pals[0].propGoal && pals[0].propGoal.kind, x:Math.round(pals[0].x)})`));
+  check(ev("pals[0].carry === null && pals[0].giftCd > " + t),
+    "delivered loot clears carry and starts the cooldown");
+  // unbonded pal must not fetch at all
+  ev(`(function(){ const p = pals[0];
+      bond = {}; p.carry = null; p.propGoal = null; p.walkT = null; p.nextT = 0; p.fly = false; })();`);
+  frame(t += 16.7);
+  check(ev("!(pals[0].propGoal && pals[0].propGoal.kind === 'find')"),
+    "unbonded pal never forages",
+    ev("pals[0].propGoal && pals[0].propGoal.kind"));
+  ev("bond = {}; bond[SPECIES[1].id] = 400;");
+
+  // --- T19: comfort — bonded pal rushes to a gloomy pet ---
+  ev(`(function(){ const p = pals[0];
+      p.carry = null; p.propGoal = null; p.walkT = null; p.nextT = 0;
+      p.x = petX + 120; p.y = petY; p.fly = false; p.faceT = 0; p.faceId = null;
+      dizzyUntil = ${t + 4000}; })();`);
+  frame(t += 16.7);
+  check(ev("pals[0].faceId === 'love'"),
+    "bonded pal rushes to comfort a dizzy pet", ev("pals[0].faceId"));
+  check(ev("dizzyUntil") < t + 4000,
+    "comfort shortens the daze", ev("Math.round(dizzyUntil - " + t + ")"));
+  ev("dizzyUntil = 0;");
+
+  // --- T20: trait chores — a drip pal waters the plant, not just sniffs ---
+  // (the pet is pinned far away — its own plant errand would overwrite
+  // steamUntil with the plain sniff value and make this look like a fail)
+  ev(`(function(){
+      owned.push(SPECIES[3].id); spawnPal(3);   // tide — the drip-trait pal
+      const p = pals[pals.length - 1];
+      const q = pals[0];                        // berry stays out of it
+      q.x = 400; q.y = petY; q.nextT = 1e15; q.propGoal = null; q.walkT = null;
+      plant = { x: 1500, y: petY, plat: plats[0] };
+      p.x = plant.x - 14; p.y = petY; p.fly = false; p.faceT = 0; p.faceId = null;
+      p.carry = null; p.propGoal = { kind: 'plant' };
+      p.walkT = plant.x - 14; p.plantCd = 0; p.nextT = 1e15;
+      p.hideUntil = 0; p.restUntil = 0;
+      plant.steamUntil = 0; })();`);
+  ev("Math.random = () => 0.9;"); // no sneeze — land the nuzzle path
+  for (let i = 0; i < 240 && !ev("plant.steamUntil > 0"); i++) {
+    ev("petX = 900; petY = plats[0].y; walkTarget = null;");
+    t += 16.7; frame(t);
+  }
+  ev("Math.random = globalThis.__realRandom; delete globalThis.__realRandom");
+  check(ev("plant && plant.steamUntil > Date.now() + 5000"),
+    "drip-trait pal waters the plant (9s perk vs 4s sniff)",
+    ev("plant && Math.round(plant.steamUntil - Date.now())"));
+  ev("plant = null;");
+
   console.log(`\n${pass} pass ${fail} fail`);
   process.exit(fail ? 2 : 0);
 })();

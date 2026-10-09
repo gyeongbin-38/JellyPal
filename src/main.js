@@ -3236,6 +3236,7 @@ function spawnPal(i) {
     web: 0, webA: 0, webAV: 0,
     stackOn: null, stackT: 0, stackCd: 0, stackRise: 0, hopT: 0,
     sigT: 0, sigId: null, sigDid: 0, tag: null,
+    carry: null, // fetch loot riding on its head — { n, since }
   });
   return true;
 }
@@ -6424,6 +6425,8 @@ function cardStatus(t2, now) {
   if (t2.stackOn) return `RIDING ${spName(SPECIES[t2.stackOn.sp])}`;
   if (t2.tag) return t2.tag.it ? "PLAYING TAG" : "FLEEING!";
   if (t2.sigT && now < t2.sigT) return "SHOWING OFF";
+  if (t2.propGoal && t2.propGoal.kind === "find") return "FORAGING";
+  if (t2.propGoal && t2.propGoal.kind === "deliver") return "DELIVERING";
   if (t2.fly) return "AIRBORNE";
   if (t2.walkT !== null) return "WANDERING";
   return "IDLE";
@@ -9719,6 +9722,12 @@ function frameBody(now) {
         // re-clamp every frame — platform bounds shift, and play-bumps set
         // unclamped targets that used to shove pals off the edge forever
         p.walkT = Math.max(plo, Math.min(phi, p.walkT));
+        // the find lure twinkles at the spot while the pal closes in —
+        // without it the errand reads as an ordinary wander
+        if (p.propGoal && p.propGoal.kind === "find" && p.propGoal.lureX !== undefined &&
+            Math.random() < dt * 8) {
+          fx.push({ x: p.propGoal.lureX + (Math.random() - 0.5) * 16, y: p.y - 6 - Math.random() * 14, vx: 0, vy: -16, life: 0.7, c: "#ffd75e", spr: "mote" });
+        }
         const dx = p.walkT - p.x;
         if (Math.abs(dx) < 6) {
           p.walkT = null; p.walkV = 0; p.squashV += 2.5;
@@ -9835,6 +9844,15 @@ function frameBody(now) {
                 p.faceId = "content"; p.faceT = now + 1800;
                 hearts.push({ x: p.x, y: p.y - 58, life: 1 });
                 plant.steamUntil = Date.now() + 4000;
+                // gardener's touch: a drip-trait pal waters the sprout
+                // instead of just sniffing — drops fall, the plant perks
+                if (psp.trait === "drip") {
+                  plant.steamUntil = Date.now() + 9000;
+                  for (let k = 0; k < 6; k++) fx.push({ x: plant.x + (Math.random() - 0.5) * 14, y: plant.y - 34 - k * 5, vx: (Math.random() - 0.5) * 12, vy: 26 + Math.random() * 22, life: 0.5, c: "#8fd4f0" });
+                  for (let k = 0; k < 4; k++) fx.push({ x: plant.x + (Math.random() - 0.5) * 16, y: plant.y - 8, vx: (Math.random() - 0.5) * 20, vy: -18 - Math.random() * 14, life: 0.5, c: "#9adf8a" });
+                  bangs.push({ x: plant.x, y: plant.y - 46, life: 1, t: "♪" });
+                  bondGain(psp.id, 2);
+                }
               }
             } else if (pg.kind === "music" && music && Math.abs(music.x - p.x) < 50) {
               // the little DJ winds the box — everyone nearby gets the bounce
@@ -9842,6 +9860,13 @@ function frameBody(now) {
               p.lookDir = Math.sign(music.x - p.x) || 1;
               p.lookUntil = now + 1200;
               music.spinUntil = Date.now() + 2800;
+              // a spark-trait pal cranks the box harder — the tune runs
+              // long and the winding crackles
+              if (psp.trait === "spark") {
+                music.spinUntil = Date.now() + 5200;
+                for (let k = 0; k < 5; k++) fx.push({ x: music.x + (Math.random() - 0.5) * 16, y: music.y - 22, vx: (Math.random() - 0.5) * 40, vy: -30 - Math.random() * 20, life: 0.3, c: "#8fd4f0" });
+                bondGain(psp.id, 2);
+              }
               for (let k = 0; k < 4; k++) bangs.push({ x: music.x - 12 + k * 10, y: music.y - 28 - k * 7, life: 1 + k * 0.15, t: "♪" });
               for (const q of pals) {
                 if (Math.abs(q.x - music.x) < 300 && Math.abs(q.y - music.y) < 40 && !q.fly && q !== palHeld && now > (q.restUntil || 0) && !(now < (q.hideUntil || 0))) {
@@ -9864,6 +9889,13 @@ function frameBody(now) {
                 for (let k = 0; k < 6; k++) fx.push({ x: mirror.x + (Math.random() - 0.5) * 16, y: mirror.y - 32 + Math.random() * 22, vx: (Math.random() - 0.5) * 26, vy: -16 - Math.random() * 20, life: 0.5, c: "#ffffff" });
                 bangs.push({ x: p.x, y: p.y - 62, life: 1.1, t: "✦" });
                 if (Math.random() < 0.3) hearts.push({ x: p.x, y: p.y - 58, life: 1 });
+                // a glint pal can't resist polishing what it sees — the
+                // mirror ends up shinier than it found it
+                if (psp.trait === "glint") {
+                  for (let k = 0; k < 6; k++) fx.push({ x: mirror.x + (Math.random() - 0.5) * 18, y: mirror.y - 36 + Math.random() * 26, vx: (Math.random() - 0.5) * 34, vy: -14 - Math.random() * 24, life: 0.6, c: "#e8f0ff", spr: "star5" });
+                  bangs.push({ x: mirror.x, y: mirror.y - 46, life: 1, t: "✦" });
+                  bondGain(psp.id, 2);
+                }
               }
             } else if (pg.kind === "mat" && mat && Math.abs(mat.x - p.x) < 50) {
               // the pad is irresistible — one happy boing, then it wanders off
@@ -9891,6 +9923,45 @@ function frameBody(now) {
                 for (let k = 0; k < 4; k++) fx.push({ x: jar.x + (Math.random() - 0.5) * 14, y: jar.y - 18, vx: (Math.random() - 0.5) * 44, vy: -22 - Math.random() * 26, life: 0.5, c: "#d9a05b" });
                 if (Math.random() < 0.35) hearts.push({ x: p.x, y: p.y - 60, life: 1 });
               }
+            } else if (pg.kind === "find") {
+              // got it — the lure twinkles burst into a prize the pal
+              // hoists overhead, then it's straight to the pet
+              p.giftCd = now + 300000 + Math.random() * 240000;
+              for (let k = 0; k < 7; k++) fx.push({ x: p.x + (Math.random() - 0.5) * 20, y: p.y - 12 - Math.random() * 18, vx: (Math.random() - 0.5) * 46, vy: -24 - Math.random() * 32, life: 0.6, c: "#ffd75e", spr: "mote" });
+              p.carry = { n: 2, since: now };
+              p.squashV += 3;
+              p.faceId = "happy"; p.faceT = now + 900;
+              bangs.push({ x: p.x, y: p.y - 66, life: 0.9, t: "✦" });
+              sfx.pop();
+              if (!petHome && Math.abs(petY - p.y) < 40) {
+                p.propGoal = { kind: "deliver", at: now };
+                p.walkT = Math.max(plo, Math.min(phi, petX + (p.x < petX ? -30 : 30)));
+              } else {
+                // no pet to deliver to — pockets half the find and moves on
+                jelly = addSavedInt(jelly, 1);
+                dirty = true;
+                p.carry = null;
+              }
+            } else if (pg.kind === "deliver" && p.carry) {
+              // a gift it never asked for but absolutely deserves — the
+              // jelly goes in the wallet, the pet turns to look, and the
+              // pal gets the satisfaction
+              if (!petHome && Math.abs(petX - p.x) < 95 && Math.abs(petY - p.y) < 40) {
+                jelly = addSavedInt(jelly, p.carry.n);
+                dirty = true;
+                p.carry = null;
+                bondGain(psp.id, 2);
+                p.faceId = "happy"; p.faceT = now + 1500;
+                p.squashV += 4;
+                lookDir = Math.sign(p.x - petX) || 1;
+                lookUntil = now + 1300;
+                bangs.push({ x: p.x, y: p.y - 70, life: 1.3, t: "+2!" });
+                hearts.push({ x: (p.x + petX) / 2, y: p.y - 62, life: 1.1 });
+                hearts.push({ x: petX, y: petY - 84, life: 1.1 });
+                sfx.heart();
+              }
+              // otherwise it arrived at a stale spot — the carry flag
+              // keeps the delivery alive and the next decision re-aims
             }
           }
         }
@@ -9976,9 +10047,53 @@ function frameBody(now) {
           Math.abs(q2.x - p.x) > 34 && Math.abs(q2.x - p.x) < 240);
         const petNapper = petDozing && Math.abs(petY - p.y) < 24 &&
           Math.abs(petX - p.x) > 34 && Math.abs(petX - p.x) < 280;
+        // bedside manner: a bonded pal (FRIEND+) rushes to a gloomy pet and
+        // pats it better. dizzy/pout/cry windows run ~1s — too short to
+        // walk an errand over — so this is a hop + hearts reaction, not a
+        // walkTarget
+        if (!petHome && now > (p.comfortCd || 0) && bondLvl(psp.id) >= 2 &&
+            (now < dizzyUntil || now < cryUntil || now < poutUntil) &&
+            Math.abs(petY - p.y) < 40 && Math.abs(petX - p.x) > 30 && Math.abs(petX - p.x) < 240 &&
+            Math.random() < 0.55) {
+          p.comfortCd = now + 60000;
+          p.lookDir = Math.sign(petX - p.x) || 1;
+          p.lookUntil = now + 1400;
+          p.faceId = "love"; p.faceT = now + 1600;
+          p.fly = true; p.vy = -140; p.vx = Math.sign(petX - p.x) * 90; p.hopT = now;
+          hearts.push({ x: p.x, y: p.y - 60, life: 1 });
+          hearts.push({ x: petX, y: petY - 56, life: 1.1 });
+          dizzyUntil = Math.min(dizzyUntil, now + 350);
+          cryUntil = 0;
+          poutUntil = 0;
+          bondGain(psp.id, 2);
+        }
+        // loot in hand outranks every other whim — re-aim at the pet, or
+        // pocket the find (half credit) if the delivery can't be made
+        else if (p.carry) {
+          if (!petHome && now - p.carry.since < 45000 && Math.abs(petY - p.y) < 40) {
+            p.walkT = Math.max(plo, Math.min(phi, petX + (p.x < petX ? -30 : 30)));
+            p.propGoal = { kind: "deliver", at: p.carry.since };
+          } else {
+            jelly = addSavedInt(jelly, 1);
+            dirty = true;
+            p.carry = null;
+            bangs.push({ x: p.x, y: p.y - 64, life: 0.9, t: "✦" });
+          }
+        }
+        // fetch errand: a bonded pal (BUDDY+) occasionally spots a lost
+        // jelly sparkle on its platform, walks over, and carries it back
+        // to the pet — the pal's own little contribution to the economy
+        else if (r < 0.06 && !petHome && !isBaby(psp) && bondLvl(psp.id) >= 3 &&
+                 now > (p.giftCd || 0) && !p.tag && !p.fly && Math.abs(petY - p.y) < 40) {
+          const spot = Math.max(plo, Math.min(phi, p.x + (Math.random() < 0.5 ? -1 : 1) * (90 + Math.random() * 170)));
+          if (Math.abs(spot - p.x) > 50) {
+            p.walkT = spot;
+            p.propGoal = { kind: "find", at: now, lureX: spot };
+          }
+        }
         // mini signature flourish: pals show off a themed ~1s version
         // of their species' act — they used to be skill-less statues
-        if (psp.sig && !isBaby(psp) && !p.tag && !p.fly && Math.random() < 0.12) {
+        else if (psp.sig && !isBaby(psp) && !p.tag && !p.fly && Math.random() < 0.12) {
           p.sigT = now + 900;
           p.sigId = psp.sig;
           p.sigDid = 0;
@@ -10454,6 +10569,13 @@ function frameBody(now) {
       accMV = null;
     }
     if (isBaby(psp)) drawPaci(ctx, 0, -SH * psy2 * 0.42, Math.max(1, psy2 * 0.85));
+    // fetch loot rides on its head — a bobbing little jelly it found
+    if (p.carry) {
+      bubbleIcon(ctx, 0, -SH * psy2 - 14 + Math.sin(t * 5 + p.ph) * 1.5);
+      if (Math.random() < dt * 2.5) {
+        fx.push({ x: p.x + (Math.random() - 0.5) * 16, y: p.y - SH * psy2 - 18, vx: (Math.random() - 0.5) * 14, vy: -18, life: 0.6, c: "#ffd75e", spr: "mote" });
+      }
+    }
     ctx.restore();
     ctx.globalAlpha = 1;
     }
