@@ -79,9 +79,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   check(ev("STORE") === true, "store flag flips from backend probe");
   const ids = ev("settingsRowIds()");
-  check(ids.length === 13 && !ids.includes(10) && !ids.includes(11) && !ids.includes(12),
-    "store drops BOOT/JELLY/REDEEM rows", JSON.stringify(ids));
+  check(ids.length === 12 && !ids.includes(9) && !ids.includes(10) && !ids.includes(11) && !ids.includes(12),
+    "store drops WEATHER/BOOT/JELLY/REDEEM rows", JSON.stringify(ids));
   check(ids.includes(0) && ids.includes(15), "VOL + QUIT survive the trim");
+
+  // zero-network: the store SKU must never fire update or weather probes
+  check(invokeCalls.check_update === undefined && invokeCalls.get_weather === undefined,
+    "no outbound network calls", `check_update=${JSON.stringify(invokeCalls.check_update)}`);
 
   const mons = ev("monPlats");
   check(mons.length === 1 && mons[0].y === 560 - 6 && mons[0].w === 480,

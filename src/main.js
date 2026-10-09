@@ -2192,8 +2192,9 @@ function setMaxScroll() { return Math.max(0, settingsRowIds().length * 26 + 24 -
 // 8 SHARE 9 WEATHER 10 BOOT 11 JELLY 12 REDEEM 13 ID 14 RESET 15 QUIT
 // The store SKU drops rows that cannot exist in a sandboxed app:
 // BOOT (LaunchAgents), JELLY (external purchase links), REDEEM (license
-// codes — Apple wants IAP for digital goods).
-const STORE_HIDDEN_ROWS = new Set([10, 11, 12]);
+// codes — Apple wants IAP for digital goods), WEATHER (coarse IP geo is
+// data the store SKU does not need — network surface stays zero).
+const STORE_HIDDEN_ROWS = new Set([9, 10, 11, 12]);
 function settingsRowIds() {
   const ids = [];
   for (let i = 0; i < 16; i++) if (!STORE || !STORE_HIDDEN_ROWS.has(i)) ids.push(i);
@@ -2454,7 +2455,7 @@ invokeAsync("is_demo").then((v) => { DEMO = isDemoResponse(v); }).catch(() => {}
 // exist inside the sandbox (autostart toggle, external jelly purchases,
 // redeem codes) and confines the world to the card window.
 let STORE = false;
-invokeAsync("is_store_build").then((v) => {
+const storeReady = invokeAsync("is_store_build").then((v) => {
   STORE = v === true;
   if (!STORE) return;
   document.body.classList.add("store");
@@ -2478,16 +2479,20 @@ function verNewer(a, b) {
   }
   return false;
 }
-if (UPDATE_URL) {
-  invokeAsync("check_update", { url: UPDATE_URL }).then((v) => {
-    if (verNewer(v, APP_VER)) { newVer = v; sfx.reveal(); }
-  }).catch(() => {});
-}
+// the store SKU makes zero outbound requests: updates arrive through the
+// App Store, weather stays off — nothing to fetch, nothing to disclose.
+storeReady.then(() => {
+  if (UPDATE_URL && !STORE) {
+    invokeAsync("check_update", { url: UPDATE_URL }).then((v) => {
+      if (verNewer(v, APP_VER)) { newVer = v; sfx.reveal(); }
+    }).catch(() => {});
+  }
+});
 function pollWeather() {
   // Do not let the default-on value outrun a delayed load of WEATHER OFF.
   // The native command performs coarse IP geolocation, so the persisted
   // privacy choice must be known before any boot or interval probe can run.
-  if (!saveReady || !weatherOn) return;
+  if (!saveReady || !weatherOn || STORE) return;
   const request = ++weatherRequest;
   invokeAsync("get_weather").then((c) => {
     // The response crosses two remote JSON boundaries. Ignore malformed or

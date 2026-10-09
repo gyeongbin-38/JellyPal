@@ -25,8 +25,9 @@
     "targets": ["app"],
     "macOS": {
       "entitlements": "macos-store/entitlements.plist",
+      "minimumSystemVersion": "12.0",
       "files": {
-        "PrivacyInfo.xcprivacy": "macos-store/PrivacyInfo.xcprivacy"
+        "Resources/PrivacyInfo.xcprivacy": "macos-store/PrivacyInfo.xcprivacy"
       }
     }
   }
