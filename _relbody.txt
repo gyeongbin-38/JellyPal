@@ -1,0 +1,12 @@
+## v0.3.0 — passive drip economy, zero permissions
+
+The typing-to-earn mechanic is gone — Jellypal now asks Windows and macOS for **no permissions at all**.
+
+- **Removed**: global keyboard listener (rdev), macOS Input Monitoring prompt, clipboard combo watch. The app reads no keys, no screens, no other apps.
+- **New economy**: +3 jelly every 5 minutes while the app is open, ~2% of ticks land a **LUCKY DROP +30**. XP now flows from drips and snacks.
+- **Presence**: cursor motion keeps the slime awake (was typing); it naps 5 min after you step away.
+- **Species**: jelly-hungry slimes (Sprout/Mochi/Bites/Bean/Mecha + hybrids) munch on lucky drops; snack crumbs fall from treats.
+- Click-through gesture protection kept — button state is polled, not tapped.
+- Site: live drip demo replaces the typing demo; zero-permissions is now a feature card.
+
+SHA-256 in the site's download section.

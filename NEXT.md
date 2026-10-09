@@ -49,7 +49,7 @@ Size: S < half day, M = 1-2 days, L = multi-day.
 - ~~Pal webs~~ — real pendulum swing under the cursor, whip-snip too
 - ~~Legendary passives~~ — pulsar pulls snacks, rex gathers a wider court
 - ~~Dex milestones~~ — gem payout at 10/20/30/40/50/58 base species
-- ~~Dev unlock tool~~ — `unlock.cjs` opens everything in the test save
+- ~~Dev unlock tool~~ — `unlock.cjs` opens everything only in a marker-gated disposable test profile
 - ~~Web play depth~~ — zip-up blend, poke=twirl, drag=tear, reel-in
   climb on a parked cursor
 - ~~itch.io packaging~~ — v0.2.0, `dist.cjs` -> `dist/typet-0.2.0-win.zip`
@@ -222,14 +222,14 @@ Size: S < half day, M = 1-2 days, L = multi-day.
    bump the file when shipping a new build. `APP_VER` must match
    tauri.conf.json version.
 5. ~~Settings panel growth~~ — DONE: panel height now fits the viewport
-   (min 220px), the 14 rows scroll inside a clipped viewport on a wheel
+   (min 220px), the 16 rows scroll inside a clipped viewport on a wheel
    turn, footer stats stay pinned, offscreen rows take no clicks.
 6. **Gem sinks round 2** — species decor, name dyes, ranch themes —
    premium accs landed; more variety keeps big packs attractive. [M]
 7. **More seasonal species** — spring/rainy sets; the `SEASONS` table makes
    each new entry ~20 lines. [S]
-8. **Synchronized naps** — pals sleeping in a pile when the pet naps;
-   partially covered by existing huddle logic. [S]
+8. ~~Synchronized naps~~ — DONE: same-platform pals may curl into spaced
+   slots beside a sleeping main pet; waking it cancels pending approaches.
 9. **Steam Cloud + achievements** — deferred until Steam launch; `stats`
    counters already persist locally so SDK wiring is the only work. [M]
 10. **Deck / handheld support** — overlay on SteamOS/Game Mode. [L]
@@ -239,7 +239,7 @@ Size: S < half day, M = 1-2 days, L = multi-day.
     verdict above); un-block only if a KR/JP launch is planned. [L]
 
 ## backlog
-- [ ] qa-sheet 회귀 검사 자동화
+- [x] qa-sheet 회귀 검사 자동화 — DONE: `qacheck.cjs` baseline is a required `_pulse.cjs` gate
 - [x] 스테이터스 카드: 월드 내 타겟 표시 — DONE 골드 링+쉐브론
 - [x] 랜치/너서리 셀 우클릭으로도 카드 열기 — DONE
 - [x] 창 위치 저장 — DONE panelPos → state.json (해상도 키잉 포함)
