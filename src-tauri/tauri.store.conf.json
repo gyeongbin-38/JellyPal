@@ -15,7 +15,7 @@
         "skipTaskbar": false,
         "resizable": false,
         "maximizable": false,
-        "minimizable": true,
+        "minimizable": false,
         "shadow": true,
         "visibleOnAllWorkspaces": false
       }

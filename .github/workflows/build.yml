@@ -122,6 +122,13 @@ jobs:
           args: --config src-tauri/tauri.store.conf.json --features store --bundles app
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Stamp CFBundleVersion for App Store uploads
+        # every upload needs a unique monotonic build number; the workflow
+        # run number gives that for free — re-tar so the artifact carries it
+        run: |
+          B="src-tauri/target/release/bundle/macos"
+          plutil -replace CFBundleVersion -string "$GITHUB_RUN_NUMBER" "$B/Jellypal.app/Contents/Info.plist"
+          tar -czf "$B/Jellypal.app.tar.gz" -C "$B" Jellypal.app
       - uses: actions/upload-artifact@v4
         with:
           name: jellypal-store

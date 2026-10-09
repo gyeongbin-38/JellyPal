@@ -3195,6 +3195,29 @@ fn is_store_build() -> bool {
     cfg!(feature = "store")
 }
 
+// the settings BOOT row only makes sense where autostart can actually
+// work: Windows Run key, direct-mac LaunchAgent, or store-mac on 13+
+// (SMAppService exists). Below that the row stays hidden entirely.
+#[tauri::command]
+fn autostart_available() -> bool {
+    #[cfg(windows)]
+    {
+        return true;
+    }
+    #[cfg(all(target_os = "macos", not(feature = "store")))]
+    {
+        return true;
+    }
+    #[cfg(all(target_os = "macos", feature = "store"))]
+    {
+        return smapp::available();
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        return false;
+    }
+}
+
 #[tauri::command]
 fn set_autostart(enable: bool) -> Result<(), String> {
     #[cfg(windows)]
@@ -3206,10 +3229,9 @@ fn set_autostart(enable: bool) -> Result<(), String> {
     #[cfg(all(target_os = "macos", feature = "store"))]
     {
         // A sandboxed app cannot drop LaunchAgents into ~/Library — the
-        // store path to this is SMAppService (login items). Until that's
-        // wired, the toggle reports unsupported and the UI hides it.
-        let _ = enable;
-        return Err("autostart unavailable in this build".into());
+        // store path is SMAppService login items (macOS 13+; the row stays
+        // hidden below that, see autostart_available).
+        return smapp::set_enabled(enable);
     }
     #[cfg(all(target_os = "macos", not(feature = "store")))]
     {
@@ -3523,6 +3545,83 @@ fn dock_reserve() -> (String, f64) {
     (String::new(), 0.0)
 }
 
+// SMAppService.mainAppService (macOS 13+) is the sandbox-safe login item:
+// the store build registers the app itself — no LaunchAgent plist, no
+// helper bundle. The class lookup doubles as the availability gate:
+// SMAppService simply does not exist before macOS 13.
+#[cfg(all(target_os = "macos", feature = "store"))]
+mod smapp {
+    use std::ffi::{c_char, c_void};
+
+    // linking the framework is what registers the class with the runtime
+    #[link(name = "ServiceManagement", kind = "framework")]
+    extern "C" {}
+
+    #[link(name = "objc", kind = "dylib")]
+    extern "C" {
+        fn objc_getClass(name: *const c_char) -> *const c_void;
+        fn sel_registerName(name: *const c_char) -> *const c_void;
+        #[link_name = "objc_msgSend"]
+        fn send0(obj: *const c_void, sel: *const c_void) -> *const c_void;
+        #[link_name = "objc_msgSend"]
+        fn send_err(
+            obj: *const c_void,
+            sel: *const c_void,
+            err: *mut *const c_void,
+        ) -> bool;
+        #[link_name = "objc_msgSend"]
+        fn send_int(obj: *const c_void, sel: *const c_void) -> i64;
+    }
+
+    pub fn available() -> bool {
+        unsafe { !objc_getClass(b"SMAppService\0".as_ptr() as *const c_char).is_null() }
+    }
+
+    fn service() -> Option<*const c_void> {
+        unsafe {
+            let cls = objc_getClass(b"SMAppService\0".as_ptr() as *const c_char);
+            if cls.is_null() {
+                return None;
+            }
+            let svc = send0(
+                cls,
+                sel_registerName(b"mainAppService\0".as_ptr() as *const c_char),
+            );
+            (!svc.is_null()).then_some(svc)
+        }
+    }
+
+    // SMAppServiceStatus: 0 notRegistered, 1 enabled, 2 requiresApproval
+    fn status(svc: *const c_void) -> i64 {
+        unsafe { send_int(svc, sel_registerName(b"status\0".as_ptr() as *const c_char)) }
+    }
+
+    pub fn set_enabled(enable: bool) -> Result<(), String> {
+        let svc = service().ok_or_else(|| "login items need macOS 13+".to_string())?;
+        let name: &[u8] = if enable {
+            b"registerAndReturnError:\0"
+        } else {
+            b"unregisterAndReturnError:\0"
+        };
+        unsafe {
+            let mut err: *const c_void = std::ptr::null();
+            let ok = send_err(
+                svc,
+                sel_registerName(name.as_ptr() as *const c_char),
+                &mut err,
+            );
+            // "already in that state" counts as success — the goal is the
+            // end state, not the transition. status 1 = enabled.
+            let want: i64 = if enable { 1 } else { 0 };
+            if ok || status(svc) == want {
+                Ok(())
+            } else {
+                Err("login item request refused".into())
+            }
+        }
+    }
+}
+
 
 
 // NSWorkspace.openURL is the sandbox-sanctioned way to hand a URL or
@@ -3785,7 +3884,8 @@ pub fn run() {
             get_monitors,
             get_weather,
             set_autostart,
-            is_store_build
+            is_store_build,
+            autostart_available
         ])
         .setup(|app| {
             let window = required_runtime_value(app.get_webview_window("main"), "main window")?;
@@ -3812,10 +3912,15 @@ pub fn run() {
                 }
             }
 
+            let store_mode = is_store_build();
             // Cover the whole (primary) monitor.
             let mut mpos = tauri::PhysicalPosition::new(0, 0);
             let mut msize = tauri::PhysicalSize::new(1920, 1080);
             let mut scale = 1.0f64;
+            // the store card keeps its configured size/position and stays
+            // interactive — the fullscreen transparent overlay surgery below
+            // belongs only to the desktop flavor
+            if !store_mode {
             if let Some(monitor) = window.current_monitor()? {
                 scale = monitor.scale_factor();
                 msize = *monitor.size();
@@ -3876,6 +3981,7 @@ pub fn run() {
             // macOS even when WebKit restores its opaque default.
             window.set_background_color(Some(tauri::window::Color(0, 0, 0, 0)))?;
             window.set_ignore_cursor_events(true)?;
+            }
 
             // desktop companion shouldn't take a Dock slot on macOS — the
             // menu-bar tray icon is the only persistent UI affordance
@@ -3916,9 +4022,12 @@ pub fn run() {
 
             // Click-through toggle: capture mouse only when it is over the pet
             // or an open UI panel. Everything else passes through.
+            // The store card keeps the poll (cursor presence + always-on-top
+            // reassert) but never flips click-through and never reads other
+            // apps' window titles — the sandbox should see zero probing.
             let win_poll = window.clone();
             std::thread::spawn(move || {
-                let mut inside = false;
+                let mut inside = store_mode;
                 let mut last_cur = (0.0f64, 0.0f64);
                 let mut tick = 0u32;
                 let mut flip_fail = 0u32;
@@ -3929,7 +4038,7 @@ pub fn run() {
                     // noticed that the cursor had entered a hit target.
                     std::thread::sleep(Duration::from_millis(12));
                     tick = next_poll_tick(tick);
-                    if tick % 166 == 1 {
+                    if tick % 166 == 1 && !store_mode {
                         // foreground app name + window title — cross-platform
                         // via active-win-pos-rs (title may be empty on macOS
                         // without screen-recording permission; the app name
@@ -3955,8 +4064,21 @@ pub fn run() {
                         .cursor_position()
                         .map(|p| (p.x as i32, p.y as i32))
                         .unwrap_or_default();
-                    let lx = (cx - mpos.x) as f64 / scale;
-                    let ly = (cy - mpos.y) as f64 / scale;
+                    // overlay flavor: coords are relative to the virtual
+                    // screen union pinned at setup. card flavor: relative to
+                    // the card's own live position (it drifts — it is a
+                    // user-dragged window, not a pinned overlay)
+                    let (ox, oy, sc) = if store_mode {
+                        let (wx, wy) = win_poll
+                            .outer_position()
+                            .map(|p| (p.x, p.y))
+                            .unwrap_or_default();
+                        (wx, wy, win_poll.scale_factor().unwrap_or(1.0))
+                    } else {
+                        (mpos.x, mpos.y, scale)
+                    };
+                    let lx = (cx - ox) as f64 / sc;
+                    let ly = (cy - oy) as f64 / sc;
                     if (lx - last_cur.0).abs() + (ly - last_cur.1).abs() > 3.0 {
                         last_cur = (lx, ly);
                         let _ = win_poll.emit("cursor", [lx, ly]);
@@ -3981,7 +4103,7 @@ pub fn run() {
                     // platform quirk could keep it true; force the flip after
                     // ~2s of divergence so a bad read can't freeze input
                     let btn_held = any_mouse_button_held();
-                    let diverged = now_inside != inside;
+                    let diverged = !store_mode && now_inside != inside;
                     held_stall = next_held_stall(held_stall, diverged, btn_held);
                     if diverged && (!btn_held || held_stall > 166) {
                         // only commit the state when the OS actually flipped —
@@ -4021,9 +4143,13 @@ pub fn run() {
 
             // Platform scan: top edges of every visible top-level window,
             // so the pet can sit on them. Emitted as logical-px [x, y, w].
+            // Store build: the card's floor is its own bottom edge, and a
+            // sandboxed app should not be enumerating other processes'
+            // windows anyway — skip the thread entirely.
             let handle2 = app.handle().clone();
             let own_w = msize.width as i32;
             let own_h = msize.height as i32;
+            if !store_mode {
             std::thread::spawn(move || loop {
                 let rects = collect_window_rects(scale);
                 let plats: Vec<[f64; 3]> = rects
@@ -4045,6 +4171,7 @@ pub fn run() {
                 let _ = handle2.emit("platforms", plats);
                 std::thread::sleep(Duration::from_millis(600));
             });
+            }
 
             Ok(())
         })

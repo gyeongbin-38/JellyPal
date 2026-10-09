@@ -53,12 +53,17 @@ global.__TAURI__ = {
       if (cmd === "is_store_build") return Promise.resolve(true);
       if (cmd === "load_state") return Promise.resolve("{}");
       if (cmd === "is_demo") return Promise.resolve(false);
+      if (cmd === "autostart_available") return Promise.resolve(true); // pretend macOS 13+
       if (cmd === "get_monitors") return Promise.resolve([{ x: 0, y: 0, w: 1920, h: 1080 }]);
       return Promise.resolve(null);
     },
   },
   event: { listen: (name, cb) => { (listeners["tauri:" + name] = listeners["tauri:" + name] || []).push(cb); return Promise.resolve(() => {}); } },
-  window: { getCurrentWindow: () => ({ startDragging: () => Promise.resolve() }) },
+  window: { getCurrentWindow: () => ({
+    startDragging: () => Promise.resolve(),
+    show: () => { invokeCalls.__win_show = true; return Promise.resolve(); },
+    setFocus: () => { invokeCalls.__win_focus = true; return Promise.resolve(); },
+  }) },
 };
 window.__TAURI__ = global.__TAURI__;
 
@@ -78,14 +83,23 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(30); // let the is_store_build probe resolve and confine the world
 
   check(ev("STORE") === true, "store flag flips from backend probe");
+  await sleep(30); // and the autostart_available probe behind it
+
   const ids = ev("settingsRowIds()");
-  check(ids.length === 12 && !ids.includes(9) && !ids.includes(10) && !ids.includes(11) && !ids.includes(12),
-    "store drops WEATHER/BOOT/JELLY/REDEEM rows", JSON.stringify(ids));
+  check(ids.length === 13 && !ids.includes(9) && !ids.includes(11) && !ids.includes(12),
+    "store drops WEATHER/JELLY/REDEEM rows", JSON.stringify(ids));
+  check(ids.includes(10), "BOOT un-hides when login items are available");
   check(ids.includes(0) && ids.includes(15), "VOL + QUIT survive the trim");
 
   // zero-network: the store SKU must never fire update or weather probes
   check(invokeCalls.check_update === undefined && invokeCalls.get_weather === undefined,
     "no outbound network calls", `check_update=${JSON.stringify(invokeCalls.check_update)}`);
+
+  // tray summon: floats the card window instead of recalling the slime
+  emit("summon");
+  await sleep(10);
+  check(invokeCalls.__win_show === true && invokeCalls.__win_focus === true,
+    "summon floats the card to the front");
 
   const mons = ev("monPlats");
   check(mons.length === 1 && mons[0].y === 560 - 6 && mons[0].w === 480,

@@ -2467,6 +2467,11 @@ const storeReady = invokeAsync("is_store_build").then((v) => {
   petY = Math.min(petY, winH);
   for (const p of pals) p.y = Math.min(p.y, winH);
   sendClickable();
+  // BOOT only un-hides where the OS can actually honor it — SMAppService
+  // login items need macOS 13+; older store builds never see the row
+  invokeAsync("autostart_available").then((ok) => {
+    if (ok === true) STORE_HIDDEN_ROWS.delete(10);
+  }).catch(() => {});
 }).catch(() => {});
 // update probe: compare the remote version file against APP_VER once at
 // boot; a newer remote lights the NEW VER badge in settings
@@ -3662,7 +3667,17 @@ function gainXp(n, bx, by) {
   dirty = true;
 }
 
-listenQuiet("summon", () => recall());
+// tray Summon: the overlay flavor recalls the slime to the cursor; the
+// card flavor just floats its window to the front — there is no desktop
+// to pull the slime across to
+listenQuiet("summon", () => {
+  if (STORE) {
+    try {
+      const w = window.__TAURI__.window.getCurrentWindow();
+      w.show().then(() => w.setFocus());
+    } catch {}
+  } else recall();
+});
 
 // startle routine — a shared "something caught the slime's eye" beat.
 // test/debug hook drives it; no global clipboard tap exists anymore.
