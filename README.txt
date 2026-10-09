@@ -3,7 +3,7 @@ JELLYPAL v0.3.0 - a tiny slime ranch that lives on your desktop
 
 A small pixel slime lives on your screen while you work.
 Jelly drips in every few minutes just for having it around —
-collect all 60 species, breed hybrids, decorate its little ranch.
+collect all 62 species, breed hybrids, decorate its little ranch.
 
 HOW TO RUN
 ----------

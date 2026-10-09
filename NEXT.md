@@ -218,6 +218,11 @@ before bundling.
       geo) — privacy manifest stays "collects nothing"
 - [x] LaunchAgent autostart gated off in store build
 - [x] `macos-store/sign.sh`: codesign + productbuild .pkg for Transporter
+- [x] SMAppService login item (macOS 13+) — `smapp` FFI module,
+      `autostart_available` gates the BOOT row; card summon floats the
+      window; store setup skips overlay resize, click-through, window
+      scan and focus probing entirely
+- [x] CFBundleVersion = GHA run number (stamped in the store job tar)
 - [ ] Apple Developer account ($99/yr) + App Store Connect app record
 - [ ] Sign + validate on a real Mac (entitlements bake at codesign time;
       CI builds are unsigned)
@@ -254,8 +259,9 @@ before bundling.
    turn, footer stats stay pinned, offscreen rows take no clicks.
 6. **Gem sinks round 2** — species decor, name dyes, ranch themes —
    premium accs landed; more variety keeps big packs attractive. [M]
-7. **More seasonal species** — spring/rainy sets; the `SEASONS` table makes
-   each new entry ~20 lines. [S]
+7. ~~More seasonal species~~ — DONE: sakura (April) + drizzle (Jun15-Jul15)
+   joined pumkin/yule; dex total 62, new `[62,200]` completion milestone,
+   site table + copy synced
 8. ~~Synchronized naps~~ — DONE: same-platform pals may curl into spaced
    slots beside a sleeping main pet; waking it cancels pending approaches.
 9. **Steam Cloud + achievements** — deferred until Steam launch; `stats`

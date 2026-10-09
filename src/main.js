@@ -237,6 +237,12 @@ const SPECIES = [
   { id: "yule", name: "Yule", r: 2, shape: "round", trait: "glint", season: "winter", sig: "jingle",
     pal: { o:"#7a1f2a",b:"#e0455a",l:"#ff9aa8",s:"#b03045",e:"#2b0f15",w:"#ffffff",m:"#2b0f15",k:"#4fbd63" },
     top: [[14,0,"w"],[22,0,"w"],[15,1,"w"],[21,1,"w"],[16,2,"w"],[17,2,"w"],[18,2,"w"],[19,2,"w"],[20,2,"w"]] },
+  { id: "sakura", name: "Sakura", r: 1, shape: "round", trait: "glint", season: "spring",
+    pal: { o:"#8a3f52",b:"#f5a8bc",l:"#ffd9e4",s:"#e0809a",e:"#33202a",w:"#ffffff",m:"#33202a",k:"#7dc47f" },
+    top: [[17,0,"k"],[19,0,"k"],[18,1,"k"],[15,2,"l"],[21,2,"l"]] },
+  { id: "drizzle", name: "Drizzle", r: 1, shape: "round", trait: "drip", season: "rainy",
+    pal: { o:"#3a4a5e",b:"#8fb8d9",l:"#c8e0f0",s:"#6a92b5",e:"#1c2630",w:"#ffffff",m:"#1c2630",k:"#4f7ea8" },
+    top: [[15,0,"s"],[17,0,"s"],[19,0,"s"],[21,0,"s"],[16,1,"l"],[18,1,"l"],[20,1,"l"]] },
   // --- legendaries: each with a concept-matched quirk on top of a signature ---
   { id: "spidr", name: "Webby", r: 3, shape: "round", trait: "web", mv: "scurry", sig: "webshot",
     pal: { o:"#3a2a4a",b:"#6b4a8a",l:"#9a72b8",s:"#4e3560",e:"#1a1226",w:"#ffffff",m:"#1a1226",k:"#e05a6e" },
@@ -269,6 +275,8 @@ const SPECIES = [
 const SEASONS = {
   halloween: [[9, 24], [10, 3]],  // Oct 24 - Nov 3
   winter: [[11, 18], [0, 5]],     // Dec 18 - Jan 5
+  spring: [[3, 1], [3, 30]],      // April 1 - April 30
+  rainy: [[5, 15], [6, 15]],      // Jun 15 - Jul 15
 };
 function seasonOpen(sp) {
   if (!sp.season) return true;
@@ -411,6 +419,8 @@ const FLAVOR = {
   siren: "VOICE OF THE DEEP|FREE CONCERTS AT 3AM",
   pumkin: "CARVED WITH CARE|COMES BACK EVERY FALL",
   yule: "GIFT-WRAPPED BY WINTER|TOO CUTE TO OPEN",
+  sakura: "BLOOMS ONCE A YEAR|EVERY DAY COUNTS",
+  drizzle: "RAINY-DAY ENERGY|PUDDLES ARE TRAMPOLINES",
   spidr: "WOVEN FROM MOONLIT SILK|YOUR CURSOR IS HOME",
   drago: "A DRAGON THAT STAYED LITTLE|KEEP IT WARM",
   pulsar: "HEART OF A DEAD STAR|STILL BEATING",
@@ -436,7 +446,7 @@ const PSY_ASSIGN = {
   minty: "shy", taro: "lazy", honey: "lazy", coral: "bouncy", slate: "calm",
   fungi: "lazy", aurora: "bold", toxic: "bold", mecha: "calm", ghost: "shy",
   astro: "bold", ninja: "hyper", comet: "hyper", molten: "bold", siren: "bold",
-  pumkin: "bouncy", yule: "calm",
+  pumkin: "bouncy", yule: "calm", sakura: "bouncy", drizzle: "calm",
   spidr: "bold", drago: "hyper", pulsar: "calm", rex: "bold",
   pinata: "hyper", lant: "shy", dice: "bouncy", frog: "bouncy",
 };
@@ -1580,7 +1590,7 @@ function sanitizeStats(value) {
   return clean;
 }
 // collection milestones: [owned-base-count, gem reward] — pays out once each
-const DEX_MILES = [[10, 15], [20, 25], [30, 40], [40, 60], [50, 80], [58, 150]];
+const DEX_MILES = [[10, 15], [20, 25], [30, 40], [40, 60], [50, 80], [58, 150], [62, 200]];
 let dexMile = 0;
 let sigT0 = 0;
 let sigId = null;
@@ -1765,6 +1775,9 @@ let startleFall = false; // platform vanished mid-stand — dazed on landing
 // when the user is already mid-gesture (contextual) or on a slow drip —
 // never while a modal is up or the pet is being dragged
 const HINTS = [
+  // card-only: no titlebar, so the one thing a new user cannot guess is
+  // that empty space drags the window
+  { id: "cardmove", t: "DRAG EMPTY SPACE TO MOVE THE CARD", storeOnly: true },
   { id: "swish", t: "SWISH THE CURSOR NEARBY - IT HUNTS MOVEMENT", trig: () => curV > 400 },
   { id: "poke", t: "A SLOW POKE BOOPS THE SNOOT", trig: () => boopT > 0.3 },
   { id: "swipe", t: "SWIPE BACK AND FORTH OVER IT - SCRITCHES", trig: () => rubCount > 0 },
@@ -8017,6 +8030,7 @@ function frameBody(now) {
       !gemShop && !albumOpen && !redeemMode && !treatAim && !photoHide) {
     for (const h of HINTS) {
       if (hintsSeen[h.id]) continue;
+      if (h.storeOnly && !STORE) continue;
       if ((h.trig && h.trig()) || now > hintDrip) {
         hintsSeen[h.id] = 1;
         hintText = h.t;
