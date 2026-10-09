@@ -74,7 +74,7 @@ const SHAPES = { round: HW_ROUND, tall: HW_TALL, flat: HW_FLAT, square: HW_SQUAR
 
 // rarity: 0 common, 1 rare, 2 epic, 3 legendary
 const SPECIES = [
-  { id: "sprout", name: "Sprout", r: 0, shape: "round", kr: "SNACKS ON KEYSTROKES",
+  { id: "sprout", name: "Sprout", r: 0, shape: "round", kr: "SNACKS ON JELLY",
     pal: { o:"#35704f",b:"#6fdca0",l:"#a9f0cb",s:"#4cb07e",e:"#23332c",w:"#ffffff",m:"#23332c",k:"#ff9fb0" },
     top: [[17,0,"l"],[19,0,"l"],[18,1,"l"]] },
   { id: "berry", name: "Berry", r: 0, shape: "round",
@@ -89,7 +89,7 @@ const SPECIES = [
   { id: "ember", name: "Ember", r: 1, shape: "tall", trait: "spark",
     pal: { o:"#8a4b2f",b:"#f0975c",l:"#ffcfa8",s:"#d1743f",e:"#33231c",w:"#ffffff",m:"#33231c",k:"#ff6b6b" },
     top: [[18,0,"k"],[17,1,"k"],[19,1,"k"]] },
-  { id: "mochi", name: "Mochi", r: 1, shape: "round", kr: "NIBBLES KEYSTROKES",
+  { id: "mochi", name: "Mochi", r: 1, shape: "round", kr: "NIBBLES JELLY",
     pal: { o:"#9a7f88",b:"#f5e6ea",l:"#ffffff",s:"#d9c2ca",e:"#3a2f33",w:"#ffffff",m:"#3a2f33",k:"#ff9fb0" },
     top: [[25,2,"v"],[26,3,"v"],[25,4,"v"],[29,2,"v"],[28,3,"v"],[29,4,"v"],[27,3,"v"]] },
   { id: "shade", name: "Shade", r: 2, shape: "flat", trait: "wisp", sig: "umbral",
@@ -146,7 +146,7 @@ const SPECIES = [
   { id: "cliff", name: "Cliff", r: 3, shape: "flat", trait: "climb", mv: "walk", sig: "landslide",
     pal: { o:"#4a4038",b:"#8a7a68",l:"#b8a88e",s:"#68584a",e:"#26201a",w:"#ffffff",m:"#26201a",k:"#d98a6b" },
     top: [[11,3,"s"],[14,4,"s"],[22,3,"s"],[25,5,"s"],[18,1,"l"],[9,6,"l"]] },
-  { id: "bites", name: "Bites", r: 3, shape: "round", trait: "chomp", mv: "scurry", sig: "frenzy", kr: "EATS KEYSTROKES",
+  { id: "bites", name: "Bites", r: 3, shape: "round", trait: "chomp", mv: "scurry", sig: "frenzy", kr: "EATS JELLY WHOLE",
     pal: { o:"#7d2a3a",b:"#e05a6e",l:"#ffa8b8",s:"#b84055",e:"#2b1015",w:"#ffffff",m:"#2b1015",k:"#ffd75e" },
     top: [[16,0,"w"],[17,0,"w"],[18,0,"w"],[19,0,"w"],[20,0,"w"],[17,1,"w"],[18,1,"w"],[19,1,"w"],[18,2,"w"]] },
   { id: "choco", name: "Choco", r: 0, shape: "round",
@@ -167,7 +167,7 @@ const SPECIES = [
   { id: "cloud", name: "Cloud", r: 0, shape: "puddle",
     pal: { o:"#7a8fa0",b:"#dfeaf2",l:"#ffffff",s:"#b8cdd8",e:"#2c3842",w:"#ffffff",m:"#2c3842",k:"#ffb0c8" },
     top: [[10,4,"w"],[14,3,"w"],[26,4,"w"],[22,3,"w"]] },
-  { id: "bean", name: "Bean", r: 0, shape: "tall", kr: "WIGGLES WHEN YOU TYPE",
+  { id: "bean", name: "Bean", r: 0, shape: "tall", kr: "WIGGLES AT JELLY",
     pal: { o:"#6b2a2a",b:"#c95a4a",l:"#f08a72",s:"#a84034",e:"#2b1414",w:"#ffffff",m:"#2b1414",k:"#ff9fb0" },
     top: [[18,0,"b"]] },
   { id: "snowy", name: "Snowy", r: 0, shape: "round",
@@ -209,7 +209,7 @@ const SPECIES = [
   { id: "toxic", name: "Toxic", r: 2, shape: "puddle", trait: "wisp", sig: "bubbleup",
     pal: { o:"#3d5a1f",b:"#8ee03f",l:"#c4f58a",s:"#66b02e",e:"#1c2b0e",w:"#ffffff",m:"#1c2b0e",k:"#e0ff5e" },
     top: [[11,5,"k"],[25,4,"k"],[18,3,"s"]] },
-  { id: "mecha", name: "Mecha", r: 2, shape: "square", trait: "spark", sig: "beep", kr: "BEEPS AT EACH KEY",
+  { id: "mecha", name: "Mecha", r: 2, shape: "square", trait: "spark", sig: "beep", kr: "BEEPS AT JELLY",
     pal: { o:"#2e343c",b:"#98a4b0",l:"#c8d4dc",s:"#6a7682",e:"#181c22",w:"#ffb02e",m:"#181c22",k:"#ffb02e" },
     top: [[18,0,"k"],[18,1,"s"],[12,4,"k"],[24,4,"k"]] },
   { id: "ghost", name: "Ghost", r: 2, shape: "puddle", trait: "wisp", mv: "hover", sig: "phase",
@@ -359,7 +359,7 @@ const SIG_INFO = {
 
 // one-line lore per species ("|" splits onto a second line)
 const FLAVOR = {
-  sprout: "SPROUTED IN THE KEYBOARD TRAY|FEEDS ON WARM KEYSTROKES",
+  sprout: "SPROUTED IN THE KITCHEN TRAY|FEEDS ON WARM JELLY DRIPS",
   berry: "SWEETEST OF THE PATCH|STICKS TO FRIENDS",
   pebble: "A ROCK THAT DREAMS|OF BEING A BOULDER",
   tide: "A DROP OF THE OCEAN|STILL HUMMING THE SEA",
@@ -388,7 +388,7 @@ const FLAVOR = {
   peach: "FUZZY AND PROUD OF IT|SUMMER'S FAVORITE",
   coal: "DIAMOND IN TRAINING|EXTREMELY PATIENT",
   cloud: "RAINED ITSELF DRY|NOW JUST VIBES",
-  bean: "THINKS EVERY KEY IS A BEAN|WIGGLES TO PROVE IT",
+  bean: "THINKS EVERY DROP IS A BEAN|WIGGLES TO PROVE IT",
   snowy: "A SNOWBALL WITH PLANS|FOR ETERNAL WINTER",
   rust: "OLD MACHINE, YOUNG HEART|SQUEAKS WITH PRIDE",
   waffle: "SYRUP MAKES IT STRONGER|BUTTER MAKES IT HAPPY",
@@ -422,7 +422,7 @@ const FLAVOR = {
   hyb: "BORN RIGHT ON THIS DESKTOP|ONE OF A KIND",
 };
 
-const APP_VER = "0.2.18"; // keep in sync with tauri.conf.json version
+const APP_VER = "0.3.0"; // keep in sync with tauri.conf.json version
 
 // species -> personality assignment (hybrids inherit one parent's)
 const PSY_ASSIGN = {
@@ -1364,16 +1364,15 @@ for (const k of Object.keys(SFX_DEFS)) {
     }
   };
 }
-let lastMunchSfx = 0;
 
 // ---------- game state ----------
-// sleep: dozes off after 5 minutes with no direct interaction. typing is
-// NOT interaction — the slime naps while you work (unless it eats keys)
+// sleep: dozes off after 5 minutes with no user activity. cursor motion
+// counts as presence — the slime naps when you actually step away
 const SLEEP_AFTER = 5 * 60_000;
 // poke it after 20+ ignored minutes and you get the grumpy greeting
 const RETURN_GRUMPY = 20 * 60_000;
-const KEYS_PER_LEVEL = 300;
-const JELLY_EVERY = 600;      // ~1 pull per 3 days of active typing
+const XP_PER_LEVEL = 300;     // xp flows from drips + snacks now
+const JELLY_EVERY = 600;      // xp milestone → +1 jelly
 const PULL_COST = 50;         // ~$0.15/pull against the $2.99/1000 gem pack
 const DUP_REFUND = 15;        // ~30% of a pull back on duplicates
 // throwable snacks — right-click the snack button to cycle the kind
@@ -1461,8 +1460,7 @@ function sanitizePanelPositions(value) {
 }
 
 let state = "idle";
-let lastKey = Date.now();   // last keystroke — feed timing only, not sleep
-let awakeAt = Date.now();   // last waking activity: touch, treats, (kr) typing
+let awakeAt = Date.now();   // last user activity: cursor motion, touch, snacks
 // direct slime contact — updates the sleep clock. a long-ignored slime
 // greets you grumpy instead of cheerful
 function touch() {
@@ -2526,7 +2524,7 @@ function sanitizeSavedHybrid(raw, seenIds) {
   for (const [key, allowed] of [["trait", TRAIT_INFO], ["mv", MV_INFO], ["sig", SIG_INFO], ["ps", PSYCH]]) {
     if (typeof raw[key] === "string" && Object.prototype.hasOwnProperty.call(allowed, raw[key])) safe[key] = raw[key];
   }
-  if (raw.kr === "REACTS TO TYPING") safe.kr = raw.kr;
+  if (raw.kr === "LOVES JELLY" || raw.kr === "REACTS TO TYPING") safe.kr = raw.kr;
   seenIds.add(safe.id);
   return safe;
 }
@@ -2558,7 +2556,7 @@ invokeAsync("load_state").then((txt) => {
   saveReady = true;
   loadFailed = false;
   xp = sanitizeSavedInt(s.xp);
-  level = Math.min(3, Math.floor(xp / KEYS_PER_LEVEL));
+  level = Math.min(3, Math.floor(xp / XP_PER_LEVEL));
   if (typeof s.jelly === "number") jelly = sanitizeSavedInt(s.jelly, START_JELLY);
   pityRare = sanitizeSavedInt(s.pityRare, 0, 12);
   pityLeg = sanitizeSavedInt(s.pityLeg, 0, 50);
@@ -2781,16 +2779,31 @@ function persist() {
 }
 setInterval(() => { if (dirty && saveReady) persist().catch(() => {}); }, 5000);
 
-// passive jelly drip: +1 every 5 minutes the app is alive — the ranch keeps
-// earning even without typing (away-time has its own 1/10min credit at
-// load). Sleep gaps just delay the next drip instead of bursting a batch.
-let dripAt = Date.now() + 5 * 60000;
-setInterval(() => {
-  if (Date.now() < dripAt) return;
-  dripAt = Date.now() + 5 * 60000;
-  jelly = addSavedInt(jelly, 1);
-  dirty = true;
-}, 30000);
+// passive jelly drip: +3 every 5 minutes the app is alive, ~2% of ticks
+// land a +30 LUCKY DROP. Away-time has its own 1/10min credit at load;
+// sleep gaps just delay the next drip instead of bursting a batch.
+// Drips also feed xp so the slime levels while the ranch stays open.
+const DRIP_MS = 5 * 60000;
+let dripAt = Date.now() + DRIP_MS;
+function dripTick() {
+  if (Date.now() < dripAt) return false;
+  dripAt = Date.now() + DRIP_MS;
+  const lucky = Math.random() < 0.02;
+  jelly = addSavedInt(jelly, lucky ? 30 : 3);
+  gainXp(15, null);
+  if (lucky && !petHome && performance.now() >= boxHide) {
+    bangs.push({ x: petX, y: petY - 100, life: 2.5, t: "LUCKY +30!" });
+    starUntil = performance.now() + 1200;
+    sfx.reveal();
+    // jelly-hungry species visibly munch the windfall
+    if (SPECIES[active].kr) munchUntil = performance.now() + 500;
+    for (const p of pals) {
+      if (SPECIES[p.sp].kr) { p.faceId = "munch"; p.faceT = performance.now() + 500; }
+    }
+  }
+  return true;
+}
+setInterval(dripTick, 30000);
 
 // bred hybrids hatch as babies: half-size + pacifier for their first hour
 const BABY_MS = 3600000;
@@ -3599,62 +3612,29 @@ function hitTest(mx, my) {
   return mx >= x && mx <= x + w && my >= y && my <= y + h;
 }
 
-function eat() {
-  const now = Date.now();
-  const visiblePet = !petHome && performance.now() >= boxHide;
-  // typing feeds the wallet, not the pet: xp/gems always tick, but only
-  // key-eating species react visibly — everyone else just stays awake.
-  // typing IS waking activity for all species though: a slime that nods
-  // off mid-workday reads as dead, not peaceful
-  const kr = SPECIES[active].kr;
-  awakeAt = now;
-  if (kr && now - lastKey > 360000 && visiblePet) {
-    // welcome back: first keystroke after 6+ idle minutes gets a heart
-    contentUntil = performance.now() + 1500;
-    hearts.push({ x: petX, y: petY - 70, life: 1 });
-    sfx.heart();
-  }
-  lastKey = now;
-  xp = addSavedInt(xp, 1);
-  if (!seen && xp >= 50) { seen = true; dirty = true; }
+// xp → level + jelly milestones, shared by snacks and the passive drip.
+// bx/by anchor the gem burst; null = silent gain (pet parked at the ranch)
+function gainXp(n, bx, by) {
+  const prevXp = xp;
+  xp = addSavedInt(xp, n);
+  if (!seen && xp >= 50) seen = true;
   const every = SPECIES[active].r >= 3 ? JELLY_EVERY / 2 : JELLY_EVERY;
-  if (xp % every === 0) {
+  if (Math.floor(xp / every) > Math.floor(prevXp / every)) {
     jelly = addSavedInt(jelly, 1);
-    // parked at the ranch = invisible pet: skip spot-anchored effects so
-    // nothing rains where the pet used to stand
-    if (visiblePet) {
-      bangs.push({ x: petX + 20, y: petY - 80, life: 1, t: "💎" });
-      starUntil = performance.now() + 900; // starry-eyed over the gem
+    if (bx != null && !petHome && performance.now() >= boxHide) {
+      bangs.push({ x: bx, y: by, life: 1, t: "💎" });
+      starUntil = performance.now() + 900;
       sfx.heart();
     }
   }
-  level = Math.min(3, Math.floor(xp / KEYS_PER_LEVEL));
+  level = Math.min(3, Math.floor(xp / XP_PER_LEVEL));
   dirty = true;
-  // typing wakes every species instantly — non-kr slimes used to keep
-  // the sleeping face (and the zzz trail) for up to a second after the
-  // first keystroke because only the mood tick flipped state back
-  if (state !== "idle") state = "idle";
-  if (!kr) return;
-  munchUntil = performance.now() + 150;
-  // companions nibble along — only species that also eat keys
-  for (const p of pals) {
-    if (SPECIES[p.sp].kr) { p.faceId = "munch"; p.faceT = performance.now() + 150; }
-  }
-  if (visiblePet && now > lastMunchSfx + 600) { lastMunchSfx = now; sfx.munch(); }
-  if (state !== "idle") state = "idle";
-  if (visiblePet && Math.random() < 0.35 && crumbs.length < 12) {
-    // anchor each crumb's landing floor at spawn — the old live-petY
-    // check let crumbs sink mid-air if the pet moved off mid-fall
-    crumbs.push({ x: petX + (Math.random() * 60 - 30), y: petY - 80, vy: 0, life: 1, floor: petY });
-  }
 }
 
-listenQuiet("keystroke", eat);
 listenQuiet("summon", () => recall());
 
-// clipboard mischief: the backend spots Ctrl+C/X/V combos (combo only —
-// never the content). the pet perks up like it noticed you pocketing
-// something. throttled so rapid copy-paste doesn't make it twitchy.
+// startle routine — a shared "something caught the slime's eye" beat.
+// test/debug hook drives it; no global clipboard tap exists anymore.
 let copyCd = 0;
 function copyPeek(intense) {
   const now = performance.now();
@@ -3686,12 +3666,7 @@ function copyPeek(intense) {
   }
   sfx.pop();
 }
-// count raw clipboard events into crash.log so "did the combo even
-// reach the app?" is answerable without guessing — first 20 only
-let copyEvts = 0;
-const copyLog = (k) => { copyEvts++; if (copyEvts <= 20) invokeQuiet("log_crash", { msg: `clip-${k}#${copyEvts}` }); };
-listenQuiet("copy", () => { copyLog("copy"); copyPeek(true); });
-listenQuiet("paste", () => { copyLog("paste"); copyPeek(false); });
+
 
 // ---------- accessory routines ----------
 // the doodad occasionally inspires its own little act — a propeller flyby
@@ -3944,18 +3919,6 @@ listenQuiet("quit-request", () => {
     .then(() => invokeQuiet("quit_app"));
 });
 
-// macOS: the backend reports false when Input Monitoring isn't granted —
-// without it the global key tap stays silent so typing earns no jelly.
-// Nag once per launch until it's granted; the site explains the toggle.
-let inputMon = true;
-listenQuiet("input-mon", (e) => {
-  inputMon = e && e.payload !== false;
-  if (!inputMon) bangs.push({
-    x: winW / 2, y: 100, life: 5,
-    t: "TYPING NEEDS INPUT MONITORING - SEE jellypal.fun",
-  });
-});
-
 // ---------- cursor tracking (from backend) ----------
 function sanitizeCursorPayload(value) {
   if (!Array.isArray(value) || value.length < 2) return null;
@@ -3974,7 +3937,9 @@ listenQuiet("cursor", (e) => {
     curVX = (x - lastCurX) / dt * 1000;
   }
   lastCurX = x; lastCurY = y; lastCurT = now;
-  if (Math.hypot(x - curX, y - curY) > 2) lastCurMove = now;
+  // moving the mouse counts as presence — the old keystroke feed is gone,
+  // so cursor activity is what keeps the slime awake during active use
+  if (Math.hypot(x - curX, y - curY) > 2) { lastCurMove = now; awakeAt = Date.now(); }
   curX = x; curY = y;
 });
 
@@ -5609,7 +5574,7 @@ function drawInfo(c, W, H, t) {
     } else {
       row("SEEN", stats.pulls ? `${stats.pulls} PULLS TOTAL` : NONE[0], "#8a6b4a");
     }
-    if (sp.kr) row("KEYS", sp.kr, "#2f7a9e");
+    if (sp.kr) row("JELLY", sp.kr, "#2f7a9e");
   } else {
     row("RARITY", RARITY_NAME[sp.r], RARITY_COLOR[sp.r]);
     row("SEASON", seasonText(sp));
@@ -6355,12 +6320,12 @@ function drawCard(now) {
   drawText(kctx, BOND_NAMES[Math.min(bl, BOND_NAMES.length - 1)], 158, ry, 1, "#5c4632", null, true);
   ry += 14;
   if (isPet) {
-    row(ry, "LEVEL", `${level}  (${xp} KEYS)`);
+    row(ry, "LEVEL", `${level}  (${xp} XP)`);
     // xp progress bar toward the next level
     kctx.fillStyle = "#d8c4a0";
     kctx.fillRect(76, ry + 10, 160, 6);
     kctx.fillStyle = "#7dc24a";
-    const prog = level >= 3 ? 1 : (xp % KEYS_PER_LEVEL) / KEYS_PER_LEVEL;
+    const prog = level >= 3 ? 1 : (xp % XP_PER_LEVEL) / XP_PER_LEVEL;
     kctx.fillRect(76, ry + 10, Math.round(160 * prog), 6);
     ry += 22;
   }
@@ -6913,7 +6878,7 @@ function makeHybrid(A, B) {
     mv: Math.random() < 0.5 ? A.mv : B.mv,
     sig: Math.random() < 0.5 ? A.sig : B.sig,
     ps: Math.random() < 0.5 ? A.ps : B.ps,
-    kr: (A.kr || B.kr) ? "REACTS TO TYPING" : undefined,
+    kr: (A.kr || B.kr) ? "LOVES JELLY" : undefined,
     bornAt: Date.now(),
     pal,
     top: Math.random() < 0.5 ? A.top : B.top,
@@ -8479,17 +8444,12 @@ function frameBody(now) {
       const tk = TREATS[treat.kind || 0];
       treat = null;
       stats.treats = addSavedInt(stats.treats, 1);
-      const prevXp = xp;
-      xp = addSavedInt(xp, tk.xp);
-      // snacks count toward the same gem milestones as typing
-      const every = SPECIES[active].r >= 3 ? JELLY_EVERY / 2 : JELLY_EVERY;
-      if (Math.floor(xp / every) > Math.floor(prevXp / every)) {
-        jelly = addSavedInt(jelly, 1);
-        bangs.push({ x: petX + 20, y: petY - 96, life: 1, t: "💎" });
-        starUntil = now + 900;
-      }
-      level = Math.min(3, Math.floor(xp / KEYS_PER_LEVEL));
+      gainXp(tk.xp, petX + 20, petY - 96);
       munchUntil = now + 500;
+      // snack morsels tumble off — everyone leaves crumbs now
+      if (crumbs.length < 12 && Math.random() < 0.6) {
+        crumbs.push({ x: petX + (Math.random() * 60 - 30), y: petY - 80, vy: 0, life: 1, floor: petY });
+      }
       contentUntil = now + 2500;
       bondGain(SPECIES[active].id, 3);
       // treat side-effects: chili rush, coffee buzz, cake delight
@@ -9516,14 +9476,7 @@ function frameBody(now) {
                 const tk = TREATS[treat.kind || 0];
                 treat = null;
                 stats.treats = addSavedInt(stats.treats, 1);
-                const prevXp2 = xp;
-                xp = addSavedInt(xp, tk.xp);
-                const every = SPECIES[active].r >= 3 ? JELLY_EVERY / 2 : JELLY_EVERY;
-                if (Math.floor(xp / every) > Math.floor(prevXp2 / every)) {
-                  jelly = addSavedInt(jelly, 1);
-                  bangs.push({ x: p.x + 14, y: p.y - 92, life: 1, t: "💎" });
-                }
-                level = Math.min(3, Math.floor(xp / KEYS_PER_LEVEL));
+                gainXp(tk.xp, p.x + 14, p.y - 92);
                 bondGain(SPECIES[p.sp].id, 3);
                 // the snack's magic applies no matter who snatched it
                 if (tk.id === "chili") { hyperUntil = now + 60000; bangs.push({ x: p.x + 34, y: p.y - 96, life: 1.6, t: "HOT!" }); }
@@ -10614,7 +10567,7 @@ function frameBody(now) {
 
   // first-run tutorial hint floating above the slime
   if (!seen && Date.now() - bootT < 60000) {
-    const l1 = "TYPE TO FEED";
+    const l1 = "JELLY DRIPS IN";
     const l2 = "RIGHT CLICK = STATUS";
     const ty = Math.max(8, petY - SH * sy - 46 + Math.sin(t * 2.4) * 2);
     const x1 = Math.max(4, Math.min(winW - textW(l1, 1) - 4, petX - textW(l1, 1) / 2));

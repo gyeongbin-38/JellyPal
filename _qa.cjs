@@ -49,7 +49,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       propsOut: Object.values(d.props || {}).filter(Boolean).length,
       owned: d.owned, seen: d.seen,
     }));
-    const ok = d.jelly === 100 && (d.pals || []).length === 0
+    const ok = d.jelly === 500 && (d.pals || []).length === 0
       && Object.values(d.props || {}).every(v => v === null);
     console.log("[qa] FIRST-RUN:", ok ? "PASS" : "FAIL");
   } else console.log("[qa] WARN no state.json");

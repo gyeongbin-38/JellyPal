@@ -1,9 +1,9 @@
-JELLYPAL v0.2.18 - a tiny slime ranch that lives on your desktop
+JELLYPAL v0.3.0 - a tiny slime ranch that lives on your desktop
 ================================================================
 
 A small pixel slime lives on your screen while you work.
-Feed it by typing, collect all 60 species, breed hybrids,
-and decorate its little ranch.
+Jelly drips in every few minutes just for having it around —
+collect all 60 species, breed hybrids, decorate its little ranch.
 
 HOW TO RUN
 ----------
@@ -20,8 +20,6 @@ REQUIREMENTS
 
 CONTROLS
 --------
-- TYPE anywhere        -> feeds the slime (keystrokes are
-                          only counted, never read)
 - DRAG / THROW         -> grab the slime, toss it around
 - TICKLE               -> hold it and wiggle the cursor
 - PET                  -> hold it and stroke slowly

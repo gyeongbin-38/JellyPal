@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{
@@ -16,10 +16,6 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 // Rects (logical px, relative to our window) that should capture the mouse.
 static CLICKABLE: Mutex<Vec<[f64; 4]>> = Mutex::new(Vec::new());
 static DRAGGING: AtomicBool = AtomicBool::new(false);
-// global mouse-button state via the rdev listener — cross-platform
-// replacement for GetAsyncKeyState; a missed release only delays a
-// click-through toggle until the next press cycle, never wedges it
-static MOUSE_HELD: AtomicI32 = AtomicI32::new(0);
 // set while reset_save is wiping — an in-flight save_state landing after the
 // deletes would resurrect the very save the user asked to destroy
 static RESETTING: AtomicBool = AtomicBool::new(false);
@@ -106,14 +102,6 @@ fn sanitize_clickable_rects(rects: Vec<[f64; 4]>) -> Vec<[f64; 4]> {
         .collect()
 }
 
-fn adjust_mouse_held(current: i32, pressed: bool) -> i32 {
-    if pressed {
-        current.max(0).saturating_add(1)
-    } else {
-        current.saturating_sub(1).max(0)
-    }
-}
-
 fn next_poll_tick(current: u32) -> u32 {
     current.wrapping_add(1)
 }
@@ -155,10 +143,6 @@ fn clickable_policy_self_test() -> bool {
             bounded.len() == MAX_CLICKABLE_RECTS
                 && bounded.last().map(|r| r[0]) == Some((MAX_CLICKABLE_RECTS - 1) as f64)
         },
-        adjust_mouse_held(0, true) == 1,
-        adjust_mouse_held(i32::MAX, true) == i32::MAX,
-        adjust_mouse_held(0, false) == 0,
-        adjust_mouse_held(i32::MIN, false) == 0,
         next_poll_tick(u32::MAX) == 0,
         next_held_stall(0, true, true) == 1,
         next_held_stall(u32::MAX, true, true) == u32::MAX,
@@ -3390,28 +3374,34 @@ fn collect_window_rects(_scale: f64) -> Vec<[i32; 4]> {
     Vec::new()
 }
 
-// rdev::listen rides a CGEventTap on macOS, and event taps deliver nothing
-// until the app is granted Input Monitoring. Preflight reads the current
-// state; Request pops the system prompt once (and keeps returning false
-// until granted — the tap then works on the next launch). Without this the
-// app launches fine but typing silently earns no jelly.
-#[cfg(target_os = "macos")]
-fn ensure_input_monitoring() -> bool {
-    extern "C" {
-        fn CGPreflightListenEventAccess() -> bool;
-        fn CGRequestListenEventAccess() -> bool;
-    }
+// mouse-button state for the click-through toggle — a synchronous state
+// query, not a global event tap, so it needs no Input Monitoring or
+// accessibility permission on either platform. (The old rdev listener
+// was the only tap; it is gone — typing rewards were removed.)
+#[cfg(windows)]
+fn any_mouse_button_held() -> bool {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState;
+    // VK_LBUTTON / VK_RBUTTON / VK_MBUTTON — high bit set while held
     unsafe {
-        if CGPreflightListenEventAccess() {
-            true
-        } else {
-            CGRequestListenEventAccess()
-        }
+        GetAsyncKeyState(0x01) < 0 || GetAsyncKeyState(0x02) < 0 || GetAsyncKeyState(0x04) < 0
     }
 }
-#[cfg(not(target_os = "macos"))]
-fn ensure_input_monitoring() -> bool {
-    true
+#[cfg(target_os = "macos")]
+fn any_mouse_button_held() -> bool {
+    // CGEventSourceButtonState(kCGEventSourceStateCombinedSessionState, btn)
+    // reads the live button bitmask — no event tap, no permission
+    extern "C" {
+        fn CGEventSourceButtonState(state_id: i32, button: u32) -> bool;
+    }
+    unsafe {
+        CGEventSourceButtonState(0, 0)
+            || CGEventSourceButtonState(0, 1)
+            || CGEventSourceButtonState(0, 2)
+    }
+}
+#[cfg(not(any(windows, target_os = "macos")))]
+fn any_mouse_button_held() -> bool {
+    false
 }
 
 // macOS auto-hiding Dock: NSScreen.visibleFrame (our work_area source)
@@ -3450,17 +3440,7 @@ fn dock_reserve() -> (String, f64) {
     (String::new(), 0.0)
 }
 
-// the copy/paste modifier differs per platform — Cmd on macOS, Ctrl
-// elsewhere (on Windows the Meta key is the Win key, and Win+V opens
-// clipboard history — it must not count as a paste)
-#[cfg(target_os = "macos")]
-fn is_combo_modifier(k: rdev::Key) -> bool {
-    matches!(k, rdev::Key::MetaLeft | rdev::Key::MetaRight)
-}
-#[cfg(not(target_os = "macos"))]
-fn is_combo_modifier(k: rdev::Key) -> bool {
-    matches!(k, rdev::Key::ControlLeft | rdev::Key::ControlRight)
-}
+
 
 // open a folder or url with the OS default handler
 fn open_with_shell(target: &str) -> Result<(), String> {
@@ -3792,67 +3772,6 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // Global keystroke counter; never inspect which key — except
-            // the modifier so copy/paste/cut combos can be spotted
-            // (combo detection only; typed content is never read).
-            // ctrl on Windows/Linux, meta (Cmd) on macOS — see
-            // is_combo_modifier for why they differ
-            let input_ok = ensure_input_monitoring();
-            let _ = app.emit("input-mon", input_ok);
-            let handle = app.handle().clone();
-            let log_dir = data_dir(app.handle()).ok();
-            std::thread::spawn(move || {
-                let mut modifier = false;
-                if let Err(e) = rdev::listen(move |event| {
-                    match event.event_type {
-                        rdev::EventType::KeyPress(k) => {
-                            let _ = handle.emit("keystroke", ());
-                            if is_combo_modifier(k) {
-                                modifier = true;
-                            } else {
-                                match k {
-                                    rdev::Key::KeyC | rdev::Key::KeyX if modifier => {
-                                        let _ = handle.emit("copy", ());
-                                    }
-                                    rdev::Key::KeyV if modifier => {
-                                        let _ = handle.emit("paste", ());
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                        rdev::EventType::KeyRelease(k) => {
-                            if is_combo_modifier(k) {
-                                modifier = false;
-                            }
-                        }
-                        // tracked globally so the click-through toggle never
-                        // flips mid-gesture (that swap is what wedged input)
-                        rdev::EventType::ButtonPress(_) => {
-                            MOUSE_HELD
-                                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
-                                    Some(adjust_mouse_held(v, true))
-                                })
-                                .ok();
-                        }
-                        rdev::EventType::ButtonRelease(_) => {
-                            MOUSE_HELD
-                                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
-                                    Some(adjust_mouse_held(v, false))
-                                })
-                                .ok();
-                        }
-                        _ => {}
-                    }
-                }) {
-                    if let Some(dir) = log_dir {
-                        let _ = std::fs::create_dir_all(&dir);
-                        let body = format!("rdev listen failed: {e:?}");
-                        let _ = write_atomic_regular(&dir.join("hook.log"), body.as_bytes());
-                    }
-                }
-            });
-
             // Click-through toggle: capture mouse only when it is over the pet
             // or an open UI panel. Everything else passes through.
             let win_poll = window.clone();
@@ -3915,12 +3834,11 @@ pub fn run() {
                             });
                     // never flip click-through while a mouse button is held —
                     // toggling mid-gesture can deadlock the webview's input
-                    // pipeline and hang the window. if the global press/release
-                    // counter ever leaks (a release event that never arrived),
-                    // btn_held stays true forever and every flip is skipped —
-                    // force the flip after ~2s of divergence so a leaked count
-                    // can't freeze input permanently
-                    let btn_held = MOUSE_HELD.load(Ordering::Relaxed) > 0;
+                    // pipeline and hang the window. the held state is polled
+                    // (no event tap), so it can't leak — but a stuck query or
+                    // platform quirk could keep it true; force the flip after
+                    // ~2s of divergence so a bad read can't freeze input
+                    let btn_held = any_mouse_button_held();
                     let diverged = now_inside != inside;
                     held_stall = next_held_stall(held_stall, diverged, btn_held);
                     if diverged && (!btn_held || held_stall > 166) {

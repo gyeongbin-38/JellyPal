@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Jellypal — a tiny slime that lives on your screen</title>
-<meta name="description" content="A cute pixel-art slime companion for your Windows desktop. It naps on your windows, eats keystrokes, and squirts out jelly you spend on new species.">
+<meta name="description" content="A cute pixel-art slime companion for your desktop. It naps on your windows, drips jelly while it lives there, and you spend it on new species.">
 <meta property="og:title" content="Jellypal — a tiny slime that lives on your screen">
-<meta property="og:description" content="A cute pixel-art slime companion for your Windows desktop. Feed it keystrokes, collect 48+ species, breed hybrids.">
+<meta property="og:description" content="A cute pixel-art slime companion for your desktop. Collect 48+ species, breed hybrids, earn jelly while it hangs around.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://jellypal.fun">
 <meta property="og:image" content="https://jellypal.fun/shot-desktop.png">
@@ -248,7 +248,7 @@
       <a href="#jelly">Jelly</a>
       <a href="#qa">Questions</a>
       <a href="https://github.com/gyeongbin-38/JellyPal">GitHub</a>
-      <a class="navdl jp-button jp-button--small jp-button--secondary" href="dl/Jellypal_0.2.18_x64-setup.exe">Download</a>
+      <a class="navdl jp-button jp-button--small jp-button--secondary" href="dl/Jellypal_0.3.0_x64-setup.exe">Download</a>
     </nav>
   </div>
 
@@ -256,13 +256,13 @@
   <section class="hero">
     <div>
       <h1>A tiny <span class="squish">slime</span> that lives on your Windows desktop.</h1>
-      <p class="sub">Jellypal is a desktop pet that snacks on your typing. Earn jelly,
-      then spend it on new species, hybrids and accessories.
+      <p class="sub">Jellypal is a desktop pet that drips jelly while it hangs out
+      on your screen. Spend it on new species, hybrids and accessories.
       That one on the right is the real sprite — go on, boop it.</p>
       <div class="cta">
-        <a class="jp-button jp-button--primary" href="dl/Jellypal_0.2.18_x64-setup.exe">Download for Windows</a>
-        <a class="jp-button jp-button--quiet" href="dl/jellypal-0.2.18-win.zip">portable zip</a>
-        <a class="jp-button jp-button--quiet" href="dl/Jellypal_0.2.18_aarch64.dmg">macOS (Apple Silicon)</a>
+        <a class="jp-button jp-button--primary" href="dl/Jellypal_0.3.0_x64-setup.exe">Download for Windows</a>
+        <a class="jp-button jp-button--quiet" href="dl/jellypal-0.3.0-win.zip">portable zip</a>
+        <a class="jp-button jp-button--quiet" href="dl/Jellypal_0.3.0_aarch64.dmg">macOS (Apple Silicon)</a>
       </div>
       <div class="jp-meta" role="list" aria-label="Download details">
         <span class="jp-chip" role="listitem">Windows 10/11</span>
@@ -275,10 +275,10 @@
     <div class="stage">
       <div class="frame jp-window pxframe">
         <div class="titlebar jp-window__bar"><i class="dot jp-window__dot"></i><i class="dot jp-window__dot"></i><i class="dot jp-window__dot"></i><span class="jp-window__title">ranch</span><span class="jp-window__status">live</span></div>
-        <canvas id="ranch" width="640" height="300" role="button" tabindex="0" aria-label="A live jelly slime on a night ranch. It watches your cursor — press Enter or click to boop it, drag to pick it up, or just type anywhere."></canvas>
+        <canvas id="ranch" width="640" height="300" role="button" tabindex="0" aria-label="A live jelly slime on a night ranch. It watches your cursor — press Enter or click to boop it, drag to pick it up."></canvas>
       </div>
       <div class="cap">browser preview — same sprite and behavior as the app.<br>
-      boop it, pick it up, or just type: it snacks on keystrokes <i>(counted, never read — nothing leaves this page)</i>.
+      boop it or pick it up — jelly drips in on its own <i>(real pace: every 5&nbsp;min)</i>.
       <button id="mot" type="button" aria-pressed="false">pause motion</button></div>
     </div>
   </section>
@@ -286,16 +286,16 @@
   <section class="eco">
     <div class="jp-section-head">
       <div class="jp-eyebrow">the tiny loop</div>
-      <h2 class="jp-heading"><canvas class="hico" data-ico="jelly" width="24" height="24"></canvas>You type. It eats.<br>Out pops jelly.</h2>
+      <h2 class="jp-heading"><canvas class="hico" data-ico="jelly" width="24" height="24"></canvas>You chill. It drips.<br>Out pops jelly.</h2>
     </div>
     <p class="jp-lede">
-      The thing you were doing anyway is the gameplay loop — no grind, no ads.
-      Try it above: type anywhere on this page and watch the counter.
+      The gameplay loop is: nothing. Jellypal earns while it lives on your
+      desktop — the counter above is already filling on its own.
     </p>
     <div class="loop">
-      <div class="lstep jp-card jp-card--lift"><div class="keycap">A</div><div class="lt">you type</div><div class="ld">work, chat, game — every key counts</div></div>
+      <div class="lstep jp-card jp-card--lift"><div class="keycap">☕</div><div class="lt">it hangs out</div><div class="ld">naps on your windows, wanders, minds its own</div></div>
       <div class="larrow">▶</div>
-      <div class="lstep jp-card jp-card--lift"><canvas class="lico" width="52" height="40" data-lico="jelly"></canvas><div class="lt">600 keys = 1 jelly</div><div class="ld">a few minutes of typing · active legendary? every 300</div></div>
+      <div class="lstep jp-card jp-card--lift"><canvas class="lico" width="52" height="40" data-lico="jelly"></canvas><div class="lt">+3 jelly every 5 min</div><div class="ld">just for being open · lucky drops pay +30</div></div>
       <div class="larrow">▶</div>
       <div class="lstep jp-card jp-card--lift"><canvas class="lico" width="52" height="40" data-lico="pal"></canvas><div class="lt">jelly = new friends</div><div class="ld">pull species, breed hybrids, dress them up</div></div>
     </div>
@@ -326,7 +326,7 @@
     </div>
     <p class="jp-lede">
       Everything is earnable free — jelly drips in every few minutes just
-      for having Jellypal around, and typing earns it faster. Packs skip the wait:
+      for having Jellypal around. Packs skip the wait:
       pay once on Gumroad and you get a license key on the spot —
       paste it in the app (settings → REDEEM CODE) and the jelly lands.
     </p>
@@ -346,7 +346,7 @@
     </div>
     <div class="note" id="myidhint">One-time purchase, not a subscription. After checkout Gumroad shows a
     <b>license key</b> (and emails it to you) — in the app: settings → REDEEM CODE → paste it, and the jelly lands.
-    Pulls cost 50 jelly · breeds cost 20 · premium accessories 800–1400 — and every drop is earnable free by typing.</div>
+    Pulls cost 50 jelly · breeds cost 20 · premium accessories 800–1400 — and every drop is earnable free while it runs.</div>
   </section>
 
   <section class="safe" id="safe">
@@ -358,9 +358,10 @@
       <div class="jp-info-card"><div class="jp-info-card__title">Tiny by design</div>
         <div class="jp-info-card__body">1.7 MB installer · 2.1 MB zip. It sips CPU and sleeps when you do —
         built for small laptops.</div></div>
-      <div class="jp-info-card"><div class="jp-info-card__title">Your typing stays yours</div>
-        <div class="jp-info-card__body">Keystrokes are <b>counted, never read</b> — the app can't see what you type.
-        The only network call is redeeming a jelly code. No account, no ads, no tracking.</div></div>
+      <div class="jp-info-card"><div class="jp-info-card__title">Zero permissions, period</div>
+        <div class="jp-info-card__body">Jellypal reads no keys, no screens, no other apps — it asks
+        macOS and Windows for <b>nothing</b>. The only network call is redeeming a jelly code.
+        No account, no ads, no tracking.</div></div>
       <div class="jp-info-card"><div class="jp-info-card__title">Why does Windows warn?</div>
         <div class="jp-info-card__body">Jellypal isn't code-signed (a certificate costs ~$300/yr — hard to justify
         for a $3 slime). Choose <b>More info → Run anyway</b>, and only download from
@@ -371,14 +372,14 @@
         clear its quarantine once: <code>xattr -d com.apple.quarantine ~/Downloads/Jellypal_*.dmg</code>
         — then mount it and run the <b>Fix-Jellypal.command</b> inside. If the <b>app</b> is the one
         called damaged: <code>xattr -cr /Applications/Jellypal.app</code></div></div>
-      <div class="jp-info-card"><div class="jp-info-card__title">Mac: typing earns jelly</div>
-        <div class="jp-info-card__body">macOS guards global typing — allow Jellypal under
-        <b>System Settings → Privacy &amp; Security → Input Monitoring</b>, then relaunch.
-        It counts keystrokes only; it can't see what you type.</div></div>
+      <div class="jp-info-card"><div class="jp-info-card__title">Mac, the easy way</div>
+        <div class="jp-info-card__body">Install through the <b>itch app</b> (itch.io/app → search
+        Jellypal) and macOS never warns — no quarantine, no Terminal, and zero permission
+        prompts: Jellypal needs none.</div></div>
       <div class="jp-info-card"><div class="jp-info-card__title">Verify your download</div>
         <div class="jp-info-card__body">SHA-256, checkable with <code>certutil -hashfile</code>:<br>
-        <code class="hash">setup.exe&nbsp; 2d205af571b98256e8cf12ba72b7c378106d6f79c23747f55945a0b9346ec45a</code><br>
-        <code class="hash">win.zip&nbsp;&nbsp;&nbsp; 2c12bd32a811480a7ca111b1e8cc35d0b37736af8d26869aa2ddfcc6133fae96</code><br>
+        <code class="hash">setup.exe&nbsp; e0c4dd32855a2d28dff7f7faed6e778813d6aeb4ff449106cc4f9be9abdee563</code><br>
+        <code class="hash">win.zip&nbsp;&nbsp;&nbsp; cc705a5af7075ca98add3f23be84b201a933342cb49f75d8e7522a6ef0c5d880</code><br>
         <code class="hash">mac.dmg&nbsp;&nbsp;&nbsp; 6e1fb63786c2470d5a071084877e5989b16bc66304479666ee51abae5791684a</code><br>
         <code class="hash">mac.tgz&nbsp;&nbsp;&nbsp; 0ec6eed8279aeb2c8552500b51231917102dfe1f6b0e0180f8086b02ad563bc2</code></div></div>
     </div>
@@ -393,30 +394,30 @@
       <details class="jp-disclosure" open><summary>Windows says "unrecognized app"?</summary><div class="jp-disclosure__body">Normal for a small unsigned app — choose <b>More info → Run anyway</b>. Jellypal is a plain local app. No ads, no tracking, no account.</div></details>
       <details class="jp-disclosure"><summary>Installer or zip?</summary><div class="jp-disclosure__body">The installer puts it in C:\Jellypal and bundles WebView2. The zip runs from anywhere but needs Edge WebView2 already installed (most Windows 11 PCs have it).</div></details>
       <details class="jp-disclosure"><summary>Will it slow my laptop?</summary><div class="jp-disclosure__body">It's a ~2 MB app built for small machines — it sips CPU and sleeps when you do.</div></details>
-      <details class="jp-disclosure"><summary>Does it record what I type?</summary><div class="jp-disclosure__body">No — it counts keystrokes, it can't read them. What you type never leaves your PC.</div></details>
+      <details class="jp-disclosure"><summary>Does it watch what I do?</summary><div class="jp-disclosure__body">No. It reads no keys, no screens, no windows — macOS and Windows will never even ask for a permission. Jelly drips on a timer.</div></details>
       <details class="jp-disclosure"><summary>Does it need internet?</summary><div class="jp-disclosure__body">Only when you redeem a jelly code. Everything else runs fully offline.</div></details>
       <details class="jp-disclosure"><summary>How do I uninstall?</summary><div class="jp-disclosure__body">Installer: remove it from Windows Settings → Apps. Zip: delete the folder. Your save lives in the app's data folder and goes with it.</div></details>
-      <details class="jp-disclosure"><summary>Mac version?</summary><div class="jp-disclosure__body">In the works. Windows first.</div></details>
+      <details class="jp-disclosure"><summary>Mac version?</summary><div class="jp-disclosure__body">Out now for Apple Silicon — the dmg above or the itch app. Intel Macs aren't supported yet.</div></details>
     </div>
   </section>
 
   <section class="recta">
     <h2 class="big"><canvas class="hico" data-ico="cushion" width="34" height="24"></canvas>Ready for a ranch of your own?</h2>
     <div class="cta" style="justify-content:center">
-      <a class="jp-button jp-button--primary" href="dl/Jellypal_0.2.18_x64-setup.exe">Download for Windows</a>
-      <a class="jp-button jp-button--quiet" href="dl/jellypal-0.2.18-win.zip">portable zip</a>
-      <a class="jp-button jp-button--quiet" href="dl/Jellypal_0.2.18_aarch64.dmg">macOS dmg</a>
+      <a class="jp-button jp-button--primary" href="dl/Jellypal_0.3.0_x64-setup.exe">Download for Windows</a>
+      <a class="jp-button jp-button--quiet" href="dl/jellypal-0.3.0-win.zip">portable zip</a>
+      <a class="jp-button jp-button--quiet" href="dl/Jellypal_0.3.0_aarch64.dmg">macOS dmg</a>
     </div>
     <div class="trust">Free to start · 1.7 MB · no account, no ads, no tracking.<br>
     If Windows says <b>"unrecognized app"</b>, choose <b>More info → Run anyway</b> — that's normal for a small unsigned app.<br>
     <b>Mac, zero warnings:</b> paste this in Terminal —
-    <code style="user-select:all">curl -L https://jellypal.fun/dl/jellypal-0.2.18-mac.tar.gz | tar xz -C /Applications &amp;&amp; open /Applications/Jellypal.app</code><br>
+    <code style="user-select:all">curl -L https://jellypal.fun/dl/jellypal-0.3.0-mac.tar.gz | tar xz -C /Applications &amp;&amp; open /Applications/Jellypal.app</code><br>
     — if the <b>dmg won't open</b> ("damaged"), run <code style="user-select:all">xattr -d com.apple.quarantine ~/Downloads/Jellypal_*.dmg</code> first, then open the <b>Fix-Jellypal.command</b> inside it. It's not damaged — it's unsigned.</div>
   </section>
   </main>
 
   <footer>
-    <div>made with 🫠 for small computers — v0.2.18 · early release</div>
+    <div>made with 🫠 for small computers — v0.3.0 · early release</div>
     <div>
       <a href="https://github.com/gyeongbin-38/JellyPal">github</a> ·
       <a href="https://github.com/gyeongbin-38/JellyPal/releases">release notes</a> ·

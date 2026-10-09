@@ -105,12 +105,13 @@ cv.addEventListener("pointercancel", () => {
 });
 cv.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); boop(); } });
 
-/* typing anywhere → jelly drop flies to counter (game loop, demo speed) */
-addEventListener("keydown", e => {
-  if (e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) return;
-  if (/input|textarea|select/i.test(e.target && e.target.tagName || "")) return;
-  jdrops.push({ x: p.x + rng(70) - 35, y: p.y - 20, tx: 16, ty: 11, t: 0, hit: false });
-});
+/* jelly drips in on a timer — the real loop, at demo speed (~4s ≈ 5min) */
+setInterval(() => {
+  if (paused || document.hidden) return;
+  const lucky = Math.random() < 0.08;
+  for (let i = 0, n = lucky ? 3 : 1; i < n; i++)
+    jdrops.push({ x: p.x + rng(70) - 35, y: p.y - 20 - i * 14, tx: 16, ty: 11, t: -i * 8, hit: false });
+}, 4000);
 
 /* ---------- tick ---------- */
 let paused = false;
