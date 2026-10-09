@@ -5580,6 +5580,8 @@ const BREED_CD = 5 * 3600 * 1000;
 const ACC_COST = 300;
 const slotPh = SPECIES.map(() => Math.random() * 5);
 let pullAnim = null;
+let pull10 = false;      // x10 toggle chip armed (bulk pull on PULL)
+let pullResults = null;  // { t0, list, refunded } — bulk pull result sheet
 let breedMode = false;
 let breedSel = [];
 let breedReadyAt = 0;
@@ -5802,17 +5804,26 @@ function drawRanch(ms) {
     drawText(rctx, "100", RESET_R[0] + 34, RESET_R[1] + 8, 1, "#2b1030");
   } else {
     drawText(rctx, "BREED", BREED_R[0] + 7, BREED_R[1] + 8, 1, "#2b1030");
+    // x10 bulk-pull toggle sits in the RUSH slot while no breed cooldown
+    // needs it — one tap arms/disarms the ten-pull sheet
+    rctx.fillStyle = pull10 ? "#eec23f" : "#e3d0aa";
+    rctx.fillRect(RESET_R[0], RESET_R[1], RESET_R[2], RESET_R[3]);
+    rctx.strokeStyle = pull10 ? "#8a5a20" : "#a8845c";
+    rctx.lineWidth = 2;
+    rctx.strokeRect(RESET_R[0] + 1, RESET_R[1] + 1, RESET_R[2] - 2, RESET_R[3] - 2);
+    drawText(rctx, pull10 ? "X10!" : "X1", RESET_R[0] + (pull10 ? 10 : 18), RESET_R[1] + 8, 1, pull10 ? "#2b1030" : "#8a6b4a");
   }
 
-  // PULL button
-  const canPull = jelly >= PULL_COST && !pullAnim && !breedMode && !shopMode;
+  // PULL button — armed bulk mode charges tenfold and opens the sheet
+  const pullCost = pull10 ? PULL_COST * 10 : PULL_COST;
+  const canPull = jelly >= pullCost && !pullAnim && !pullResults && !breedMode && !shopMode;
   rctx.fillStyle = canPull ? "#4fbd82" : "#cbb896";
   rctx.fillRect(PULL_R[0], PULL_R[1], PULL_R[2], PULL_R[3]);
   rctx.strokeStyle = "#5c4632";
   rctx.strokeRect(PULL_R[0] + 1, PULL_R[1] + 1, PULL_R[2] - 2, PULL_R[3] - 2);
   drawText(rctx, "PULL", PULL_R[0] + 5, PULL_R[1] + 8, 1, "#10231a");
-  bubbleIcon(rctx, PULL_R[0] + 38, PULL_R[1] + 11);
-  drawText(rctx, String(PULL_COST), PULL_R[0] + 48, PULL_R[1] + 8, 1, "#10231a");
+  bubbleIcon(rctx, PULL_R[0] + (pull10 ? 26 : 38), PULL_R[1] + 11);
+  drawText(rctx, String(pullCost), PULL_R[0] + PULL_R[2] - 3 - textW(String(pullCost), 1), PULL_R[1] + 8, 1, "#10231a");
 
   // SHOP button: accessory store
   rctx.fillStyle = shopMode ? "#e05a6e" : "#8fd4f0";
@@ -5982,6 +5993,7 @@ function drawRanch(ms) {
   }
 
   if (pullAnim) drawPull(ms);
+  if (pullResults) drawPullTen(ms);
 }
 
 // ---------- nursery: its own floating window for baby hybrids ----------
@@ -6723,10 +6735,54 @@ function drawPull(ms) {
   }
 }
 
+// bulk pull results sheet: 5x2 grid of the ten rolls — rarity-framed
+// sprite cells with NEW/SHINY flags and the summed duplicate refund.
+// stays up until a click; the reveal anim is a one-beat stagger-in.
+function drawPullTen(ms) {
+  const el = ms - pullResults.t0;
+  rctx.fillStyle = "rgba(60, 45, 25, 0.45)";
+  rctx.fillRect(0, 42, RW, rc.height - 42);
+  const pw = 432, ph = 226;
+  const px = Math.round(RW / 2 - pw / 2), py = 46;
+  rctx.fillStyle = "#f7ecd7";
+  rctx.fillRect(px, py, pw, ph);
+  rctx.strokeStyle = "#5c4632";
+  rctx.lineWidth = 3;
+  rctx.strokeRect(px + 1, py + 1, pw - 2, ph - 2);
+  drawText(rctx, "10 PULLS!", px + pw / 2 - textW("10 PULLS!", 2) / 2, py + 9, 2, "#5c4632");
+  const CW = 78, CH = 78, GX = px + 14, GY = py + 30;
+  pullResults.list.forEach((r, i) => {
+    const col = i % 5, row2 = Math.floor(i / 5);
+    const x = GX + col * (CW + 6), y = GY + row2 * (CH + 6);
+    const sp = SPECIES[r.idx];
+    // stagger: each cell pops in 60ms after the previous
+    const tt = Math.max(0, Math.min(1, (el - i * 60) / 180));
+    if (tt <= 0) return;
+    const pop = 0.6 + tt * 0.4;
+    rctx.fillStyle = "#efe0c2";
+    rctx.fillRect(x, y, CW, CH);
+    rctx.strokeStyle = RARITY_COLOR[sp.r];
+    rctx.lineWidth = r.shiny ? 3 : 2;
+    rctx.strokeRect(x + 1, y + 1, CW - 2, CH - 2);
+    const iw = Math.round(62 * pop), ih = Math.round(45 * pop);
+    rctx.drawImage(sprite("happy", r.idx, false), x + (CW - iw) / 2, y + 6 + (45 - ih) / 2, iw, ih);
+    const nm = spName(sp).toUpperCase();
+    drawText(rctx, nm.slice(0, 12), x + CW / 2 - textW(nm.slice(0, 12), 1) / 2, y + 52, 1, "#5c4632");
+    const tag = r.shiny ? "SHINY!" : r.isNew ? "NEW!" : `+${DUP_REFUND}`;
+    const tc = r.shiny ? "#eec23f" : r.isNew ? "#4fbd82" : "#a8845c";
+    drawText(rctx, tag, x + CW / 2 - textW(tag, 1) / 2, y + 64, 1, tc, null, true);
+  });
+  const foot = (pullResults.refunded > 0
+    ? `DUP REFUNDS +${pullResults.refunded} JELLY  -  `
+    : "") + "1 RARE+ GUARANTEED  -  CLICK TO CLOSE";
+  drawText(rctx, foot, px + pw / 2 - textW(foot, 1) / 2, py + ph - 16, 1, "#8a6b4a");
+}
+
 function toggleRanch(force) {
   ranchOpen = force !== undefined ? force : !ranchOpen;
   ranch.classList.toggle("open", ranchOpen);
   accPick = null;
+  pullResults = null; // a closed ranch drops the pending results sheet
   // infoPick survives — the card is its own overlay, not ranch content
   if (ranchOpen) {
     fitRanch();
@@ -6754,6 +6810,8 @@ rc.addEventListener("pointerdown", (e) => {
   const my = e.clientY - r.top;
   const inR = (R) => mx >= R[0] && mx <= R[0] + R[2] && my >= R[1] && my <= R[1] + R[3];
   if (inR(CLOSE_R)) { toggleRanch(false); return; }
+  // a bulk results sheet swallows its dismissal click
+  if (pullResults) { pullResults = null; sfx.pop(); return; }
   if (pullAnim) return;
   // header grip: drag any button-free strip of the title bar to move the
   // window; the nursery rides along when it's stacked below
@@ -6846,13 +6904,19 @@ rc.addEventListener("pointerdown", (e) => {
     }
     return;
   }
-  if (inR(RESET_R) && Date.now() < breedReadyAt) {
-    if (jelly >= 100) {
-      jelly -= 100;
-      breedReadyAt = 0;
-      dirty = true;
-      sfx.reveal();
-    } else sfx.pop();
+  if (inR(RESET_R)) {
+    if (Date.now() < breedReadyAt) {
+      if (jelly >= 100) {
+        jelly -= 100;
+        breedReadyAt = 0;
+        dirty = true;
+        sfx.reveal();
+      } else sfx.pop();
+    } else if (!breedMode && !shopMode) {
+      // no cooldown to rush: the slot is the x10 bulk-pull toggle
+      pull10 = !pull10;
+      sfx.pop();
+    }
     return;
   }
   if (inR(BREED_R)) {
@@ -6868,7 +6932,7 @@ rc.addEventListener("pointerdown", (e) => {
     }
     return;
   }
-  if (inR(PULL_R) && !breedMode) { doPull(); return; }
+  if (inR(PULL_R) && !breedMode) { (pull10 ? doPull10 : doPull)(); return; }
   const items = pageItems();
   for (let k = 0; k < items.length; k++) {
     const i = items[k];
@@ -6971,17 +7035,9 @@ function rollSpecies() {
   return pool[(Math.random() * pool.length) | 0];
 }
 
-function doPull() {
-  if (jelly < PULL_COST || pullAnim) return;
-  // free demo: the collection caps at DEMO_MAX base species
-  if (DEMO && owned.filter((id) => !id.startsWith("hyb")).length >= DEMO_MAX) {
-    bangs.push({ x: petX, y: petY - 110, life: 2.2, t: "DEMO FULL - GET FULL VER" });
-    sfx.pop();
-    return;
-  }
-  jelly -= PULL_COST;
-  stats.pulls = addSavedInt(stats.pulls, 1);
-  const sp = rollSpecies();
+// shared per-pull application: own/dup-refund, shiny roll, accessory drop.
+// returns the result sheet entry the reveal UI renders
+function pullApply(sp) {
   const idx = SPECIES.indexOf(sp);
   const isNew = !owned.includes(sp.id);
   if (isNew) owned.push(sp.id);
@@ -6996,11 +7052,54 @@ function doPull() {
     acc = locked[(Math.random() * locked.length) | 0].id;
     accOwned.push(acc);
   }
+  return { idx, isNew, shiny, acc };
+}
+
+function doPull() {
+  if (jelly < PULL_COST || pullAnim || pullResults) return;
+  // free demo: the collection caps at DEMO_MAX base species
+  if (DEMO && owned.filter((id) => !id.startsWith("hyb")).length >= DEMO_MAX) {
+    bangs.push({ x: petX, y: petY - 110, life: 2.2, t: "DEMO FULL - GET FULL VER" });
+    sfx.pop();
+    return;
+  }
+  jelly -= PULL_COST;
+  stats.pulls = addSavedInt(stats.pulls, 1);
+  const r = pullApply(rollSpecies());
   dirty = true;
   checkDex();
-  pullAnim = { t0: performance.now(), idx, isNew, acc, shiny };
+  pullAnim = { t0: performance.now(), idx: r.idx, isNew: r.isNew, acc: r.acc, shiny: r.shiny };
   sfx.drop();
   setTimeout(() => sfx.reveal(), 700);
+}
+
+// x10 bulk pull: ten rolls at once, results sheet instead of ten capsule
+// anims. one rare-or-better is guaranteed — the sheet upgrades a common
+// pick if all ten rolled commons.
+function doPull10() {
+  if (jelly < PULL_COST * 10 || pullAnim || pullResults) return;
+  if (DEMO && owned.filter((id) => !id.startsWith("hyb")).length >= DEMO_MAX) {
+    bangs.push({ x: petX, y: petY - 110, life: 2.2, t: "DEMO FULL - GET FULL VER" });
+    sfx.pop();
+    return;
+  }
+  jelly -= PULL_COST * 10;
+  stats.pulls = addSavedInt(stats.pulls, 10);
+  const picks = [];
+  for (let i = 0; i < 10; i++) picks.push(rollSpecies());
+  if (!picks.some((sp) => sp.r >= 1)) {
+    let pool = SPECIES.filter((s) => s.r >= 1 && !s.id.startsWith("hyb") && seasonOpen(s));
+    if (!pool.length) pool = SPECIES.filter((s) => s.r >= 1 && !s.id.startsWith("hyb"));
+    picks[(Math.random() * picks.length) | 0] = pool[(Math.random() * pool.length) | 0];
+  }
+  const list = picks.map(pullApply);
+  const refunded = list.filter((r) => !r.isNew).length * DUP_REFUND;
+  dirty = true;
+  checkDex();
+  pullResults = { t0: performance.now(), list, refunded };
+  if (list.some((r) => r.isNew || r.shiny)) starUntil = performance.now() + 1400;
+  sfx.drop();
+  setTimeout(() => sfx.reveal(), 500);
 }
 
 // breeding: two parents -> a hybrid baby mixing their colors.
