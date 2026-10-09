@@ -199,6 +199,34 @@ Size: S < half day, M = 1-2 days, L = multi-day.
 - ~~Localization verdict~~ — DEFERRED: 5x7 ASCII FONT can't do KR/JP;
   needs a bitmap font project + textW fixed-width assumptions
 
+## Mac App Store track (sandboxed companion-card SKU)
+
+Ship shape: same codebase, `tauri.store.conf.json` merges over the base
+config — opaque 480x560 always-on-top card, `com.jellypal.store`,
+`macOSPrivateApi: false`, sandbox entitlements, privacy manifest in
+`Contents/Resources`, macOS 12.0 floor. CI job `store` strips
+`macos-private-api` from Cargo.toml + WebView2Loader.dll from resources
+before bundling.
+
+- [x] `is_store_build` backend flag (cargo feature `store`)
+- [x] Store frontend mode: BOOT/JELLY/REDEEM/WEATHER rows hidden,
+      world confined to card floor, full-card hitbox, window platforms
+      ignored (`_storesim.cjs` 8/8)
+- [x] Zero subprocess: `defaults`→CFPreferences, `curl`→ureq,
+      `/usr/bin/open`→NSWorkspace FFI
+- [x] Zero outbound network in store build (no update probe, no weather
+      geo) — privacy manifest stays "collects nothing"
+- [x] LaunchAgent autostart gated off in store build
+- [x] `macos-store/sign.sh`: codesign + productbuild .pkg for Transporter
+- [ ] Apple Developer account ($99/yr) + App Store Connect app record
+- [ ] Sign + validate on a real Mac (entitlements bake at codesign time;
+      CI builds are unsigned)
+- [ ] StoreKit IAP if paid jelly packs come to the store SKU
+      (direct SKU keeps Gumroad/redeem — hidden there)
+- [ ] `SMAppService` autostart for the store build (currently off)
+- [ ] App Store metadata: screenshots of the card, description,
+      privacy labels ("Data Not Collected")
+
 ## Next up (F2P + gem packs — Steam deferred)
 
 0. ~~itch.io page + account~~ — LIVE: https://gyeongbin.itch.io/jellypal
