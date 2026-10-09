@@ -26,7 +26,7 @@
     "macOS": {
       "entitlements": "macos-store/entitlements.plist",
       "files": {
-        "macos-store/PrivacyInfo.xcprivacy": "PrivacyInfo.xcprivacy"
+        "PrivacyInfo.xcprivacy": "macos-store/PrivacyInfo.xcprivacy"
       }
     }
   }
