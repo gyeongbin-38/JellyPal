@@ -2820,14 +2820,30 @@ fn sanitize_ack_nonces(nonces: Vec<String>) -> Vec<String> {
     clean
 }
 
-// `Command::output` buffers child stdout without a ceiling. Read at most one
-// byte beyond the policy instead, then terminate an oversized producer before
-// it can make a broken/malicious endpoint consume arbitrary memory.
+// Read at most one byte beyond the policy, then refuse an oversized
+// producer before it can make a broken/malicious endpoint consume
+// arbitrary memory. Shared by child-stdout reads and HTTP response bodies.
+fn read_capped(reader: impl std::io::Read, max_bytes: usize) -> std::io::Result<Vec<u8>> {
+    use std::io::Read as _;
+    let mut bytes = Vec::with_capacity(max_bytes.min(8 * 1024));
+    reader
+        .take(max_bytes.saturating_add(1) as u64)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() > max_bytes {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "response exceeds policy",
+        ));
+    }
+    Ok(bytes)
+}
+
+// `Command::output` buffers child stdout without a ceiling — pipe through
+// the cap and terminate an oversized producer instead.
 fn bounded_command_output(
     command: &mut std::process::Command,
     max_bytes: usize,
 ) -> std::io::Result<Vec<u8>> {
-    use std::io::Read as _;
     use std::process::Stdio;
 
     let mut child = command
@@ -2842,23 +2858,14 @@ fn bounded_command_output(
             "child stdout unavailable",
         ));
     };
-    let mut bytes = Vec::with_capacity(max_bytes.min(8 * 1024));
-    let read = stdout
-        .take(max_bytes.saturating_add(1) as u64)
-        .read_to_end(&mut bytes);
-    if let Err(e) = read {
-        let _ = child.kill();
-        let _ = child.wait();
-        return Err(e);
-    }
-    if bytes.len() > max_bytes {
-        let _ = child.kill();
-        let _ = child.wait();
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidData,
-            "child response exceeds policy",
-        ));
-    }
+    let bytes = match read_capped(stdout, max_bytes) {
+        Ok(b) => b,
+        Err(e) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(e);
+        }
+    };
     let status = child.wait()?;
     if !status.success() {
         return Err(std::io::Error::new(
@@ -2886,40 +2893,42 @@ fn run_checked_command(command: &mut std::process::Command) -> std::io::Result<(
     }
 }
 
-fn configured_curl_command(args: &[&str]) -> std::process::Command {
-    let mut command = std::process::Command::new("curl");
-    // curl only honors -q/--disable as the first argument. This prevents a
-    // user's .curlrc from adding proxies, credentials, output files, or other
-    // behavior to Jellypal's fixed, bounded requests.
-    command.arg("-q").args(args);
-    command
+// In-process HTTP client — a curl subprocess cannot run inside the App
+// Sandbox. One shared agent: an 8s global timeout bounds every call
+// (the old per-request --max-time values were 5–8s). http_status_as_error
+// is off so an HTTP error page still reaches parse_server_json as a body,
+// matching the old curl -s contract where only transport failure meant
+// "offline".
+fn http_agent() -> &'static ureq::Agent {
+    use std::sync::OnceLock;
+    static AGENT: OnceLock<ureq::Agent> = OnceLock::new();
+    AGENT.get_or_init(|| {
+        ureq::Agent::new_with_config(
+            ureq::config::Config::builder()
+                .timeout_global(Some(std::time::Duration::from_secs(8)))
+                .http_status_as_error(false)
+                .build(),
+        )
+    })
 }
 
-fn curl_text(args: &[&str], max_bytes: usize) -> Option<String> {
-    let mut command = configured_curl_command(args);
-    String::from_utf8(bounded_command_output(&mut command, max_bytes).ok()?).ok()
+fn http_post(url: &str, body: &str) -> Option<String> {
+    let mut resp = http_agent()
+        .post(url)
+        .header("Content-Type", "application/json")
+        .send(body)
+        .ok()?;
+    String::from_utf8(read_capped(resp.body_mut().as_reader(), MAX_SERVER_RESPONSE_BYTES).ok()?)
+        .ok()
 }
 
-fn curl_post(url: &str, body: &str) -> Option<String> {
-    curl_text(
-        &[
-            "-s",
-            "--max-time",
-            "8",
-            "-X",
-            "POST",
-            "-H",
-            "Content-Type: application/json",
-            "-d",
-            body,
-            url,
-        ],
-        MAX_SERVER_RESPONSE_BYTES,
-    )
+fn http_get(url: &str, max_bytes: usize) -> Option<String> {
+    let mut resp = http_agent().get(url).call().ok()?;
+    String::from_utf8(read_capped(resp.body_mut().as_reader(), max_bytes).ok()?).ok()
 }
 
 // A transport-level success is not the same as an application-level success:
-// curl can exit zero for HTTP error responses, and the worker reports those as
+// an HTTP error response is still a response, and the worker reports those as
 // JSON `{error: ...}` bodies. Keep every grant endpoint on the same strict
 // contract so a refusal or malformed response is never mistaken for success.
 fn parse_server_json(response: &str) -> Result<serde_json::Value, String> {
@@ -2961,11 +2970,8 @@ fn network_policy_self_test() -> bool {
     let bounded_flood = sanitize_ack_nonces(flood);
     let mut invalid_first = vec!["BAD".to_string(); MAX_ACK_INPUT_NONCES];
     invalid_first.push("ABCDEFGH".into());
-    let curl_command = configured_curl_command(&["-s", "https://example.com/version.txt"]);
-    let curl_args: Vec<String> = curl_command
-        .get_args()
-        .map(|arg| arg.to_string_lossy().into_owned())
-        .collect();
+    let capped_ok = read_capped(&b"OK"[..], 64).ok();
+    let capped_over = read_capped(&vec![b'X'; 65][..], 64).is_err();
 
     let small_output = std::env::current_exe().ok().and_then(|exe| {
         let mut command = std::process::Command::new(exe);
@@ -3023,13 +3029,8 @@ fn network_policy_self_test() -> bool {
             && bounded_flood.first().map(String::as_str) == Some("AAAAAAAA")
             && bounded_flood.last().map(String::as_str) == Some("AAAAAAB7"),
         sanitize_ack_nonces(invalid_first).is_empty(),
-        curl_args.first().map(String::as_str) == Some("-q"),
-        curl_args.get(1..).is_some_and(|args| {
-            args == [
-                "-s".to_string(),
-                "https://example.com/version.txt".to_string(),
-            ]
-        }),
+        capped_ok.as_deref() == Some(b"OK"),
+        capped_over,
         small_output.as_deref() == Some(b"OK"),
         large_rejected,
         checked_success,
@@ -3090,7 +3091,7 @@ fn verify_grant(v: &serde_json::Value, uid: &str) -> Result<(String, u64), Strin
 // Err("offline") means the server never answered — the caller may fall back
 // to offline verification; any other Err is a real refusal (e.g. a code
 // already claimed by a different uid) and must NOT fall back.
-// async so curl's up-to-8s block lands on a runtime worker, not the event
+// async so the http agent's up-to-8s block lands on a runtime worker, not the event
 // loop — a sync command here froze set_clickable/set_dragging dispatch and
 // made the overlay briefly eat clicks on a slow/flaky network
 #[tauri::command]
@@ -3102,7 +3103,7 @@ async fn redeem_bound(uid: String, code: String) -> Result<u64, String> {
         return Err("bad request".into());
     }
     let body = serde_json::json!({ "uid": uid, "code": code }).to_string();
-    let resp = curl_post(&format!("{SERVER_URL}/redeem"), &body).ok_or("offline")?;
+    let resp = http_post(&format!("{SERVER_URL}/redeem"), &body).ok_or("offline")?;
     let v = parse_server_json(&resp)?;
     let g = v.get("grant").cloned().ok_or("bad response")?;
     verify_grant(&g, &uid).map(|(_, gems)| gems)
@@ -3120,7 +3121,7 @@ async fn claim_grants(uid: String) -> Result<String, String> {
         return Err("bad request".into());
     }
     let body = serde_json::json!({ "uid": uid }).to_string();
-    let resp = curl_post(&format!("{SERVER_URL}/claim"), &body).ok_or("offline")?;
+    let resp = http_post(&format!("{SERVER_URL}/claim"), &body).ok_or("offline")?;
     let v = parse_server_json(&resp)?;
     let mut out = Vec::new();
     let grants = v
@@ -3148,19 +3149,19 @@ async fn ack_grants(uid: String, nonces: Vec<String>) -> Result<(), String> {
         return Ok(());
     }
     let body = serde_json::json!({ "uid": uid, "nonces": nonces }).to_string();
-    let response = curl_post(&format!("{SERVER_URL}/ack"), &body).ok_or("offline")?;
+    let response = http_post(&format!("{SERVER_URL}/ack"), &body).ok_or("offline")?;
     parse_ack_response(&response)
 }
 
 #[tauri::command]
 async fn check_update(url: String) -> Result<String, String> {
     // version probe — fetches a tiny text file (e.g. "0.2.1") hosted next to
-    // the itch page. curl.exe ships with Windows 10+, so no http crate needed
+    // the itch page
     if !valid_https_url(&url) {
         return Err("refusing non-https url".into());
     }
-    let body = curl_text(&["-s", "--max-time", "6", &url], MAX_VERSION_RESPONSE_BYTES)
-        .ok_or("curl failed")?
+    let body = http_get(&url, MAX_VERSION_RESPONSE_BYTES)
+        .ok_or("fetch failed")?
         .trim()
         .to_string();
     if body.is_empty() || body.len() > 32 || !valid_release_version(&body) {
@@ -3169,18 +3170,11 @@ async fn check_update(url: String) -> Result<String, String> {
     Ok(body)
 }
 
-fn curl_get(url: &str, max_secs: &str) -> Option<String> {
-    curl_text(
-        &["-s", "--max-time", max_secs, url],
-        MAX_WEATHER_RESPONSE_BYTES,
-    )
-}
-
 #[tauri::command]
 async fn get_weather() -> Option<i64> {
     // local weather for cosmetic reactions (umbrella, snowflakes).
     // ipapi.co gives coarse lat/lon over https; open-meteo needs no key.
-    let geo = curl_get("https://ipapi.co/json/", "5")?;
+    let geo = http_get("https://ipapi.co/json/", MAX_WEATHER_RESPONSE_BYTES)?;
     let g: serde_json::Value = serde_json::from_str(&geo).ok()?;
     let lat = g.get("latitude")?.as_f64()?;
     let lon = g.get("longitude")?.as_f64()?;
@@ -3188,9 +3182,17 @@ async fn get_weather() -> Option<i64> {
         "https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&current_weather=true",
         lat, lon
     );
-    let met = curl_get(&url, "5")?;
+    let met = http_get(&url, MAX_WEATHER_RESPONSE_BYTES)?;
     let m: serde_json::Value = serde_json::from_str(&met).ok()?;
     m.pointer("/current_weather/weathercode")?.as_i64()
+}
+
+// True when built with `--features store` — the frontend reads this once
+// to switch into the sandboxed companion-card UI (no redeem, no overlay
+// toggles) and to hide controls that cannot work under the App Sandbox.
+#[tauri::command]
+fn is_store_build() -> bool {
+    cfg!(feature = "store")
 }
 
 #[tauri::command]
@@ -3201,7 +3203,15 @@ fn set_autostart(enable: bool) -> Result<(), String> {
         // belongs in startup when the user asks for it
         return set_windows_autostart(enable);
     }
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "store"))]
+    {
+        // A sandboxed app cannot drop LaunchAgents into ~/Library — the
+        // store path to this is SMAppService (login items). Until that's
+        // wired, the toggle reports unsupported and the UI hides it.
+        let _ = enable;
+        return Err("autostart unavailable in this build".into());
+    }
+    #[cfg(all(target_os = "macos", not(feature = "store")))]
     {
         // per-user LaunchAgent — the macOS equivalent of the Run key
         let home = std::env::var("HOME").map_err(|e| e.to_string())?;
@@ -3410,26 +3420,99 @@ fn any_mouse_button_held() -> bool {
 // bottom floor get covered every time the Dock pops. Read com.apple.dock
 // once at startup and inset the matching edge by the tile size.
 // Returns (orientation, reserve_px) — reserve 0 when dock stays hidden
-// or the lookup fails.
+// or the lookup fails. CFPreferencesCopyAppValue is the public,
+// sandbox-safe API for this — no `defaults` subprocess.
+#[cfg(target_os = "macos")]
+mod dock_prefs {
+    use std::ffi::{c_char, c_void, CString};
+
+    pub enum Pref {
+        Bool(bool),
+        Num(f64),
+        Str(String),
+    }
+
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        fn CFStringCreateWithCString(
+            alloc: *const c_void,
+            s: *const c_char,
+            encoding: u32,
+        ) -> *const c_void;
+        fn CFPreferencesCopyAppValue(
+            key: *const c_void,
+            app_id: *const c_void,
+        ) -> *const c_void;
+        fn CFRelease(cf: *const c_void);
+        fn CFGetTypeID(cf: *const c_void) -> usize;
+        fn CFBooleanGetTypeID() -> usize;
+        fn CFBooleanGetValue(b: *const c_void) -> bool;
+        fn CFNumberGetTypeID() -> usize;
+        fn CFNumberGetValue(n: *const c_void, ty: i64, out: *mut f64) -> bool;
+        fn CFStringGetTypeID() -> usize;
+        fn CFStringGetLength(s: *const c_void) -> isize;
+        fn CFStringGetMaximumSizeForEncoding(len: isize, enc: u32) -> isize;
+        fn CFStringGetCString(s: *const c_void, buf: *mut c_char, size: isize, enc: u32)
+            -> bool;
+    }
+
+    const UTF8: u32 = 0x0800_0100; // kCFStringEncodingUTF8
+    const K_DOUBLE: i64 = 13; // kCFNumberDoubleType
+
+    fn cfstr(s: &str) -> *const c_void {
+        let c = CString::new(s).expect("preference key has no NUL");
+        unsafe { CFStringCreateWithCString(std::ptr::null(), c.as_ptr(), UTF8) }
+    }
+
+    // Reads one key from com.apple.dock. Value class is checked before
+    // coercion so a user-edited plist with an unexpected type falls back
+    // to our defaults instead of misparsing.
+    pub fn value(key: &str) -> Option<Pref> {
+        unsafe {
+            let k = cfstr(key);
+            let app = cfstr("com.apple.dock");
+            let v = CFPreferencesCopyAppValue(k, app);
+            CFRelease(k);
+            CFRelease(app);
+            if v.is_null() {
+                return None;
+            }
+            let tid = CFGetTypeID(v);
+            let out = if tid == CFBooleanGetTypeID() {
+                Some(Pref::Bool(CFBooleanGetValue(v)))
+            } else if tid == CFNumberGetTypeID() {
+                let mut n = 0.0f64;
+                CFNumberGetValue(v, K_DOUBLE, &mut n).then_some(Pref::Num(n))
+            } else if tid == CFStringGetTypeID() {
+                let len = CFStringGetMaximumSizeForEncoding(CFStringGetLength(v), UTF8) + 1;
+                let mut buf = vec![0u8; len as usize];
+                CFStringGetCString(v, buf.as_mut_ptr() as *mut c_char, len, UTF8)
+                    .then(|| String::from_utf8_lossy(&buf).trim_matches('\0').to_string())
+                    .map(Pref::Str)
+            } else {
+                None
+            };
+            CFRelease(v);
+            out
+        }
+    }
+}
+
 #[cfg(target_os = "macos")]
 fn dock_reserve() -> (String, f64) {
-    fn dflt(key: &str) -> Option<String> {
-        std::process::Command::new("defaults")
-            .args(["read", "com.apple.dock", key])
-            .output()
-            .ok()
-            .filter(|o| o.status.success())
-            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_lowercase())
-    }
-    let autohide = matches!(dflt("autohide").as_deref(), Some("1") | Some("true"));
-    if !autohide {
+    use dock_prefs::{value as pref, Pref};
+    if !matches!(pref("autohide"), Some(Pref::Bool(true))) {
         return (String::new(), 0.0);
     }
-    let orient = dflt("orientation").unwrap_or_else(|| "bottom".into());
-    let tiles = dflt("tilesize")
-        .and_then(|s| s.parse::<f64>().ok())
-        .unwrap_or(48.0)
-        .clamp(24.0, 128.0);
+    let orient = match pref("orientation") {
+        Some(Pref::Str(s)) => s.to_lowercase(),
+        _ => "bottom".into(),
+    };
+    let tiles = match pref("tilesize") {
+        Some(Pref::Num(n)) => n,
+        _ => 48.0,
+    }
+    .clamp(24.0, 128.0);
     // magnification can swell hovered tiles well past tilesize — keep a
     // little air so the slime's feet never sit inside the pop zone
     (orient, tiles + 14.0)
@@ -3442,12 +3525,67 @@ fn dock_reserve() -> (String, f64) {
 
 
 
+// NSWorkspace.openURL is the sandbox-sanctioned way to hand a URL or
+// folder to the OS — spawning `/usr/bin/open` is not allowed in the App
+// Sandbox. Raw objc calls keep this dependency-free.
+#[cfg(target_os = "macos")]
+fn ns_open(target: &str) -> Result<(), String> {
+    use std::ffi::{c_char, c_void, CString};
+
+    #[link(name = "objc", kind = "dylib")]
+    extern "C" {
+        fn objc_getClass(name: *const c_char) -> *const c_void;
+        fn sel_registerName(name: *const c_char) -> *const c_void;
+        #[link_name = "objc_msgSend"]
+        fn send0(obj: *const c_void, sel: *const c_void) -> *const c_void;
+        #[link_name = "objc_msgSend"]
+        fn send_obj(obj: *const c_void, sel: *const c_void, a: *const c_void) -> *const c_void;
+        #[link_name = "objc_msgSend"]
+        fn send_cstr(obj: *const c_void, sel: *const c_void, a: *const c_char) -> *const c_void;
+        #[link_name = "objc_msgSend"]
+        fn send_bool(obj: *const c_void, sel: *const c_void, a: *const c_void) -> bool;
+    }
+    unsafe {
+        let cls = |n: &[u8]| objc_getClass(n.as_ptr() as *const c_char);
+        let sel = |n: &[u8]| sel_registerName(n.as_ptr() as *const c_char);
+        let c = CString::new(target).map_err(|_| "bad target".to_string())?;
+        let ns_str = send_cstr(
+            cls(b"NSString\0"),
+            sel(b"stringWithUTF8String:\0"),
+            c.as_ptr(),
+        );
+        if ns_str.is_null() {
+            return Err("string alloc failed".into());
+        }
+        let url_sel = if target.starts_with("http") {
+            sel(b"URLWithString:\0")
+        } else {
+            sel(b"fileURLWithPath:\0")
+        };
+        let url = send_obj(cls(b"NSURL\0"), url_sel, ns_str);
+        if url.is_null() {
+            return Err("url alloc failed".into());
+        }
+        let ws = send0(cls(b"NSWorkspace\0"), sel(b"sharedWorkspace\0"));
+        if ws.is_null() {
+            return Err("workspace unavailable".into());
+        }
+        if send_bool(ws, sel(b"openURL:\0"), url) {
+            Ok(())
+        } else {
+            Err("openURL refused".into())
+        }
+    }
+}
+
 // open a folder or url with the OS default handler
 fn open_with_shell(target: &str) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        return ns_open(target);
+    }
     #[cfg(windows)]
     let cmd = "explorer";
-    #[cfg(target_os = "macos")]
-    let cmd = "open";
     #[cfg(all(unix, not(target_os = "macos")))]
     let cmd = "xdg-open";
     std::process::Command::new(cmd)
@@ -3643,7 +3781,8 @@ pub fn run() {
             check_update,
             get_monitors,
             get_weather,
-            set_autostart
+            set_autostart,
+            is_store_build
         ])
         .setup(|app| {
             let window = required_runtime_value(app.get_webview_window("main"), "main window")?;

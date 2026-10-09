@@ -71,9 +71,8 @@ jobs:
 
                xattr -cr /Applications/Jellypal.app
 
-          3. Typing earns jelly — macOS guards global input, so allow
-             Jellypal under System Settings -> Privacy & Security ->
-             Input Monitoring, then relaunch.
+          3. Done — Jellypal asks for no permissions at all. It earns
+             jelly on a passive drip while it runs.
           EOF
           hdiutil create -volname Jellypal -srcfolder "$ROOT" -ov -format UDZO \
             "$OUT/Jellypal_${VER}_aarch64.dmg"
@@ -102,3 +101,39 @@ jobs:
           ls -la "$LOGDIR" 2>/dev/null || true
           cat "$LOGDIR/crash.log" 2>/dev/null | tail -20 || true
           cat "$LOGDIR/hook.log" 2>/dev/null | tail -10 || true
+
+  # App Store flavor: same codebase, different manifest. macos-private-api
+  # is physically removed from Cargo.toml so no private symbols reach the
+  # binary, then the store config (sandbox entitlements, opaque card
+  # window, com.jellypal.store) merges over tauri.conf.json.
+  store:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: npm ci
+      - name: Strip private API for store build
+        run: sed -i '' 's/, "macos-private-api"//' src-tauri/Cargo.toml
+      - uses: tauri-apps/tauri-action@v0
+        with:
+          args: --config src-tauri/tauri.store.conf.json --features store --bundles app
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jellypal-store
+          path: src-tauri/target/release/bundle/macos/Jellypal.app.tar.gz
+          retention-days: 14
+      - name: Smoke test — launch store app, verify it stays alive
+        run: |
+          BIN="src-tauri/target/release/bundle/macos/Jellypal.app/Contents/MacOS/jellypal"
+          "$BIN" &
+          APP_PID=$!
+          sleep 20
+          if kill -0 $APP_PID 2>/dev/null; then
+            echo "PASS: store build alive after 20s (pid $APP_PID)"
+            kill $APP_PID || true
+          else
+            echo "FAIL: store build exited early"
+            exit 1
+          fi

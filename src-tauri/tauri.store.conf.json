@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "identifier": "com.jellypal.store",
+  "app": {
+    "macOSPrivateApi": false,
+    "windows": [
+      {
+        "title": "Jellypal",
+        "width": 480,
+        "height": 560,
+        "focus": false,
+        "decorations": false,
+        "transparent": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": false,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": true,
+        "shadow": true,
+        "visibleOnAllWorkspaces": false
+      }
+    ]
+  },
+  "bundle": {
+    "targets": ["app"],
+    "macOS": {
+      "entitlements": "macos-store/entitlements.plist",
+      "files": {
+        "macos-store/PrivacyInfo.xcprivacy": "PrivacyInfo.xcprivacy"
+      }
+    }
+  }
+}

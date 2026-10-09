@@ -19,6 +19,17 @@ body {
   image-rendering: pixelated;
 }
 
+/* store build: the opaque companion card — the webview paints its own
+   backdrop since a transparent WKWebView needs APIs the App Store bans.
+   Cream sky + a fixed-height ground strip the slime walks on. */
+body.store {
+  background:
+    linear-gradient(180deg, #fdf4dd 0%, #f7ecd7 calc(100% - 132px), #e8d5ae calc(100% - 130px), #dcc49a 100%) !important;
+}
+body.store #c {
+  background: transparent !important;
+}
+
 /* ranch + nursery + status card: single canvas each, drawn as pixels */
 #ranch,
 #nursery,

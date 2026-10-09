@@ -1905,6 +1905,7 @@ function sanitizeMonitorPlatforms(value) {
   return clean.length ? clean : null;
 }
 invokeAsync("get_monitors").then((mons) => {
+  if (STORE) return; // the card's own floor is the whole world
   const floors = sanitizeMonitorPlatforms(mons);
   if (!floors) return;
   const oldFloors = monPlats;
@@ -2186,16 +2187,23 @@ function settingsRect() {
 }
 const SET_VIEW_TOP = 26, SET_VIEW_BOT = 34; // title gap + footer reserve
 // 440 = last row's bottom edge (30 + 15*26 + 20) relative to panel top
-function setMaxScroll() { return Math.max(0, 440 - (settingsRect()[3] - SET_VIEW_BOT)); }
+function setMaxScroll() { return Math.max(0, settingsRowIds().length * 26 + 24 - (settingsRect()[3] - SET_VIEW_BOT)); }
+// 0 VOL 1 SIZE 2 MOTION 3 PHOTO 4 ALBUM 5 POMO 6 FOCUS 7 BREAK
+// 8 SHARE 9 WEATHER 10 BOOT 11 JELLY 12 REDEEM 13 ID 14 RESET 15 QUIT
+// The store SKU drops rows that cannot exist in a sandboxed app:
+// BOOT (LaunchAgents), JELLY (external purchase links), REDEEM (license
+// codes — Apple wants IAP for digital goods).
+const STORE_HIDDEN_ROWS = new Set([10, 11, 12]);
+function settingsRowIds() {
+  const ids = [];
+  for (let i = 0; i < 16; i++) if (!STORE || !STORE_HIDDEN_ROWS.has(i)) ids.push(i);
+  return ids;
+}
 function settingsRows() {
   const [px, py] = settingsRect();
   // self-clamp: a window shrink mid-scroll can't leave the list overscrolled
   setScroll = Math.max(0, Math.min(setMaxScroll(), setScroll));
-  const rows = [];
-  for (let i = 0; i < 16; i++) rows.push([px + 16, py + 30 + i * 26 - Math.round(setScroll), 158, 20]);
-  return rows;
-  // 0 VOL 1 SIZE 2 MOTION 3 PHOTO 4 ALBUM 5 POMO 6 FOCUS 7 BREAK
-  // 8 SHARE 9 WEATHER 10 BOOT 11 JELLY 12 REDEEM 13 ID 14 RESET 15 QUIT
+  return settingsRowIds().map((id, i) => [px + 16, py + 30 + i * 26 - Math.round(setScroll), 158, 20]);
 }
 
 // gem shop: the paid-gem surface. packs are bought through Stripe Payment
@@ -2441,6 +2449,24 @@ function dailySelfie() {
 
 const isDemoResponse = (value) => value === true;
 invokeAsync("is_demo").then((v) => { DEMO = isDemoResponse(v); }).catch(() => {});
+// App Store (sandboxed) build — the companion-card SKU. The backend says
+// which flavor this binary is; store mode trims every surface that cannot
+// exist inside the sandbox (autostart toggle, external jelly purchases,
+// redeem codes) and confines the world to the card window.
+let STORE = false;
+invokeAsync("is_store_build").then((v) => {
+  STORE = v === true;
+  if (!STORE) return;
+  document.body.classList.add("store");
+  // confine the world to the card: drop monitor/window platforms down to
+  // the card floor, and re-seat anything a bigger-window save left below
+  monPlats = [{ x: 0, top: 0, y: winH - 6, w: winW, h: winH - 6 }];
+  runtimePlats = [];
+  rebuildPlatforms();
+  petY = Math.min(petY, winH);
+  for (const p of pals) p.y = Math.min(p.y, winH);
+  sendClickable();
+}).catch(() => {});
 // update probe: compare the remote version file against APP_VER once at
 // boot; a newer remote lights the NEW VER badge in settings
 function verNewer(a, b) {
@@ -3880,6 +3906,7 @@ function reconcileAnchoredPlatforms(platformNow = performance.now()) {
   }
 }
 listenQuiet("platforms", (e) => {
+  if (STORE) return; // no window-hopping inside the companion card
   const runtimePlatforms = sanitizeRuntimePlatforms(e && e.payload);
   // A malformed whole event is not an empty scan: preserve the last known
   // platforms instead of dropping every window and throwing the pet/furniture.
@@ -4146,14 +4173,18 @@ cv.addEventListener("pointerdown", (e) => {
   }
   if (settingsOpen) {
     const [px, py, pw, ph] = settingsRect();
+    const rowIds = settingsRowIds();
     const rows = settingsRows();
+    // positions are dense over the visible ids — resolve logical ids back
+    // to rects so hidden (store) rows simply have no hit area
+    const rowFor = (id) => { const j = rowIds.indexOf(id); return j < 0 ? null : rows[j]; };
     // rows scrolled out of the viewport can't be clicked — they're not
     // drawn there either, so an invisible row must never take a hit
-    const inRow = (R) => mx >= R[0] && mx <= R[0] + R[2] && my >= R[1] && my <= R[1] + R[3] && my >= py + SET_VIEW_TOP && my <= py + ph - SET_VIEW_BOT;
-    if (inRow(rows[0])) {
+    const inRow = (R) => R && mx >= R[0] && mx <= R[0] + R[2] && my >= R[1] && my <= R[1] + R[3] && my >= py + SET_VIEW_TOP && my <= py + ph - SET_VIEW_BOT;
+    if (inRow(rowFor(0))) {
       // volume slider: press anywhere on the row to set, then keep
       // dragging — the track maps x-position to 0..100%
-      volDrag = { x0: rows[0][0] + 8, w: rows[0][2] - 16 };
+      volDrag = { x0: rowFor(0)[0] + 8, w: rowFor(0)[2] - 16 };
       vol = Math.min(1, Math.max(0, (mx - volDrag.x0) / volDrag.w));
       muted = vol <= 0.001;
       volStep = Math.round((1 - vol) * 3);
@@ -4164,12 +4195,12 @@ cv.addEventListener("pointerdown", (e) => {
       invokeAsync("set_dragging", { on: true }).catch(() => {});
       sfx.pop();
     }
-    else if (inRow(rows[1])) {
+    else if (inRow(rowFor(1))) {
       sizeMul = SIZE_STEPS[(SIZE_STEPS.indexOf(sizeMul) + 1) % SIZE_STEPS.length];
       dirty = true;
       sfx.pop();
-    } else if (inRow(rows[2])) { reduceMotion = !reduceMotion; dirty = true; sfx.pop(); }
-    else if (inRow(rows[3])) {
+    } else if (inRow(rowFor(2))) { reduceMotion = !reduceMotion; dirty = true; sfx.pop(); }
+    else if (inRow(rowFor(3))) {
       // photo mode: hide every UI element, snapshot the canvas to PNG;
       // the slime smiles for the camera
       settingsOpen = false;
@@ -4210,12 +4241,12 @@ cv.addEventListener("pointerdown", (e) => {
         }
       }, 160);
     }
-    else if (inRow(rows[4])) {
+    else if (inRow(rowFor(4))) {
       // photo album: browse every PNG the photo mode has saved
       settingsOpen = false;
       openAlbum();
     }
-    else if (inRow(rows[5])) {
+    else if (inRow(rowFor(5))) {
       // pomodoro: focus sprint -> break, cycling while on
       pomo = !pomo;
       if (pomo) {
@@ -4228,53 +4259,53 @@ cv.addEventListener("pointerdown", (e) => {
       } else sfx.pop();
       dirty = true;
     }
-    else if (inRow(rows[6])) {
+    else if (inRow(rowFor(6))) {
       pomoFocusMin = POMO_FOCI[(POMO_FOCI.indexOf(pomoFocusMin) + 1) % POMO_FOCI.length];
       if (pomo && pomoPhase === "focus") { pomoLen = pomoFocusMin * 60000; pomoUntil = Date.now() + pomoLen; }
       dirty = true; sfx.pop();
     }
-    else if (inRow(rows[7])) {
+    else if (inRow(rowFor(7))) {
       pomoBreakMin = POMO_BREAKS[(POMO_BREAKS.indexOf(pomoBreakMin) + 1) % POMO_BREAKS.length];
       if (pomo && pomoPhase === "break") { pomoLen = pomoBreakMin * 60000; pomoUntil = Date.now() + pomoLen; }
       dirty = true; sfx.pop();
     }
-    else if (inRow(rows[8])) {
+    else if (inRow(rowFor(8))) {
       // share card: render a pretty collection snapshot to the photos
       // folder — built for "look at my ranch" posts
       settingsOpen = false;
       shareCard();
       sfx.pop();
     }
-    else if (inRow(rows[9])) {
+    else if (inRow(rowFor(9))) {
       setWeatherEnabled(!weatherOn);
       dirty = true; sfx.pop();
     }
-    else if (inRow(rows[10])) {
+    else if (inRow(rowFor(10))) {
       const previous = bootOn;
       bootOn = !previous;
       requestAutostart(bootOn, previous, true);
       dirty = true; sfx.pop();
     }
-    else if (inRow(rows[11])) {
+    else if (inRow(rowFor(11)) && !STORE) {
       // gem shop: pack prices + the store link + the redeem door
       settingsOpen = false;
       gemShop = true;
       sfx.pop();
     }
-    else if (inRow(rows[12])) {
+    else if (inRow(rowFor(12)) && !STORE) {
       // redeem a paid gem code — typed like the name editor
       settingsOpen = false;
       redeemMode = true;
       redeemBuf = "";
       sfx.pop();
     }
-    else if (inRow(rows[13])) {
+    else if (inRow(rowFor(13))) {
       // MY ID — the buyer pastes this at checkout so grants find their way
       // home; clicking copies it to the clipboard
-      copyInstallId(rows[13][1]);
+      copyInstallId(rowFor(13)[1]);
       sfx.pop();
     }
-    else if (inRow(rows[14])) {
+    else if (inRow(rowFor(14))) {
       // wipe save — two-tap confirm, then rust deletes state.json and
       // restarts the process so the next boot is a true first run
       if (resetBusy) return;
@@ -4283,14 +4314,14 @@ cv.addEventListener("pointerdown", (e) => {
         resetBusy = true;
         invokeAsync("reset_save").catch(() => {
           resetBusy = false;
-          bangs.push({ x: winW / 2, y: rows[14][1], life: 2, t: "RESET FAILED" });
+          bangs.push({ x: winW / 2, y: rowFor(14)[1], life: 2, t: "RESET FAILED" });
         });
       } else {
         resetArm = Date.now() + 3000;
         sfx.pop();
       }
     }
-    else if (inRow(rows[15])) {
+    else if (inRow(rowFor(15))) {
       // land the save before exit — a bare invoke races the write; but a
       // wedged save must not hold the quit hostage either, hence the cap
       Promise.race([persist().catch(() => {}), new Promise((r) => setTimeout(r, 1500))])
@@ -4463,7 +4494,14 @@ cv.addEventListener("pointerdown", (e) => {
     invokeQuiet("set_dragging", { on: true });
     return;
   }
-  if (!hitTest(mx, my) || petHome) return;
+  if (!hitTest(mx, my) || petHome) {
+    // store card: the window has no titlebar, so an empty-space press
+    // becomes a window drag (pet/pals/furniture still grab normally above)
+    if (STORE) {
+      try { window.__TAURI__.window.getCurrentWindow().startDragging(); } catch {}
+    }
+    return;
+  }
   held = true;
   grabT0 = performance.now();
   touch();
@@ -6995,6 +7033,12 @@ addEventListener("keydown", (e) => {
 // batch lands. send immediately at boot, then keep refreshing; the interval
 // alone left a dead window long enough to read as "pals can't be grabbed"
 function sendClickable() {
+  // Store build: the whole card is interactive — no click-through desktop
+  // beneath it, so the hitbox is simply the window itself
+  if (STORE) {
+    invokeQuiet("set_clickable", { rects: [[0, 0, winW, winH]] });
+    return;
+  }
   const clickNow = performance.now();
   // The main box dweller is as invisible as a hidden pal.  Keep its stale
   // body rectangle from swallowing desktop clicks through the box sprite.
@@ -10629,18 +10673,20 @@ function frameBody(now) {
     ctx.beginPath();
     ctx.rect(px + 2, vy0, pw - 4, vy1 - vy0);
     ctx.clip();
+    const rowIds = settingsRowIds();
     for (let i = 0; i < rows.length; i++) {
       const R = rows[i];
+      const id = rowIds[i];
       if (R[1] + R[3] < vy0 || R[1] > vy1) continue; // fully scrolled out
       const hov2 = curX >= R[0] && curX <= R[0] + R[2] && curY >= R[1] && curY <= R[1] + R[3] && curY >= vy0 && curY <= vy1;
-      const danger = i === rows.length - 1 || (i === 14 && Date.now() < resetArm);
+      const danger = id === 15 || (id === 14 && Date.now() < resetArm);
       ctx.fillStyle = danger ? "#e05a6e" : hov2 ? "#efe0c2" : "#e3d0aa";
       ctx.fillRect(R[0], R[1], R[2], R[3]);
       ctx.strokeStyle = "#8a6b4a";
       ctx.lineWidth = 1;
       ctx.strokeRect(R[0] + 0.5, R[1] + 0.5, R[2] - 1, R[3] - 1);
-      drawText(ctx, lbls[i], px + pw / 2 - textW(lbls[i], 1) / 2, R[1] + 6, 1, danger ? "#fff6e8" : "#5c4632");
-      if (i === 0) {
+      drawText(ctx, lbls[id], px + pw / 2 - textW(lbls[id], 1) / 2, R[1] + 6, 1, danger ? "#fff6e8" : "#5c4632");
+      if (id === 0) {
         // volume slider: the row's bottom strip is a progress bar —
         // click/drag anywhere on the row sets the level
         const tx = R[0] + 8, tw = R[2] - 16, ty = R[1] + R[3] - 5;
