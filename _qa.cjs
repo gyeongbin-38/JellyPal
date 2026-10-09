@@ -43,7 +43,12 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   const state = path.join(ROAM, "com.jellypal.desktop", "state.json");
   if (fs.existsSync(state)) {
-    const d = JSON.parse(fs.readFileSync(state, "utf8"));
+    // production saves are DPAPI-encrypted ("JPENC1:" + base64); decrypt
+    // through the OS so the check reads the same blob the app would read.
+    const text = execSync(
+      `powershell -NoProfile -ExecutionPolicy Bypass -File "${__dirname}/_unprotect.ps1" -Path "${state}"`,
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    const d = JSON.parse(text);
     console.log("[qa] fresh state:", JSON.stringify({
       jelly: d.jelly, pals: (d.pals || []).length,
       propsOut: Object.values(d.props || {}).filter(Boolean).length,
