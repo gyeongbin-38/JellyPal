@@ -686,6 +686,187 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
     ev("plant && Math.round(plant.steamUntil - Date.now())"));
   ev("plant = null;");
 
+  // --- T21: quiet budget — an editor-focused user silences the loud tier ---
+  // palQuiet = editor focus (or cursor moved <15s ago). hops, tag, flairs,
+  // totems, cursor webs all hold; walking/prop visits still run.
+  ev(`(function(){
+      pals.length = 0; palHeld = null;
+      owned.push(SPECIES[1].id); spawnPal(1);   // berry — plain walker
+      owned.push(SPECIES[3].id); spawnPal(3);   // tide — sig 'shower'
+      focusTitle = 'main.ts'; focusExe = 'code';
+      state = 'idle'; petHome = false; dizzyUntil = 0; cryUntil = 0; poutUntil = 0;
+      petX = 1400; petY = plats[0].y;
+      bond = {}; treat = null; treatFly = null; sigT0 = 0; pullAnim = null; pullResults = null;
+      huntT0 = 0; huntCd = 1e15; // the pounce pack-hop is user-triggered —
+      // deliberately ungated, so keep the pet from pouncing mid-test
+      pals.forEach((p, i) => {
+        p.x = 500 + i * 110; p.y = petY; p.fly = false; p.plat = null; p.walkT = null;
+        p.propGoal = null; p.nextT = 0; p.tag = null; p.stackOn = null; p.stackCd = 0;
+        p.sigT = 0; p.carry = null; p.restUntil = 0; p.hideUntil = 0; p.chatMate = null;
+        p.chatUntil = 0; p.follow = null; p.vx = 0; p.vy = 0; p.hopWind = 0;
+        p.playCd = 0; p.giftCd = 1e15; p.comfortCd = 1e15; p.web = 0;
+        p.settleUntil = 0; p.sitMate = null; p.settleCd = 0; p.blockCd = 0;
+        p.accAct = null; // queued accessory bits (wings/bow/prop) launch pals
+      });
+      mainPlayCd = 1e15; })();`);
+  for (let i = 0; i < 80; i++) { t += 16.7; frame(t); } // land + settle in
+  let loud = 0, ambient = 0;
+  ev("globalThis.__realRandom = Math.random; Math.random = () => 0.55;");
+  for (let i = 0; i < 900; i++) {
+    // force a decision roll every frame — we're testing the gate, not odds
+    ev(`pals.forEach((p) => { if (!p.fly && p.walkT === null && !p.propGoal) p.nextT = 0; });`);
+    t += 16.7; frame(t);
+    if (i % 30 === 0) await new Promise((r) => setImmediate(r));
+    loud += ev(`pals.filter((p) => p.fly || p.tag || p.sigT || p.stackOn || p.web > ${t}).length`);
+    ambient += ev("pals.filter((p) => p.walkT !== null || p.propGoal || p.settleUntil > " + t + ").length");
+  }
+  ev("Math.random = globalThis.__realRandom; delete globalThis.__realRandom;");
+  check(loud === 0, "editor focus silences hops/tag/flair/totem/web", "loud~" + loud);
+  check(ambient > 0, "quiet pals still wander and prop-visit (not frozen)", "ambient~" + ambient);
+  // and the proof the gate actually opens: same roll, hands-off user — hop fires
+  ev(`focusTitle = ''; focusExe = ''; lastCurMove = 0;
+      pals.forEach((p) => { p.fly = false; p.walkT = null; p.propGoal = null; p.nextT = 0;
+        p.settleUntil = 0; p.tag = null; p.stackOn = null; p.vx = 0; p.vy = 0; });`);
+  ev("globalThis.__realRandom = Math.random; Math.random = () => 0.55;");
+  let hopped = false;
+  for (let i = 0; i < 300 && !hopped; i++) {
+    ev(`pals.forEach((p) => { if (!p.fly && p.walkT === null && !p.propGoal) p.nextT = 0; });`);
+    t += 16.7; frame(t);
+    if (ev("pals.some((p) => p.fly)")) hopped = true;
+  }
+  ev("Math.random = globalThis.__realRandom; delete globalThis.__realRandom;");
+  check(hopped, "idle hands restore the loud tier (hop fires again)");
+
+  // --- T22: settle — a pal walks up beside the pet and just stays ---
+  ev(`(function(){
+      petX = 900; petY = plats[0].y; petHome = false; state = 'idle';
+      walkTarget = null; hopTarget = null; nextWander = 1e15; flying = false;
+      huntT0 = 0; huntCd = 1e15; sigT0 = 0; // pet pinned — a wander would
+      // break the settle mid-test, a pounce-pack or landing shove launches pals
+      const p = pals[0], q = pals[1];
+      p.x = petX + 200; p.y = petY; p.fly = false; p.walkT = null; p.propGoal = null;
+      p.nextT = 0; p.settleUntil = 0; p.sitMate = null; p.settleCd = 0; p.playCd = 1e15;
+      q.x = 200; q.y = petY; q.nextT = 1e15; q.walkT = null; q.propGoal = null;
+      q.settleUntil = 0; q.sitMate = null; })();`);
+  ev("globalThis.__realRandom = Math.random; Math.random = () => 0.24;");
+  t += 16.7; frame(t);
+  ev("Math.random = globalThis.__realRandom; delete globalThis.__realRandom;");
+  check(ev("pals[0].propGoal && pals[0].propGoal.kind === 'settle'"),
+    "settle roll starts a walk toward the pet",
+    ev("pals[0].propGoal && pals[0].propGoal.kind"));
+  let settled = false;
+  for (let i = 0; i < 1200 && !settled; i++) {
+    ev("walkTarget = null; flying = false; sigT0 = 0;"); // pet stays put
+    t += 16.7; frame(t);
+    if (i % 30 === 0) await new Promise((r) => setImmediate(r));
+    if (ev("pals[0].settleUntil > " + t)) settled = true;
+  }
+  check(settled, "pal parks beside the pet once it arrives",
+    ev("pals[0] && Math.round((pals[0].settleUntil||0) - " + t + ")"));
+  check(ev(`cardStatus(pals[0],${t})`) === "CHILLING",
+    "status card reports a settled pal as CHILLING");
+  // parked means parked: forcing a decision while settled must not move it
+  ev("pals[0].nextT = 0; pals[0].walkT = null;");
+  for (let i = 0; i < 60; i++) {
+    ev("walkTarget = null; flying = false; sigT0 = 0;");
+    t += 16.7; frame(t);
+  }
+  check(ev("pals[0].walkT === null && !pals[0].propGoal && pals[0].settleUntil > " + t),
+    "a settled pal ignores decision rolls (stays put)");
+  // but it breaks the moment the pet wanders off
+  ev("petX = petX + 400;");
+  t += 16.7; frame(t);
+  check(ev("pals[0].settleUntil === 0 || pals[0].settleUntil < " + t),
+    "settle breaks when the pet walks away", ev("pals[0].settleUntil - " + t));
+
+  // --- T23: side-by-side — two idle pals sit together and share a beat ---
+  ev(`(function(){
+      walkTarget = null; hopTarget = null; flying = false; sigT0 = 0;
+      huntT0 = 0; huntCd = 1e15;
+      const p = pals[0], q = pals[1];
+      p.x = 700; p.y = petY; p.fly = false; p.walkT = null; p.propGoal = null;
+      p.nextT = 0; p.settleUntil = 0; p.sitMate = null; p.settleCd = 0;
+      p.chatMate = null; p.chatUntil = 0; p.tag = null; p.stackOn = null; p.carry = null;
+      q.x = 770; q.y = petY; q.fly = false; q.walkT = null; q.propGoal = null;
+      q.nextT = 1e15; q.settleUntil = 0; q.sitMate = null; q.settleCd = 0;
+      q.chatMate = null; q.chatUntil = 0; q.tag = null; q.stackOn = null;
+      petX = 1400; })();`); // pet out of settle range — the buddy wins
+  ev("globalThis.__realRandom = Math.random; Math.random = () => 0.30;");
+  t += 16.7; frame(t);
+  ev("Math.random = globalThis.__realRandom; delete globalThis.__realRandom;");
+  check(ev("pals[0].settleUntil > " + t + " && pals[0].sitMate === pals[1] && pals[1].settleUntil > " + t),
+    "side-by-side: both pals sit down together",
+    ev("JSON.stringify({a:(pals[0].settleUntil||0)-" + t + ",b:(pals[1].settleUntil||0)-" + t + ",m:pals[0].sitMate===pals[1]})"));
+  check(ev(`cardStatus(pals[0],${t})`) === "PAL TIME",
+    "status card reports a sitting pair as PAL TIME");
+  ev(`pals.forEach((p) => { p.settleUntil = 0; p.sitMate = null; });`);
+
+  // --- T24: head-tilt — a parked cursor earns one curious glance ---
+  ev(`(function(){
+      const p = pals[0];
+      p.x = 700; p.y = petY; p.fly = false; p.walkT = null; p.propGoal = null;
+      p.nextT = 1e15; p.hovT = 0; p.hovCd = 0; p.lookUntil = 0;
+      curX = p.x + 50; curY = p.y - 40; })();`);
+  for (let i = 0; i < 45; i++) { t += 16.7; frame(t); } // ~0.75s parked
+  check(ev("pals[0].hovCd > " + t + " && pals[0].lookUntil > " + t + " && pals[0].lookDir === 1"),
+    "cursor parked beside a pal earns a head-tilt glance",
+    ev("JSON.stringify({cd:(pals[0].hovCd||0)-" + t + ",lu:(pals[0].lookUntil||0)-" + t + ",d:pals[0].lookDir})"));
+  // it doesn't loop — the same parked cursor gets nothing more
+  ev("pals[0].lookUntil = 0; pals[0].hovT = 0;");
+  for (let i = 0; i < 40; i++) { t += 16.7; frame(t); }
+  check(ev("pals[0].hovT <= 0.1 || pals[0].lookUntil < " + t),
+    "head-tilt doesn't repeat while the cursor just sits there");
+  ev("curX = -9999; curY = -9999;");
+
+  // --- T25: audience — a reveal draws a quiet stare, ends with one note ---
+  ev(`(function(){
+      // pin the pet fully — a stale mid-air petY made the pal spawn over
+      // empty air once and take the real-drop launch instead of watching
+      petX = 700; petY = plats[0].y; flying = false; petVY = 0;
+      walkTarget = null; hopTarget = null; sigT0 = 0;
+      const p = pals[0], q = pals[1];
+      p.x = petX - 140; p.y = petY; p.fly = false; p.walkT = petX - 300; p.propGoal = null;
+      p.nextT = 1e15; p.tag = null; p.chatMate = null; p.carry = null; p.lookUntil = 0;
+      p.vx = 0; p.vy = 0; p.hopWind = 0; p.accAct = null; p.plat = plats[0];
+      q.x = 200; q.y = petY; q.walkT = null; q.nextT = 1e15; q.accAct = null;
+      huntT0 = 0; huntCd = 1e15; // a parked cursor may have primed a stalk —
+      // the pounce pack-hop would launch the pal mid-test
+      pullResults = [{ r: 'c' }]; })();`);
+  t += 16.7; frame(t);
+  check(ev("pals[0].watched === true && pals[0].walkT === null && pals[0].lookDir === 1"),
+    "a pet's reveal pulls a quiet stare (walk cancelled, eyes on pet)",
+    ev("JSON.stringify({w:pals[0].watched,wt:pals[0].walkT,ld:pals[0].lookDir,pr:!!pullResults,f:pals[0].fly,ph:petHome,dx:Math.abs(petX-pals[0].x),dy:Math.abs(petY-pals[0].y),rst:pals[0].restUntil>"+t+",hid:pals[0].hideUntil>"+t+",tg:!!pals[0].tag,cm:!!pals[0].chatMate,x:Math.round(pals[0].x),px:Math.round(petX),sym:pals[0].sympCd>"+t+",bmp:pals[0].bumpCd>"+t+",hop:pals[0].hopT>="+t+",acc:!!pals[0].accAct,mat:pals[0].matCd>"+t+",blk:pals[0].blockCd>"+t+",sig:pals[0].sigT>"+t+",comf:pals[0].comfortCd>"+t+",vy:Math.round(pals[0].vy)})"));
+  ev("pullResults = null; bangs.length = 0;");
+  ev("globalThis.__realRandom = Math.random; Math.random = () => 0.1;");
+  t += 16.7; frame(t);
+  ev("Math.random = globalThis.__realRandom; delete globalThis.__realRandom;");
+  check(ev("pals[0].watched === false && bangs.some((b) => b.t === '♪' && b.x === pals[0].x)"),
+    "show ends with a single soft note from the watcher");
+
+  // --- T26: copycat — a nearby pal mirrors the pet's bright face ---
+  ev(`(function(){
+      const p = pals[0], q = pals[1];
+      p.x = petX - 120; p.y = petY; p.fly = false; p.walkT = null; p.propGoal = null;
+      p.faceT = 0; p.faceId = null; p.copyCd = 0; p.restUntil = 0; p.hideUntil = 0;
+      q.copyCd = ${t + 1e15}; // pin the other pal out of the mirror test
+      contentUntil = ${t + 4000}; })();`);
+  ev("globalThis.__realRandom = Math.random; Math.random = () => 0;");
+  t += 16.7; frame(t);
+  ev("Math.random = globalThis.__realRandom; delete globalThis.__realRandom;");
+  check(ev("pals[0].faceId === 'content' && pals[0].copyCd > " + t),
+    "copycat: nearby pal quietly mirrors the pet's content face",
+    ev("JSON.stringify({f:pals[0].faceId,cd:(pals[0].copyCd||0)-" + t + "})"));
+  // the mirror respects the cooldown — forcing the roll again must not
+  // refresh copyCd (it decays toward t instead of jumping back out)
+  const copyCd1 = ev("pals[0].copyCd - " + t);
+  ev("globalThis.__realRandom = Math.random; Math.random = () => 0;");
+  for (let i = 0; i < 60; i++) { t += 16.7; frame(t); }
+  ev("Math.random = globalThis.__realRandom; delete globalThis.__realRandom;");
+  const copyCd2 = ev("pals[0].copyCd - " + t);
+  check(copyCd2 < copyCd1 - 500,
+    "copycat respects its cooldown (no chain-mirroring)",
+    "cd " + Math.round(copyCd1) + " -> " + Math.round(copyCd2));
+
   console.log(`\n${pass} pass ${fail} fail`);
   process.exit(fail ? 2 : 0);
 })();
