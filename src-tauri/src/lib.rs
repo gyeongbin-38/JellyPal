@@ -3584,15 +3584,18 @@ fn open_with_shell(target: &str) -> Result<(), String> {
     {
         return ns_open(target);
     }
-    #[cfg(windows)]
-    let cmd = "explorer";
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let cmd = "xdg-open";
-    std::process::Command::new(cmd)
-        .arg(target)
-        .spawn()
-        .map_err(|e| e.to_string())?;
-    Ok(())
+    #[cfg(not(target_os = "macos"))]
+    {
+        #[cfg(windows)]
+        let cmd = "explorer";
+        #[cfg(all(unix, not(target_os = "macos")))]
+        let cmd = "xdg-open";
+        std::process::Command::new(cmd)
+            .arg(target)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
