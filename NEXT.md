@@ -226,9 +226,22 @@ before bundling.
 - [ ] Apple Developer account ($99/yr) + App Store Connect app record
 - [ ] Sign + validate on a real Mac (entitlements bake at codesign time;
       CI builds are unsigned)
-- [ ] StoreKit IAP if paid jelly packs come to the store SKU
-      (direct SKU keeps Gumroad/redeem — hidden there)
-- [ ] `SMAppService` autostart for the store build (currently off)
+- [x] StoreKit 1 IAP scaffold (`src-tauri/src/lib.rs` `mod iap`,
+      macOS+store cfg only): SKProductsRequest catalog → localized
+      title/price via NSNumberFormatter, SKPayment purchase, transaction
+      observer. Crash-safe grant flow: purchased txs stay UNFINISHED in
+      `PENDING` until the frontend grants jelly and calls `iap_ack`, so a
+      crash mid-purchase makes StoreKit redeliver on relaunch; granted tx
+      ids persist in the save (`iapTx`) against double-credit.
+      Commands: `iap_ready/refresh/buy/products/drain/ack` (stubs return
+      "unavailable" on other flavors). Settings JELLY row now opens the
+      same pack panel driven by IAP in store mode.
+      Products (must match App Store Connect): jelly.small=250,
+      .medium=500, .large=1000, .xl=2500.
+- [ ] Real-Mac IAP validation: sandbox tester account, product fetch,
+      purchase grant, cancel/fail paths. Receipt validation is the
+      upgrade path if fraud ever matters (local fulfillment is fine for
+      cheap digital goods)
 - [ ] App Store metadata: screenshots of the card, description,
       privacy labels ("Data Not Collected")
 

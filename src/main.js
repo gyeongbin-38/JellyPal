@@ -1974,6 +1974,21 @@ const POMO_BREAKS = [5, 10, 15];
 // redeemed codes are one-shot per save file
 const GEM_PACKS = { A: 250, B: 500, C: 1000, D: 2500 };
 const GEM_PACK_AMOUNTS = new Set(Object.values(GEM_PACKS));
+// App Store products (store SKU only) — pack letters map onto the product
+// ids that App Store Connect records carry. Jelly amounts and prices come
+// from the backend's own PACKS table through iap_products/iap_drain, so the
+// shop never hardcodes what a purchase is worth.
+const IAP_PIDS = {
+  A: "com.jellypal.jelly.small",
+  B: "com.jellypal.jelly.medium",
+  C: "com.jellypal.jelly.large",
+  D: "com.jellypal.jelly.xl",
+};
+let iapProds = []; // [{id,title,price,jelly}] — empty until the store answers
+// granted transaction ids, persisted — a crash between grant and ack means
+// StoreKit redelivers the tx on relaunch; this list is the "already paid
+// out" proof that survives the restart
+let iapTxIds = [];
 const validGemGrant = (v) => Number.isSafeInteger(v) && GEM_PACK_AMOUNTS.has(v);
 const redeemErrorText = (error) => String((error && error.message) || error || "BAD CODE").toUpperCase();
 const redeemPending = new Set();
@@ -2153,6 +2168,50 @@ async function claimGrants() {
   } catch {}
 }
 setInterval(claimGrants, 10 * 60 * 1000);
+// App Store purchase events — same drain/grant/ack shape as claimGrants,
+// but the queue lives in the Rust StoreKit observer instead of a server.
+// Unfinished transactions are redelivered by the OS on relaunch, so a
+// crash between drain and ack can never eat a paid pack.
+async function iapPoll() {
+  if (!STORE) return;
+  try {
+    const evs = await invokeAsync("iap_drain");
+    if (!Array.isArray(evs)) return;
+    for (const ev of evs) {
+      if (!ev || typeof ev.kind !== "string") continue;
+      if (ev.kind === "purchased" && typeof ev.tx === "string") {
+        if (!iapTxIds.includes(ev.tx)) {
+          iapTxIds.push(ev.tx);
+          iapTxIds = iapTxIds.slice(-100);
+          const g = typeof ev.jelly === "number" ? Math.floor(ev.jelly) : 0;
+          if (g > 0) {
+            jelly = addSavedInt(jelly, g);
+            bangs.push({ x: winW / 2, y: 100, life: 2.2, t: `+${g} JELLY!` });
+            sfx.reveal();
+          }
+          dirty = true; // persist the tx id even for a zero-grant
+        }
+        // ack retries every redelivery until it lands — finishing is the
+        // only thing that stops StoreKit from re-sending the purchase
+        invokeAsync("iap_ack", { tx: ev.tx }).catch(() => {});
+      } else if (ev.kind === "restored") {
+        bangs.push({ x: winW / 2, y: 100, life: 2, t: "PURCHASE RESTORED" });
+      } else if (ev.kind === "failed" && ev.code !== 2) {
+        // code 2 = user cancelled — silent; real failures get a notice
+        bangs.push({ x: winW / 2, y: 100, life: 2, t: "PURCHASE FAILED" });
+      }
+    }
+  } catch {}
+}
+// ask StoreKit for the live catalog; product metadata lands in iapProds
+// when the request returns (the delegate callback is async)
+function iapLoad() {
+  invokeAsync("iap_refresh").catch(() => {});
+  invokeAsync("iap_products").then((p) => {
+    if (Array.isArray(p) && p.length) iapProds = p;
+  }).catch(() => {});
+}
+const iapProductFor = (packId) => iapProds.find((p) => p && p.id === IAP_PIDS[packId]);
 // weekly spotlight species — deterministic ISO week in the player's local
 // calendar. UTC arithmetic keeps DST from stretching a local week.
 const weekKey = (d = new Date()) => {
@@ -2204,10 +2263,11 @@ function setMaxScroll() { return Math.max(0, settingsRowIds().length * 26 + 24 -
 // 0 VOL 1 SIZE 2 MOTION 3 PHOTO 4 ALBUM 5 POMO 6 FOCUS 7 BREAK
 // 8 SHARE 9 WEATHER 10 BOOT 11 JELLY 12 REDEEM 13 ID 14 RESET 15 QUIT
 // The store SKU drops rows that cannot exist in a sandboxed app:
-// BOOT (LaunchAgents), JELLY (external purchase links), REDEEM (license
-// codes — Apple wants IAP for digital goods), WEATHER (coarse IP geo is
-// data the store SKU does not need — network surface stays zero).
-const STORE_HIDDEN_ROWS = new Set([9, 10, 11, 12]);
+// BOOT (LaunchAgents — re-shown only where SMAppService exists), REDEEM
+// (license codes — Apple wants IAP for digital goods; the store JELLY row
+// opens the IAP panel instead), WEATHER (coarse IP geo is data the store
+// SKU does not need — network surface stays zero).
+const STORE_HIDDEN_ROWS = new Set([9, 10, 12]);
 function settingsRowIds() {
   const ids = [];
   for (let i = 0; i < 16; i++) if (!STORE || !STORE_HIDDEN_ROWS.has(i)) ids.push(i);
@@ -2485,6 +2545,11 @@ const storeReady = invokeAsync("is_store_build").then((v) => {
   invokeAsync("autostart_available").then((ok) => {
     if (ok === true) STORE_HIDDEN_ROWS.delete(10);
   }).catch(() => {});
+  // IAP: warm the product cache, then keep draining — a purchase made at
+  // the last session's shutdown redelivers here once the queue is ready
+  iapLoad();
+  iapPoll();
+  setInterval(iapPoll, 20000);
 }).catch(() => {});
 // update probe: compare the remote version file against APP_VER once at
 // boot; a newer remote lights the NEW VER badge in settings
@@ -2672,6 +2737,9 @@ invokeAsync("load_state").then((txt) => {
   else redeemedBound = [];
   if (typeof s.uid === "string" && /^JP[A-Z2-7]{24}$/.test(s.uid)) uid = s.uid;
   claimedNonces = sanitizeClaimedNonces(s.claimed);
+  iapTxIds = Array.isArray(s.iapTx)
+    ? s.iapTx.filter((t) => typeof t === "string" && /^\d{1,20}$/.test(t)).slice(-100)
+    : [];
   ensureUid();
   claimGrants(); // any shop purchases waiting for this install pay out now
   // dragged panel positions — validated so a bad save can't park a
@@ -2804,7 +2872,7 @@ function persist() {
       muted, vol, sizeMul, seen, savedAt: Date.now(),
       reduceMotion, treatKind, stats, volStep, pomo, dexMile,
       lastDaily, dailyStreak, lastWeekly, pomoFocusMin, pomoBreakMin,
-      redeemed, redeemedBound, uid, claimed: claimedNonces,
+      redeemed, redeemedBound, uid, claimed: claimedNonces, iapTx: iapTxIds,
       panelPos, petHome, weatherOn, bootOn, lastSelfie, hints: hintsSeen,
       props: { bowl: bowl ? { x: bowl.x, y: bowl.y, fill: bowl.fill ?? 2 } : null, cushion: cushion ? { x: cushion.x, y: cushion.y } : null, box: box ? { x: box.x, y: box.y } : null, plant: plant ? { x: plant.x, y: plant.y } : null, music: music ? { x: music.x, y: music.y } : null, mirror: mirror ? { x: mirror.x, y: mirror.y } : null, mat: mat ? { x: mat.x, y: mat.y } : null, jar: jar ? { x: jar.x, y: jar.y, fill: jar.fill ?? 2 } : null },
       bond, lastEgg, fab: [fabX, fabY],
@@ -4185,18 +4253,28 @@ cv.addEventListener("pointerdown", (e) => {
     const packIds = Object.keys(GEM_PACKS);
     for (let i = 0; i < packIds.length; i++) {
       if (inR(packBuyRect(i))) {
-        const u = packUrl(packIds[i]);
-        if (u) openExternalUrl(u);
-        else bangs.push({ x: winW / 2, y: 100, life: 1.6, t: "STORE LINK TBD" });
+        if (STORE) {
+          const prod = iapProductFor(packIds[i]);
+          if (!prod) bangs.push({ x: winW / 2, y: 100, life: 1.6, t: "STORE LOADING" });
+          else invokeAsync("iap_buy", { productId: prod.id }).catch((e) => {
+            bangs.push({ x: winW / 2, y: 100, life: 2, t: redeemErrorText(e).slice(0, 24) });
+          });
+        } else {
+          const u = packUrl(packIds[i]);
+          if (u) openExternalUrl(u);
+          else bangs.push({ x: winW / 2, y: 100, life: 1.6, t: "STORE LINK TBD" });
+        }
         sfx.pop();
         return;
       }
     }
-    if (inR(rows[0])) {
+    // the bottom rows are direct-build doors (site link + redeem code) —
+    // in the store SKU they are not drawn, so they have no hit area either
+    if (!STORE && inR(rows[0])) {
       if (GEM_SHOP_URL) openExternalUrl(GEM_SHOP_URL);
       else bangs.push({ x: winW / 2, y: 100, life: 1.6, t: "STORE LINK TBD" });
       sfx.pop();
-    } else if (inR(rows[1])) {
+    } else if (!STORE && inR(rows[1])) {
       gemShop = false;
       redeemMode = true;
       redeemBuf = "";
@@ -4319,10 +4397,12 @@ cv.addEventListener("pointerdown", (e) => {
       requestAutostart(bootOn, previous, true);
       dirty = true; sfx.pop();
     }
-    else if (inRow(rowFor(11)) && !STORE) {
-      // gem shop: pack prices + the store link + the redeem door
+    else if (inRow(rowFor(11))) {
+      // gem shop: direct = pack prices + store link + redeem door,
+      // store = the same panel driven by App Store products
       settingsOpen = false;
       gemShop = true;
+      if (STORE) iapLoad();
       sfx.pop();
     }
     else if (inRow(rowFor(12)) && !STORE) {
@@ -10779,11 +10859,13 @@ function frameBody(now) {
       ctx.lineWidth = 1;
       ctx.strokeRect(R[0] + 0.5, R[1] + 0.5, R[2] - 1, R[3] - 1);
       drawSpr(ctx, "gem", R[0] + 14, R[1] + 10, 2);
-      drawText(ctx, `${GEM_PACKS[packIds[i]]} JELLY`, R[0] + 26, R[1] + 7, 1, "#5c4632");
-      const price = GEM_PACK_PRICE[packIds[i]];
+      const prod = STORE ? iapProductFor(packIds[i]) : null;
+      const amount = prod && prod.jelly ? prod.jelly : GEM_PACKS[packIds[i]];
+      drawText(ctx, `${amount} JELLY`, R[0] + 26, R[1] + 7, 1, "#5c4632");
+      const price = STORE ? (prod && prod.price ? prod.price : "...") : GEM_PACK_PRICE[packIds[i]];
       const BR = packBuyRect(i);
       drawText(ctx, price, BR[0] - 8 - textW(price, 1), R[1] + 7, 1, "#5c4632", null, true);
-      const live = !!packUrl(packIds[i]);
+      const live = STORE ? !!prod : !!packUrl(packIds[i]);
       const hovB = curX >= BR[0] && curX <= BR[0] + BR[2] && curY >= BR[1] && curY <= BR[1] + BR[3];
       ctx.fillStyle = hovB && live ? "#b8e8c8" : live ? "#d8ecc9" : "#ddd0b8";
       ctx.fillRect(BR[0], BR[1], BR[2], BR[3]);
@@ -10792,11 +10874,16 @@ function frameBody(now) {
       ctx.strokeRect(BR[0] + 0.5, BR[1] + 0.5, BR[2] - 1, BR[3] - 1);
       drawText(ctx, "BUY", BR[0] + BR[2] / 2 - textW("BUY", 1) / 2, BR[1] + 7, 1, live ? "#2f7e4e" : "#a8907a", null, true);
     }
-    drawText(ctx, "PAY ONCE - GUMROAD GIVES YOU A KEY", gx + gw / 2 - textW("PAY ONCE - GUMROAD GIVES YOU A KEY", 1) / 2, gy + 168, 1, "#8a6b4a");
-    drawText(ctx, "PASTE IT IN REDEEM CODE BELOW", gx + gw / 2 - textW("PASTE IT IN REDEEM CODE BELOW", 1) / 2, gy + 182, 1, "#a8845c");
+    if (STORE) {
+      drawText(ctx, "APP STORE CHECKOUT", gx + gw / 2 - textW("APP STORE CHECKOUT", 1) / 2, gy + 168, 1, "#8a6b4a");
+      drawText(ctx, "JELLY LANDS INSTANTLY", gx + gw / 2 - textW("JELLY LANDS INSTANTLY", 1) / 2, gy + 182, 1, "#a8845c");
+    } else {
+      drawText(ctx, "PAY ONCE - GUMROAD GIVES YOU A KEY", gx + gw / 2 - textW("PAY ONCE - GUMROAD GIVES YOU A KEY", 1) / 2, gy + 168, 1, "#8a6b4a");
+      drawText(ctx, "PASTE IT IN REDEEM CODE BELOW", gx + gw / 2 - textW("PASTE IT IN REDEEM CODE BELOW", 1) / 2, gy + 182, 1, "#a8845c");
+    }
     const rows = gemShopRows();
     const lbls = [GEM_SHOP_URL ? "STORE PAGE" : "STORE LINK TBD", "REDEEM CODE"];
-    for (let i = 0; i < rows.length; i++) {
+    for (let i = 0; !STORE && i < rows.length; i++) {
       const R = rows[i];
       const hov = curX >= R[0] && curX <= R[0] + R[2] && curY >= R[1] && curY <= R[1] + R[3];
       const live = i === 1 || !!GEM_SHOP_URL;
