@@ -102,8 +102,12 @@ global.__TAURI__ = {
 };
 window.__TAURI__ = global.__TAURI__;
 
-const src = fs.readFileSync("src/main.js", "utf8") +
-  "\n;globalThis.__T = (expr) => eval(expr);";
+const src0 = fs.readFileSync("src/main.js", "utf8");
+// instrument jelly award sites: tag each mutation with its line number
+const src = src0.split(/\r?\n/).map((l, i) =>
+  l.replace(/\bjelly = addSavedInt\(jelly,([^)]*)\)/g,
+    `jelly = (globalThis.__jmark=${i + 1}, addSavedInt(jelly,$1))`)
+).join("\n") + "\n;globalThis.__T = (expr) => eval(expr);";
 try { (0, eval)(src); } catch (e) { console.log("TOPLEVEL THROW:", e.stack); process.exit(1); }
 
 const ev = (s) => globalThis.__T(s);
@@ -228,9 +232,13 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
   // count chirp glyphs only while a chat session is live — greeting ♪s
   // must not count, and a chat that ends inside the wait loop must not
   // be missed either
-  const chirps = ["♪", "♥", "...", "!", "HEH"];
-  const liveBubbles = "pals.some(p=>p.chatMate) ? bangs.filter(b=>" + JSON.stringify(chirps) + ".includes(b.t)).length : 0";
+  const chirps = ["happy", "content", "laugh", "wink", "mischief"];
+  const liveBubbles = "pals.some(p=>p.chatMate) ? pals.filter(p=>p.chatMate && " + JSON.stringify(chirps) + ".includes(p.faceId)).length : 0";
   for (let i = 0; i < 900 && !chatSeen; i++) {
+    // re-pin periodically: ambient hops/scene grabs may legitimately launch a
+    // pal mid-wait — this test asserts chat formation, not motion chaos
+    if (i % 30 === 0) ev("pals[0].x=800; pals[0].y=petY; pals[0].fly=false; pals[0].vx=0; pals[0].vy=0; pals[0].walkT=null; pals[0].propGoal=null; pals[0].scene=null; pals[0].tag=null; pals[0].group=null;" +
+      "pals[1].x=860; pals[1].y=petY; pals[1].fly=false; pals[1].vx=0; pals[1].vy=0; pals[1].walkT=null; pals[1].propGoal=null; pals[1].scene=null; pals[1].tag=null; pals[1].group=null;");
     t += 16.7; frame(t);
     bubbles += ev(liveBubbles);
     if (ev("!!(pals[0] && pals[0].chatMate)")) { chatSeen = true; break; }
@@ -244,15 +252,18 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
     t += 16.7; frame(t);
     bubbles += ev(liveBubbles);
   }
-  // count chat bubbles while it runs
+  // count chat bubbles while it runs — keep re-pinning: ambient whims can
+  // legitimately walk a pal off and break the huddle mid-count
   for (let i = 0; i < 300; i++) {
+    if (i % 20 === 0) ev("pals[0].x=800; pals[0].y=petY; pals[0].fly=false; pals[0].walkT=null; pals[0].propGoal=null;" +
+      "pals[1].x=860; pals[1].y=petY; pals[1].fly=false; pals[1].walkT=null; pals[1].propGoal=null;");
     t += 16.7; frame(t);
     bubbles += ev(liveBubbles);
     if (!ev("pals[0] && pals[0].chatMate")) break;
   }
   check(chatSeen, "gossip chat starts between idle pals",
     ev(`JSON.stringify(pals.map(p=>({w:p.walkT,f:p.fly,n:p.nextT>${t}?1:0,c:p.chatMate?1:0,g:!!p.tag,s:!!p.stackOn,r:p.restUntil>${t}?1:0,h:p.hideUntil>${t}?1:0,cd:p.chatCd>${t}?1:0,pg:!!p.propGoal,fo:!!p.follow,si:!!p.sigT,x:Math.round(p.x)})))`));
-  check(bubbles > 0 || ev("bangs.some(b=>['♪','♥','...','!','HEH'].includes(b.t))"), "chat bubbles emitted", "bubbles~" + bubbles);
+  check(bubbles > 0, "chat faces cycle while gossiping", "faces~" + bubbles);
   for (let i = 0; i < 400; i++) { t += 16.7; frame(t); }
   check(ev("pals.every(p=>!p.chatMate)"), "chat ends cleanly", ev("pals.map(p=>p.chatUntil).join(',')"));
 
@@ -313,20 +324,42 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
 
   // --- T7: mood contagion — a laugh nearby echoes ---
   ev("pals.forEach(p=>{p.restUntil=0; p.hideUntil=0; p.chatUntil=0; p.chatMate=null; p.follow=null; p.stackOn=null; p.tag=null;});");
-  ev("pals[0].x = 700; pals[0].y = petY; pals[0].fly = false; pals[0].faceId = 'laugh'; pals[0].faceT = " + (t + 3000) + "; pals[0].stackCd = 1e15;");
-  ev("pals[1].x = 780; pals[1].y = petY; pals[1].fly = false; pals[1].faceT = 0; pals[1].walkT = null; pals[1].chatMate=null; pals[1].chatUntil=0; pals[1].stackCd = 1e15;");
+  ev("pals[0].x = 700; pals[0].y = petY; pals[0].fly = false; pals[0].faceId = 'laugh'; pals[0].faceT = " + (t + 3000) + "; pals[0].stackCd = 1e15;" +
+     "pals[0].nextT = 1e15; pals[0].chatCd = 1e15; pals[0].scene = null; pals[0].group = null; pals[0].propGoal = null; pals[0].settleUntil = 0;" +
+     "pals[0].vx = 0; pals[0].vy = 0;");
+  ev("pals[1].x = 780; pals[1].y = petY; pals[1].fly = false; pals[1].faceT = 0; pals[1].walkT = null; pals[1].chatMate=null; pals[1].chatUntil=0; pals[1].stackCd = 1e15;" +
+     "pals[1].nextT = 1e15; pals[1].chatCd = 1e15; pals[1].echoCd = 0; pals[1].scene = null; pals[1].group = null;" +
+     "pals[1].propGoal = null; pals[1].settleUntil = 0; pals[1].carry = null; pals[1].accAct = null;" +
+     "pals[1].vx = 0; pals[1].vy = 0;");
+  ev("pals.slice(2).forEach(p=>{p.x=-500; p.nextT=1e15; p.fly=false; p.walkT=null;});"); // park strays out of bump range
+  // wall-clock independence: at night (22-06h) the LATE NIGHT doze keeps
+  // re-stamping the echoer's face, which legitimately blocks the echo —
+  // pin noon so the test measures contagion, not the time it happens to run
+  ev("drizzleUntil = 0; wetUntil = 0; globalThis.__gh = Date.prototype.getHours; Date.prototype.getHours = () => 12;");
   let echoed = false;
   for (let i = 0; i < 700; i++) {
     t += 16.7; frame(t);
-    ev("if (pals[0]) { pals[0].faceId = 'laugh'; pals[0].faceT = " + (t + 3000) + "; pals[0].walkT = null; }"); // hold the laugh
+    // hold the laugh + freeze weather — a mid-loop drizzle/rainbow re-fires
+    // its own face stamps and starves the echo gate
+    ev("if (pals[0]) { pals[0].faceId = 'laugh'; pals[0].faceT = " + (t + 3000) + "; pals[0].walkT = null; } drizzleUntil = 0; wetUntil = 0; rainbowUntil = 0;");
     if (ev("pals[1] && pals[1].faceId === 'happy' && pals[1].faceT > " + t)) { echoed = true; break; }
   }
-  check(echoed, "mood contagion: nearby pal smiles along");
+  ev("Date.prototype.getHours = globalThis.__gh; delete globalThis.__gh;");
+  check(echoed, "mood contagion: nearby pal smiles along",
+    ev(`JSON.stringify({x:Math.round(pals[1].x),y:Math.round(pals[1].y),f:pals[1].fly,fi:pals[1].faceId,fw:pals[1].faceWhy,ft:(pals[1].faceT||0)-${t},ec:(pals[1].echoCd||0)-${t},` +
+       `hid:pals[1].hideUntil>${t},rst:pals[1].restUntil>${t},dx:Math.round(Math.abs(pals[0].x-pals[1].x)),` +
+       `dy:Math.round(Math.abs(pals[0].y-pals[1].y)),qft:(pals[0].faceT||0)-${t},qf:pals[0].faceId,qfly:pals[0].fly})`));
 
   // --- T7: faceName sanity on awake pet (clear leftover timers from T1) ---
-  ev("state = 'idle'; awakeAt = Date.now(); contentUntil = 0; starUntil = 0; poutUntil = 0; blinkUntil = 0; lookUntil = 0; munchUntil = 0;");
+  // park T6's pals out of pet-echo range and pin its cooldown — a pal's
+  // lingering laugh next to the pet legitimately pulls a curious glance
+  ev(`pals.forEach(p=>{p.x=-500; p.faceT=0;}); petEchoCd = 1e15;`);
+  ev(`state = 'idle'; awakeAt = Date.now(); contentUntil = 0; starUntil = 0; poutUntil = 0; blinkUntil = 0; lookUntil = 0; munchUntil = 0;
+      shockUntil = gaspUntil = tickleUntil = annoyedUntil = excitedUntil = mischiefUntil = winkUntil = cryUntil = sadUntil =
+      smugUntil = blepUntil = sideeyeUntil = stuffedUntil = yawnUntil = dozeUntil = splatUntil = dizzyUntil = curiousUntil = 0;`);
   frame(t += 16.7);
-  check(["idle","blink","lookL","lookR","content","happy"].includes(ev("faceName(" + t + ")")), "awake face resolves normally", ev("faceName(" + t + ")"));
+  check(["idle","blink","lookL","lookR","content","happy","yawn","doze"].includes(ev("faceName(" + t + ")")), "awake face resolves normally", ev("faceName(" + t + ")"));
+  ev("petEchoCd = 0;"); // unpin — downstream tests keep the natural echo
 
   // --- T8: removePal severs every social tie pointing at the leaver ---
   ev(`(function(){
@@ -423,10 +456,10 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
   ev(`(function(){ const p=pals[0]; globalThis.__oldSp=p.sp;
       p.sp=SPECIES.findIndex(s=>s.id==='gold'); if(!owned.includes('gold')) owned.push('gold');
       p.fly=false; p.walkT=null; p.restUntil=0; p.hideUntil=1e15;
-      pals[1].hideUntil=1e15; fx.length=0; bangs.length=0; nextFidget=1e15; })();`);
-  ev("globalThis.__realRandom = Math.random; Math.random = () => 0;");
+      pals[1].hideUntil=1e15; fx.length=0; bangs.length=0; nextFidget=1e15; drips.length=0; })();`);
+  ev("globalThis.__realRandom = Math.random; Math.random = () => 0; globalThis.__gh = Date.prototype.getHours; Date.prototype.getHours = () => 12;");
   frame(t += 16.7);
-  ev("Math.random = globalThis.__realRandom; delete globalThis.__realRandom;");
+  ev("Math.random = globalThis.__realRandom; delete globalThis.__realRandom; Date.prototype.getHours = globalThis.__gh; delete globalThis.__gh;");
   check(ev("fx.length === 0 && bangs.length === 0"),
     "hidden legendary emits no ghost particles");
   ev("pals[0].sp=globalThis.__oldSp; delete globalThis.__oldSp; pals.forEach(p=>p.hideUntil=0);");
@@ -601,7 +634,7 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
   // --- T17: expanded settings fit without wasting a scroll on large screens ---
   ev("winH=1080; setScroll=999");
   check(ev("setMaxScroll()") === 0, "all settings rows fit at 1080p");
-  ev("winH=460; settingsRows()");
+  ev("winH=460; settingsCells()");
   check(ev("setMaxScroll()") > 0 && ev("setScroll") === ev("setMaxScroll()"),
     "short-screen settings remain scrollable and clamped");
   ev("winH=1080; setScroll=0");
@@ -609,7 +642,8 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
   // --- T18: fetch errand — a bonded pal forages and delivers jelly ---
   ev(`(function(){
       pals.length = 0;
-      jelly = 1000; dirty = false;
+      jelly = 1000; dirty = false; xp = 0; // pin xp below the milestone so plays can't add jelly mid-fetch
+      sigT0 = 0; sigId = null; snack = null; treatAim = null; // no leftover signature gem or snack payout this test
       owned.push(SPECIES[1].id); spawnPal(1);   // berry — no trait needed here
       bond[SPECIES[1].id] = 400;                // BESTIE
       state = 'idle'; petHome = false;
@@ -619,7 +653,8 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
       p.walkT = null; p.nextT = 0; p.chatMate = null; p.chatUntil = 0;
       p.follow = null; p.tag = null; p.stackOn = null;
       p.restUntil = 0; p.hideUntil = 0; p.carry = null; p.propGoal = null;
-      p.giftCd = 0; p.comfortCd = 0;
+      p.giftCd = 0; p.comfortCd = 0; p.starCd = 1e15; // no wishing on a shooting star mid-economy-test
+      drips.length = 0;
     })();`);
   ev("globalThis.__realRandom = Math.random; Math.random = () => 0.03;");
   frame(t += 16.7);
@@ -631,7 +666,7 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
   // let it walk to the lure, pick up, and deliver — pin the pet in place
   let delivered = false;
   for (let i = 0; i < 2400 && !delivered; i++) {
-    ev("petX = 900; petY = plats[0].y; walkTarget = null;");
+    ev("petX = 900; petY = plats[0].y; walkTarget = null; drips.length = 0; for (const p2 of pals) p2.starCd = 1e15;");
     t += 16.7; frame(t);
     if (i % 40 === 0) await new Promise((r) => setImmediate(r));
     if (ev("jelly") === 1002) delivered = true;
@@ -766,13 +801,18 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
   check(ev(`cardStatus(pals[0],${t})`) === "CHILLING",
     "status card reports a settled pal as CHILLING");
   // parked means parked: forcing a decision while settled must not move it
-  ev("pals[0].nextT = 0; pals[0].walkT = null;");
+  // (bystanders parked away — this asserts decision gating, not bump physics)
+  ev("pals.slice(1).forEach(p=>{p.x=-500; p.nextT=1e15; p.fly=false; p.walkT=null;});");
+  ev("pals[0].nextT = 0; pals[0].walkT = null; pals[0].tag = null; pals[0].carry = null; pals[0].follow = null; pals[0].accAct = null; pals[0].scene = null; pals[0].group = null;");
   for (let i = 0; i < 60; i++) {
     ev("walkTarget = null; flying = false; sigT0 = 0;");
     t += 16.7; frame(t);
   }
   check(ev("pals[0].walkT === null && !pals[0].propGoal && pals[0].settleUntil > " + t),
-    "a settled pal ignores decision rolls (stays put)");
+    "a settled pal ignores decision rolls (stays put)",
+    ev(`JSON.stringify({wt:pals[0].walkT,pg:pals[0].propGoal&&pals[0].propGoal.kind,su:(pals[0].settleUntil||0)-${t},` +
+       `tg:!!pals[0].tag,cm:!!pals[0].chatMate,sc:!!pals[0].scene,gr:!!pals[0].group,fl:!!pals[0].follow,` +
+       `cr:!!pals[0].carry,rm:!!pals[0].rematch,sf:!!pals[0].seekFor,x:Math.round(pals[0].x),vx:Math.round(pals[0].vx||0)})`));
   // but it breaks the moment the pet wanders off
   ev("petX = petX + 400;");
   t += 16.7; frame(t);
@@ -787,9 +827,11 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
       p.x = 700; p.y = petY; p.fly = false; p.walkT = null; p.propGoal = null;
       p.nextT = 0; p.settleUntil = 0; p.sitMate = null; p.settleCd = 0;
       p.chatMate = null; p.chatUntil = 0; p.tag = null; p.stackOn = null; p.carry = null;
+      p.scene = null; p.group = null; p.follow = null; p.accAct = null;
       q.x = 770; q.y = petY; q.fly = false; q.walkT = null; q.propGoal = null;
       q.nextT = 1e15; q.settleUntil = 0; q.sitMate = null; q.settleCd = 0;
-      q.chatMate = null; q.chatUntil = 0; q.tag = null; q.stackOn = null;
+      q.chatMate = null; q.chatUntil = 0; q.tag = null; q.stackOn = null; q.carry = null;
+      q.scene = null; q.group = null; q.follow = null; q.accAct = null;
       petX = 1400; })();`); // pet out of settle range — the buddy wins
   ev("globalThis.__realRandom = Math.random; Math.random = () => 0.30;");
   t += 16.7; frame(t);
@@ -827,6 +869,9 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
       const p = pals[0], q = pals[1];
       p.x = petX - 140; p.y = petY; p.fly = false; p.walkT = petX - 300; p.propGoal = null;
       p.nextT = 1e15; p.tag = null; p.chatMate = null; p.carry = null; p.lookUntil = 0;
+      p.faceT = 0; p.faceId = null; // a stale face would veto the parting smile
+      p.restUntil = 0; p.hideUntil = 0; p.settleUntil = 0; p.scene = null; p.group = null;
+      propNewAt = 0; // a leftover fresh-prop ping would stamp curious mid-test
       p.vx = 0; p.vy = 0; p.hopWind = 0; p.accAct = null; p.plat = plats[0];
       q.x = 200; q.y = petY; q.walkT = null; q.nextT = 1e15; q.accAct = null;
       huntT0 = 0; huntCd = 1e15; // a parked cursor may have primed a stalk —
@@ -836,12 +881,12 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
   check(ev("pals[0].watched === true && pals[0].walkT === null && pals[0].lookDir === 1"),
     "a pet's reveal pulls a quiet stare (walk cancelled, eyes on pet)",
     ev("JSON.stringify({w:pals[0].watched,wt:pals[0].walkT,ld:pals[0].lookDir,pr:!!pullResults,f:pals[0].fly,ph:petHome,dx:Math.abs(petX-pals[0].x),dy:Math.abs(petY-pals[0].y),rst:pals[0].restUntil>"+t+",hid:pals[0].hideUntil>"+t+",tg:!!pals[0].tag,cm:!!pals[0].chatMate,x:Math.round(pals[0].x),px:Math.round(petX),sym:pals[0].sympCd>"+t+",bmp:pals[0].bumpCd>"+t+",hop:pals[0].hopT>="+t+",acc:!!pals[0].accAct,mat:pals[0].matCd>"+t+",blk:pals[0].blockCd>"+t+",sig:pals[0].sigT>"+t+",comf:pals[0].comfortCd>"+t+",vy:Math.round(pals[0].vy)})"));
-  ev("pullResults = null; bangs.length = 0;");
+  ev("pullResults = null; bangs.length = 0; pals[0].faceT = 0; pals[0].faceId = null;");
   ev("globalThis.__realRandom = Math.random; Math.random = () => 0.1;");
   t += 16.7; frame(t);
   ev("Math.random = globalThis.__realRandom; delete globalThis.__realRandom;");
-  check(ev("pals[0].watched === false && bangs.some((b) => b.t === '♪' && b.x === pals[0].x)"),
-    "show ends with a single soft note from the watcher");
+  check(ev("pals[0].watched === false && pals[0].faceId === 'content' && pals[0].faceT > " + (t - 16.7)),
+    "show ends with a soft content smile from the watcher");
 
   // --- T26: copycat — a nearby pal mirrors the pet's bright face ---
   ev(`(function(){
@@ -866,6 +911,83 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
   check(copyCd2 < copyCd1 - 500,
     "copycat respects its cooldown (no chain-mirroring)",
     "cd " + Math.round(copyCd1) + " -> " + Math.round(copyCd2));
+
+  // --- T27: ambient social reactions — the new interaction faces ---
+  // worry: a pal genuinely hurled nearby creases the watcher's face
+  ev(`(function(){
+      const p = pals[0], q = pals[1];
+      p.x = 500; p.y = petY; p.fly = false; p.walkT = null; p.propGoal = null;
+      p.faceT = 0; p.faceId = null; p.restUntil = 0; p.hideUntil = 0; p.chatUntil = 0;
+      p.stackOn = null; p.scene = null; p.group = null; p.accAct = null;
+      p.carry = null; p.follow = null; p.tag = null; p.settleUntil = 0;
+      q.x = 560; q.y = petY; q.fly = true; q.vx = 300; q.vy = -320;
+      petX = 1500; huntT0 = 0; huntCd = 1e15; // keep the wake-greet and pounce out of reach
+      propNewAt = -1e9; palHeld = null; drips.length = 0; p.starCd = 1e15; })();`);
+  ev("globalThis.__realRandom = Math.random; Math.random = () => 0.1;");
+  t += 16.7; frame(t);
+  ev("Math.random = globalThis.__realRandom; delete globalThis.__realRandom;");
+  check(ev("pals[0].faceId === 'worry'"),
+    "a hurled buddy creases the watcher's face", ev("pals[0].faceId"));
+
+  // jealous: a pal riding the user's palm earns a flat sideways stare
+  ev(`(function(){
+      const p = pals[0], q = pals[1]; globalThis.__P0 = p;
+      p.faceT = 0; p.faceId = null; p.fly = false; p.restUntil = 0;
+      p.hideUntil = 0; p.chatUntil = 0; p.scene = null; p.stackOn = null;
+      q.fly = false; q.vx = 0; q.vy = 0; q.x = p.x + 60; q.y = p.y;
+      palHeld = q; })();`);
+  ev("globalThis.__realRandom = Math.random; Math.random = () => 0.1;");
+  t += 16.7; frame(t);
+  ev("Math.random = globalThis.__realRandom; delete globalThis.__realRandom;");
+  check(ev("__P0.faceId === 'jealous' || !pals.includes(__P0)"),
+    "a pal in the palm earns a flat stare", ev("__P0.faceId"));
+  ev("palHeld = null;");
+
+  // curious: a fresh prop landing pings a squinted "?" — and the same
+  // reaction must NOT consume the decision roll (nextT untouched)
+  ev(`(function(){
+      const p = pals[0]; globalThis.__P0 = p;
+      p.faceT = 0; p.faceId = null; p.fly = false; p.restUntil = 0;
+      p.hideUntil = 0; p.chatUntil = 0; p.scene = null; p.stackOn = null;
+      p.settleUntil = 0; p.sitMate = null; p.tag = null; p.propGoal = null;
+      p.nextT = ${t + 800};
+      propNewAt = ${t}; propNewX = p.x + 80; })();`);
+  ev("globalThis.__realRandom = Math.random; Math.random = () => 0.1;");
+  t += 16.7; frame(t);
+  ev("Math.random = globalThis.__realRandom; delete globalThis.__realRandom;");
+  check(ev("__P0.faceId === 'curious' && __P0.faceT > " + (t - 16.7) + " && __P0.lookUntil > " + t + " && pals.includes(__P0)"),
+    "a fresh prop earns a squinted curious stare", ev("JSON.stringify({f:__P0.faceId,ft:__P0.faceT>" + t + ",alive:pals.includes(__P0)})") + " CRASH:" + JSON.stringify(crashMsgs.filter(m => m.startsWith("FRAME")).slice(-2)));
+  check(ev("__P0.nextT === " + (t - 16.7 + 800)),
+    "ambient reactions never consume the decision roll", ev("__P0.nextT - " + t));
+  ev("propNewAt = -1e9;");
+
+  // hmph: a competitive slime caught in tag sulks instead of laughing.
+  // the catch needs a clean slate — leftover rest/web/fly state from
+  // earlier scenarios quietly cancels the tag before it resolves
+  ev(`(function(){
+      const p = pals[0], q = pals[1];
+      q.sp = SPECIES.findIndex((s) => s.ps === 'hyper'); // competitive caught
+      for (const o of [p, q]) {
+        o.fly = false; o.vx = 0; o.vy = 0; o.walkT = null; o.propGoal = null;
+        o.restUntil = 0; o.hideUntil = 0; o.chatUntil = 0; o.web = 0;
+        o.stackOn = null; o.scene = null; o.faceT = 0; o.faceId = null;
+        o.act = null; o.accAct = null; o.settleUntil = 0; o.bumpCd = 0;
+      }
+      q.x = 600; q.y = petY; p.x = q.x - 20; p.y = q.y;
+      p.tag = { on: q, it: true, until: ${t + 3000} };
+      q.tag = { on: p, it: false, until: ${t + 3000} }; })();`);
+  ev("globalThis.__realRandom = Math.random; Math.random = () => 0.1;");
+  for (let i = 0; i < 20 && ev("pals[1].faceId !== 'hmph'"); i++) { t += 16.7; frame(t); }
+  ev("Math.random = globalThis.__realRandom; delete globalThis.__realRandom;");
+  check(ev("pals[1].faceId === 'hmph'"),
+    "a competitive slime caught in tag sulks (hmph)", ev("pals[1].faceId"));
+  ev("pals[0].tag = null; pals[1].tag = null;");
+
+  // swallowed frame exceptions abort the rest of frameBody silently —
+  // any FRAME crash logged during the whole run is a real regression
+  check(!crashMsgs.some((m) => m.startsWith("FRAME ")),
+    "no mid-frame exceptions across the whole run",
+    JSON.stringify(crashMsgs.filter((m) => m.startsWith("FRAME ")).slice(0, 2)));
 
   console.log(`\n${pass} pass ${fail} fail`);
   process.exit(fail ? 2 : 0);

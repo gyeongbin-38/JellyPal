@@ -71,6 +71,69 @@ const HW_FLAT = [0, 0, 0, 2, 4, 6, 8, 10, 11, 12, 13, 14, 15, 15, 15, 15, 15, 15
 const HW_SQUARE = [0, 5, 9, 11, 12, 13, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 13];
 const HW_PUDDLE = [0, 0, 0, 0, 1, 3, 5, 8, 11, 13, 14, 15, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 15];
 const SHAPES = { round: HW_ROUND, tall: HW_TALL, flat: HW_FLAT, square: HW_SQUARE, puddle: HW_PUDDLE };
+// faces that read as a reaction to something — a fresh one earns a
+// short pause-beat on the stroll so the expression lands as "stopped
+// to feel something". neutral looks (content, yawn, meh) stay out:
+// slowing the walk for them read as a trudge, not a feeling
+const FACE_EMO = {
+  happy: 1, laugh: 1, excited: 1, love: 1, star: 1, curious: 1, gasp: 1,
+  shock: 1, worry: 1, sad: 1, cry: 1, jealous: 1, sideeye: 1,
+  pout: 1, hmph: 1, embar: 1, smug: 1, mischief: 1, wink: 1, drool: 1,
+  stuffed: 1, sneeze: 1, dizzy: 1, wince: 1,
+};
+
+// reason -> little glyph: a fresh emotional face pops an icon bubble
+// over the head so the change reads as "reacted to THAT", not random
+const WHY_ICON = {
+  "PETTED": "heart", "PET'S FAVORITE": "heart", "NUZZLED": "heart",
+  "PALM PAL": "heart", "LITTLE ONE": "heart", "COMFORT": "heart",
+  "GOOD VIBES": "heart", "CONTAGIOUS": "heart", "NOTICED": "heart",
+  "GOSSIP": "dots", "HUDDLE": "dots", "GATHERING": "dots",
+  "MY TURN!": "dots", "FOLLOWING": "dots", "GROUP FUN": "dots",
+  "THE TUNE": "note", "SING-ALONG": "note", "MUSIC": "note",
+  "SHOOTING STAR": "star", "RAINBOW": "star", "SNOWFLAKE": "star",
+  "SLAPSTICK": "star", "PAL FLYING": "star", "THE SHOW": "star",
+  "EGG POPPING": "egg", "HATCHED!": "egg",
+  "NEW PAL": "gift", "JUST ARRIVED": "gift", "PRESENT": "gift", "GOODBYE": "gift",
+  "RAIN": "drop", "PUDDLE": "drop", "SLIPPED!": "drop", "SNOW": "drop",
+  "LATE NIGHT": "moon", "NIGHT NIGHT": "moon",
+  "MORNING!": "sun", "WAKE UP": "sun", "FRESH AIR": "sun", "CHILLING": "sun",
+  "SNACK": "cookie", "STUFFED": "cookie", "TREAT?": "cookie",
+  "BOWL": "cookie", "JAR": "cookie", "HUNGRY": "cookie",
+  "NEW TOY": "box", "CUSHION": "box", "BOX": "box", "PLANT": "box",
+  "MIRROR": "box", "MAT": "box", "DELIVERY": "box", "FORAGING": "box",
+  "SHOVED": "bolt", "SHOVED!": "bolt", "BUMP!": "bolt", "STEPPED ON": "bolt",
+  "POKED": "bolt", "TICKLED": "bolt", "FAST BALL": "bolt", "RATTLED": "bolt",
+  "WHEE!": "star",
+  "TAG": "flag", "REMATCH": "flag", "FINAL ROUND": "flag", "RACE": "flag",
+  "LEAPFROG": "flag", "STAREDOWN": "flag", "MIRROR PLAY": "flag",
+  "PIGGYBACK": "flag", "THE WAVE": "flag", "PLAY": "flag",
+  "SPOT TAKEN": "bolt", "EVICTED": "moon",
+  "PAL TIME": "dots", "BESTIE": "heart", "ERRAND": "box",
+  "FLUNG!": "bolt", "FOUND YOU": "flag",
+  "ACHOO": "drop", "IGNORED": "drop", "SLEEPY": "moon",
+  "SURPRISED!": "bolt", "BOOP": "heart", "HELLO!": "sun",
+  "GROOMED": "heart", "POSED!": "star", "LUCKY!": "star",
+  "GROWN UP!": "star",
+  "PEEK": "dots", "STRETCH": "sun", "DOODAD": "star", "WATCHING": "dots",
+  "BOOM!": "bolt", "ALL CLEAR": "sun", "STILL RAINING": "drop",
+  "SPARK": "bolt",
+};
+// the pet's faces carry causes too — faces whose timer means exactly one
+// thing resolve through this map; multi-cause faces (happy, excited,
+// curious, star, smug, embar, wink) rely on a petStamp planted where the
+// timer was set. no reason known = honest no-icon, never a wrong one
+const PET_FACE_WHY = {
+  dizzy: "FLUNG!", shock: "SURPRISED!", gasp: "SURPRISED!", sneeze: "ACHOO",
+  tearjoy: "TICKLED", laugh: "TICKLED", cry: "GOODBYE", worry: "PAL FLYING",
+  pout: "POKED", grumpy: "POKED", drool: "TREAT?", stuffed: "SNACK",
+  munch: "SNACK", chew: "SNACK", jealous: "PALM PAL", yawn: "WAKE UP",
+  sad: "IGNORED", doze: "SLEEPY",
+};
+let petWhy = null, petWhyF = null, petWhyAt = 0; // one queued cause stamp
+let petWhyIc = null, petWhyUntil = 0;            // the icon it resolved to
+let petEchoCd = 0; // pet-glance-at-pal-outburst cooldown
+function petStamp(why, f) { petWhy = why; petWhyF = f; petWhyAt = performance.now(); }
 
 // rarity: 0 common, 1 rare, 2 epic, 3 legendary
 const SPECIES = [
@@ -83,7 +146,7 @@ const SPECIES = [
   { id: "pebble", name: "Pebble", r: 0, shape: "flat",
     pal: { o:"#4a5560",b:"#9aa7b0",l:"#c8d2d8",s:"#7b8892",e:"#2a3036",w:"#ffffff",m:"#2a3036",k:"#f0a0b0" },
     top: [] },
-  { id: "tide", name: "Droplet", r: 1, shape: "tall", trait: "drip",
+  { id: "tide", name: "Droplet", r: 1, shape: "tall", trait: "drip", mv: "hop",
     pal: { o:"#2f5d7d",b:"#69b7ec",l:"#a9d8f7",s:"#4a90c4",e:"#1f2f3c",w:"#ffffff",m:"#1f2f3c",k:"#ffa8c0" },
     top: [[18,0,"b"],[18,1,"b"]] },
   { id: "ember", name: "Ember", r: 1, shape: "tall", trait: "spark",
@@ -121,7 +184,7 @@ const SPECIES = [
   { id: "kitty", name: "Kitty", r: 2, shape: "round", sig: "pounce",
     pal: { o:"#8a6238",b:"#f0c078",l:"#ffe8c0",s:"#d19a52",e:"#33291c",w:"#ffffff",m:"#33291c",k:"#ff8fb0" },
     top: [[10,1,"b"],[11,0,"b"],[25,0,"b"],[26,1,"b"],[11,1,"k"],[25,1,"k"]] },
-  { id: "bolt", name: "Bolt", r: 2, shape: "tall", sig: "zap",
+  { id: "bolt", name: "Bolt", r: 2, shape: "tall", mv: "scurry", sig: "zap",
     pal: { o:"#4a5560",b:"#a8b8c8",l:"#d8e4ec",s:"#788a98",e:"#20262c",w:"#8fd4f0",m:"#20262c",k:"#8fd4f0" },
     top: [[18,0,"c"],[17,1,"s"],[18,1,"s"],[19,1,"s"],[18,2,"s"]] },
   { id: "void", name: "Void", r: 2, shape: "flat", sig: "voidpull",
@@ -137,7 +200,7 @@ const SPECIES = [
   { id: "sunny", name: "Sunny", r: 0, shape: "round",
     pal: { o:"#a86b2a",b:"#ffd75e",l:"#fff0a8",s:"#e0a83f",e:"#33291c",w:"#ffffff",m:"#33291c",k:"#ff8fb0" },
     top: [[17,0,"l"],[19,0,"l"],[18,1,"l"],[13,2,"l"],[23,2,"l"]] },
-  { id: "bubble", name: "Bubble", r: 1, shape: "round", trait: "bubble",
+  { id: "bubble", name: "Bubble", r: 1, shape: "round", trait: "bubble", mv: "hop",
     pal: { o:"#5a8fa8",b:"#b8e8f5",l:"#e8fbff",s:"#8cc8de",e:"#1e3038",w:"#ffffff",m:"#1e3038",k:"#ffb0c8" },
     top: [[12,3,"w"],[24,4,"w"],[15,5,"l"],[27,7,"w"],[9,8,"l"]] },
   { id: "inky", name: "Inky", r: 1, shape: "tall",
@@ -164,10 +227,10 @@ const SPECIES = [
   { id: "coal", name: "Coal", r: 0, shape: "flat",
     pal: { o:"#1a1c20",b:"#3d4248",l:"#5d646c",s:"#2a2e34",e:"#101216",w:"#ffffff",m:"#101216",k:"#c96b5a" },
     top: [[12,3,"l"],[24,4,"l"],[18,2,"s"]] },
-  { id: "cloud", name: "Cloud", r: 0, shape: "puddle",
+  { id: "cloud", name: "Cloud", r: 0, shape: "puddle", mv: "hover",
     pal: { o:"#7a8fa0",b:"#dfeaf2",l:"#ffffff",s:"#b8cdd8",e:"#2c3842",w:"#ffffff",m:"#2c3842",k:"#ffb0c8" },
     top: [[10,4,"w"],[14,3,"w"],[26,4,"w"],[22,3,"w"]] },
-  { id: "bean", name: "Bean", r: 0, shape: "tall", kr: "WIGGLES AT JELLY",
+  { id: "bean", name: "Bean", r: 0, shape: "tall", mv: "scurry", kr: "WIGGLES AT JELLY",
     pal: { o:"#6b2a2a",b:"#c95a4a",l:"#f08a72",s:"#a84034",e:"#2b1414",w:"#ffffff",m:"#2b1414",k:"#ff9fb0" },
     top: [[18,0,"b"]] },
   { id: "snowy", name: "Snowy", r: 0, shape: "round",
@@ -188,10 +251,10 @@ const SPECIES = [
   { id: "minty", name: "Minty", r: 1, shape: "round",
     pal: { o:"#2a6b52",b:"#7de0b0",l:"#b8f5d8",s:"#52b885",e:"#142b20",w:"#ffffff",m:"#142b20",k:"#ff9fb0" },
     top: [[16,0,"w"],[20,0,"w"],[18,1,"w"]] },
-  { id: "taro", name: "Taro", r: 1, shape: "puddle",
+  { id: "taro", name: "Taro", r: 1, shape: "puddle", mv: "hover",
     pal: { o:"#5a4a7d",b:"#a88ad4",l:"#cbb4ec",s:"#8468b0",e:"#241c33",w:"#ffffff",m:"#241c33",k:"#ffb0d0" },
     top: [[12,5,"s"],[24,4,"s"]] },
-  { id: "honey", name: "Honey", r: 1, shape: "round", trait: "drip",
+  { id: "honey", name: "Honey", r: 1, shape: "round", trait: "drip", mv: "hop",
     pal: { o:"#8a6b1f",b:"#f0b53f",l:"#ffd98a",s:"#c4932a",e:"#33260e",w:"#ffffff",m:"#33260e",k:"#ff9f6b" },
     top: [[18,0,"b"],[18,1,"b"],[18,2,"s"]] },
   { id: "coral", name: "Coral", r: 1, shape: "tall",
@@ -240,7 +303,7 @@ const SPECIES = [
   { id: "sakura", name: "Sakura", r: 1, shape: "round", trait: "glint", season: "spring",
     pal: { o:"#8a3f52",b:"#f5a8bc",l:"#ffd9e4",s:"#e0809a",e:"#33202a",w:"#ffffff",m:"#33202a",k:"#7dc47f" },
     top: [[17,0,"k"],[19,0,"k"],[18,1,"k"],[15,2,"l"],[21,2,"l"]] },
-  { id: "drizzle", name: "Drizzle", r: 1, shape: "round", trait: "drip", season: "rainy",
+  { id: "drizzle", name: "Drizzle", r: 1, shape: "round", trait: "drip", mv: "hover", season: "rainy",
     pal: { o:"#3a4a5e",b:"#8fb8d9",l:"#c8e0f0",s:"#6a92b5",e:"#1c2630",w:"#ffffff",m:"#1c2630",k:"#4f7ea8" },
     top: [[15,0,"s"],[17,0,"s"],[19,0,"s"],[21,0,"s"],[16,1,"l"],[18,1,"l"],[20,1,"l"]] },
   // --- legendaries: each with a concept-matched quirk on top of a signature ---
@@ -432,7 +495,7 @@ const FLAVOR = {
   hyb: "BORN RIGHT ON THIS DESKTOP|ONE OF A KIND",
 };
 
-const APP_VER = "0.3.1"; // keep in sync with tauri.conf.json version
+const APP_VER = "0.4.0"; // keep in sync with tauri.conf.json version
 
 // species -> personality assignment (hybrids inherit one parent's)
 const PSY_ASSIGN = {
@@ -962,15 +1025,13 @@ const FACES = {
   },
   happy: {
     e: [[10,12],[11,11],[12,11],[13,12],[22,12],[23,11],[24,11],[25,12]],
-    m: [[15,15],[16,15],[17,15],[18,15],[19,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],
-        [16,17],[17,17],[18,17],[19,17]],
-    k: [[6,14],[7,14],[8,14],[9,14],[27,14],[28,14],[29,14],[30,14]],
+    m: [[15,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],[16,17],[19,17]],
+    k: [[6,14],[7,14],[8,14],[9,14],[27,14],[28,14],[29,14],[30,14],[17,17],[18,17]],
   },
   laugh: {
     e: [[9,10],[10,11],[11,12],[10,13],[9,14],[26,10],[25,11],[24,12],[25,13],[26,14]],
-    m: [[15,14],[16,14],[17,14],[18,14],[19,14],[20,14],[15,15],[16,15],[17,15],[18,15],[19,15],[20,15],
-        [16,16],[17,16],[18,16],[19,16],[17,17],[18,17]],
-    k: [[7,14],[8,14],[28,14],[29,14]],
+    m: [[15,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],[15,17],[20,17],[16,18],[17,18],[18,18],[19,18]],
+    k: [[7,14],[8,14],[28,14],[29,14],[17,17],[18,17]],
   },
   dizzy: {
     e: [[10,10],[12,10],[11,11],[10,12],[12,12],[23,10],[25,10],[24,11],[23,12],[25,12]],
@@ -987,17 +1048,15 @@ const FACES = {
   love: {
     v: [[10,10],[12,10],[10,11],[11,11],[12,11],[11,12],
         [23,10],[25,10],[23,11],[24,11],[25,11],[24,12]],
-    m: [[15,15],[16,15],[17,15],[18,15],[19,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],
-        [16,17],[17,17],[18,17],[19,17]],
-    k: [[6,14],[7,14],[8,14],[28,14],[29,14],[30,14]],
+    m: [[15,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],[16,17],[19,17]],
+    k: [[6,14],[7,14],[8,14],[28,14],[29,14],[30,14],[17,17],[18,17]],
   },
   // star-eyed excitement: gems, treats, reveals
   star: {
     c: [[11,10],[10,11],[12,11],[11,12],[10,13],[12,13],
         [24,10],[23,11],[25,11],[24,12],[23,13],[25,13]],
-    m: [[15,14],[16,14],[17,14],[18,14],[19,14],[20,14],[15,15],[16,15],[17,15],[18,15],[19,15],[20,15],
-        [16,16],[17,16],[18,16],[19,16],[17,17],[18,17]],
-    k: [[6,14],[7,14],[8,14],[6,15],[7,15],[28,14],[29,14],[30,14],[29,15],[30,15]],
+    m: [[15,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],[15,17],[20,17],[16,18],[17,18],[18,18],[19,18]],
+    k: [[6,14],[7,14],[8,14],[6,15],[7,15],[28,14],[29,14],[30,14],[29,15],[30,15],[17,17],[18,17]],
   },
   // one eye closed in a playful wink + crooked smirk
   wink: {
@@ -1046,24 +1105,226 @@ const FACES = {
     m: [[15,16],[16,16],[17,16],[18,16],[19,16],[20,15],[21,14]],
     k: [[7,14],[8,14],[28,14],[29,14]],
   },
+  // side-eye: narrowed eyes slid toward the glare target — jealousy,
+  // rival watch, unimpressed by whatever just happened over there
+  sideeye: {
+    e: [[11,11],[12,11],[13,11],[11,12],[12,12],[13,12],[11,13],[12,13],[13,13],
+        [24,11],[25,11],[26,11],[24,12],[25,12],[26,12],[24,13],[25,13],[26,13]],
+    w: [[11,11],[24,11]],
+    m: [[16,16],[17,16],[18,16],[19,16]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // doze: half-lidded droop — walking to a nap spot, about to drift off
+  doze: {
+    e: [[10,12],[11,12],[12,12],[13,12],[10,13],[11,13],[12,13],[13,13],
+        [22,12],[23,12],[24,12],[25,12],[22,13],[23,13],[24,13],[25,13]],
+    w: [[10,12],[22,12]],
+    u: [[10,14],[11,14],[12,14],[13,14],[22,14],[23,14],[24,14],[25,14]],
+    m: [[16,16],[17,16],[18,16],[19,16]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // yawn: closed arcs + big open O — wakes from a nap groggy
+  yawn: {
+    e: [[10,13],[11,14],[12,14],[13,13],[22,13],[23,14],[24,14],[25,13]],
+    m: [[16,15],[17,15],[18,15],[19,15],[15,16],[20,16],[15,17],[20,17],
+        [16,18],[17,18],[18,18],[19,18]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // pumped: wide bright eyes + open grin — race start, treat spotted,
+  // about to do something at full speed
+  excited: {
+    e: [[10,10],[11,10],[12,10],[13,10],[10,11],[11,11],[12,11],[13,11],[10,12],[11,12],[12,12],[13,12],
+        [22,10],[23,10],[24,10],[25,10],[22,11],[23,11],[24,11],[25,11],[22,12],[23,12],[24,12],[25,12]],
+    w: [[10,10],[11,10],[22,10],[23,10]],
+    u: [[10,13],[11,13],[12,13],[13,13],[22,13],[23,13],[24,13],[25,13]],
+    m: [[15,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],[15,17],[20,17],[16,18],[17,18],[18,18],[19,18]],
+    k: [[6,14],[7,14],[8,14],[9,14],[27,14],[28,14],[29,14],[30,14],[17,17],[18,17]],
+  },
+  // mischief: one squinted eye + crooked smirk — plotting the shove,
+  // the tag, the sneak. up to no good and proud of it
+  mischief: {
+    e: [[10,12],[11,12],[12,12],[13,12],[10,13],[11,13],[12,13],[13,13],
+        [22,10],[23,10],[24,10],[25,10],[22,11],[23,11],[24,11],[25,11],[22,12],[23,12],[24,12],[25,12]],
+    w: [[10,12],[22,10]],
+    m: [[15,16],[16,16],[17,16],[18,16],[19,15],[20,14]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // downcast: inner corners up, outer ends droop + little frown —
+  // lost the race, ignored too long, missing a departed friend
+  sad: {
+    e: [[10,11],[11,11],[12,11],[13,11],[10,12],[11,12],[12,12],[13,12],[12,13],[13,13],
+        [22,11],[23,11],[24,11],[25,11],[22,12],[23,12],[24,12],[25,12],[22,13],[23,13]],
+    w: [[10,11],[22,11]],
+    m: [[16,16],[17,16],[18,16],[19,16],[15,17],[20,17]],
+  },
+  // gasp: wide eyes + small round O — synergy pops, reveals, surprises
+  gasp: {
+    e: [[10,10],[11,10],[12,10],[10,11],[11,11],[12,11],[10,12],[11,12],[12,12],
+        [23,10],[24,10],[25,10],[23,11],[24,11],[25,11],[23,12],[24,12],[25,12]],
+    w: [[10,10],[23,10]],
+    m: [[17,15],[18,15],[16,16],[19,16],[16,17],[19,17],[17,18],[18,18]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // stuffed: puffed cheeks after a snack — content arcs, huge blush,
+  // tiny satisfied mouth
+  stuffed: {
+    e: [[10,12],[11,13],[12,13],[13,12],[22,12],[23,13],[24,13],[25,12]],
+    m: [[17,16],[18,16]],
+    k: [[6,14],[7,14],[8,14],[9,14],[6,15],[7,15],[8,15],[9,15],
+        [27,14],[28,14],[29,14],[30,14],[27,15],[28,15],[29,15],[30,15]],
+  },
+  // embar: flustered closed-eye arcs + a tiny w smile buried in a huge
+  // blush — after a nuzzle, a cuddle, or being handed a gift
+  embar: {
+    e: [[10,12],[11,13],[12,13],[13,12],[22,12],[23,13],[24,13],[25,12]],
+    m: [[16,16],[19,16],[17,17],[18,17]],
+    k: [[6,14],[7,14],[8,14],[9,14],[6,15],[7,15],[8,15],[9,15],[6,16],[7,16],
+        [27,14],[28,14],[29,14],[30,14],[27,15],[28,15],[29,15],[30,15],[29,16],[30,16]],
+  },
+  // jealous: narrowed eyes slid toward whoever got the attention, flat
+  // mouth with the far corner pulled down — the held pal, the eaten
+  // treat, the gift that went to someone else
+  jealous: {
+    m: [[16,16],[17,16],[18,16],[19,16],[20,17]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // curious: one eye open, one squinted (generated), tiny o mouth —
+  // first sight of a new species or a strange contraption landing
+  curious: {
+    m: [[17,16],[18,16],[17,17],[18,17]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // worry: brow over the eyes + wavy little frown + a cold sweat bead —
+  // a buddy hurled through the air, a pet crying, a pal in trouble
+  worry: {
+    m: [[16,17],[17,16],[18,17],[19,16],[20,17]],
+    d: [[23,15]],
+  },
+  // hmph: eyes slid away (generated), puffed cheeks + tiny pout — the
+  // shoved pal, the stepped-on pal, the tag loser sulking off
+  hmph: {
+    m: [[16,16],[19,16],[17,17],[18,17]],
+    k: [[6,15],[7,15],[8,15],[9,15],[6,16],[7,16],[8,16],
+        [27,15],[28,15],[29,15],[30,15],[28,16],[29,16],[30,16]],
+  },
+  // drool: plain eager eyes + open mouth with a drip at the corner —
+  // snack incoming, bowl in sight, lunch actually happening soon
+  drool: {
+    m: [[15,15],[16,15],[17,15],[18,15],[19,15],[20,15],
+        [16,16],[17,16],[18,16],[19,16],[17,17],[18,17]],
+    d: [[21,17],[21,18]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // plead: watery beg — tall glossy eyes + tiny mouth. the treat you
+  // can't have, the pal who got held first, PLEASE pick me
+  plead: {
+    e: [[10,10],[11,10],[12,10],[10,11],[11,11],[12,11],[10,12],[11,12],[12,12],[10,13],[11,13],[12,13],
+        [23,10],[24,10],[25,10],[23,11],[24,11],[25,11],[23,12],[24,12],[25,12],[23,13],[24,13],[25,13]],
+    w: [[10,10],[11,10],[10,11],[23,10],[24,10],[23,11]],
+    m: [[17,16],[18,16]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // serious: game face — lids down, brow set, flat mouth. mid-race,
+  // mid-tag, mid-staredown
+  serious: {
+    m: [[16,16],[17,16],[18,16],[19,16]],
+    g: [[9,8],[10,9],[26,8],[25,9]],
+  },
+  // tearjoy: laughing so hard it leaks — squeezed eyes + open grin +
+  // tears flung from the corners
+  tearjoy: {
+    e: [[9,10],[10,11],[11,12],[10,13],[9,14],[26,10],[25,11],[24,12],[25,13],[26,14]],
+    m: [[15,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],[15,17],[20,17],[16,18],[17,18],[18,18],[19,18]],
+    d: [[8,12],[8,13],[27,12],[27,13]],
+    k: [[7,14],[8,14],[28,14],[29,14],[17,17],[18,17]],
+  },
+  // meh: lidded side glance + flat wide mouth — profoundly unimpressed
+  meh: {
+    m: [[16,16],[17,16],[18,16],[19,16],[20,16]],
+  },
+  // sneeze: scrunched eyes + open O + spray drops. pollen, dust,
+  // a nose full of tickle
+  sneeze: {
+    e: [[9,10],[10,11],[11,12],[10,13],[9,14],[26,10],[25,11],[24,12],[25,13],[26,14]],
+    m: [[16,15],[17,15],[18,15],[19,15],[16,16],[17,16],[18,16],[19,16],[17,17],[18,17]],
+    d: [[13,18],[14,18],[21,18],[22,18],[15,19],[20,19]],
+  },
+  // ---- frame-2 variants: the looping second frame of animated faces.
+  // same eyes/feel as the base, one detail moved — laugh rocks its
+  // mouth shut, the drip falls, hearts bob, sparkles twinkle
+  happy2: {
+    e: [[10,12],[11,11],[12,11],[13,12],[22,12],[23,11],[24,11],[25,12]],
+    m: [[15,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],[17,17],[18,17]],
+    k: [[6,14],[7,14],[8,14],[9,14],[27,14],[28,14],[29,14],[30,14],[17,15],[18,15]],
+  },
+  laugh2: {
+    e: [[9,10],[10,11],[11,12],[10,13],[9,14],[26,10],[25,11],[24,12],[25,13],[26,14]],
+    m: [[15,16],[20,16],[16,17],[17,17],[18,17],[19,17]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  love2: {
+    v: [[10,11],[12,11],[10,12],[11,12],[12,12],[11,13],
+        [23,11],[25,11],[23,12],[24,12],[25,12],[24,13]],
+    m: [[15,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],[16,17],[19,17]],
+    k: [[6,14],[7,14],[8,14],[28,14],[29,14],[30,14],[17,17],[18,17]],
+  },
+  star2: {
+    c: [[10,10],[12,10],[11,11],[10,12],[12,12],
+        [23,10],[25,10],[24,11],[23,12],[25,12]],
+    m: [[15,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],[15,17],[20,17],[16,18],[17,18],[18,18],[19,18]],
+    k: [[6,14],[7,14],[8,14],[6,15],[7,15],[28,14],[29,14],[30,14],[29,15],[30,15],[17,17],[18,17]],
+  },
+  dizzy2: {
+    e: [[11,10],[10,11],[12,11],[11,12],[24,10],[23,11],[25,11],[24,12]],
+    m: [[15,16],[16,15],[17,16],[18,15],[19,16],[20,15]],
+  },
+  drool2: {
+    m: [[15,15],[16,15],[17,15],[18,15],[19,15],[20,15],
+        [16,16],[17,16],[18,16],[19,16],[17,17],[18,17]],
+    d: [[21,18],[21,19]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  sleeping2: {
+    e: [[10,13],[11,14],[12,14],[13,13],[22,13],[23,14],[24,14],[25,13]],
+    m: [[17,16],[18,16],[17,17],[18,17]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  cry2: {
+    e: [[10,11],[11,11],[12,11],[13,11],[10,12],[11,12],[12,12],[13,12],[10,13],[11,13],[12,13],[13,13],
+        [22,11],[23,11],[24,11],[25,11],[22,12],[23,12],[24,12],[25,12],[22,13],[23,13],[24,13],[25,13]],
+    w: [[10,11],[22,11]],
+    d: [[11,16],[11,17],[24,16],[24,17],[12,18],[23,18]],
+    m: [[16,15],[17,16],[18,16],[19,15]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // excited2/worry2: eyes come from the species stamp (EYE_EXPR) — only
+  // the mouth/detail lives here
+  excited2: {
+    m: [[15,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],[16,17],[19,17]],
+    k: [[6,14],[7,14],[8,14],[9,14],[27,14],[28,14],[29,14],[30,14],[17,17],[18,17]],
+  },
+  worry2: {
+    m: [[16,16],[17,17],[18,16],[19,17],[20,16]],
+    d: [[12,15]],
+  },
 };
 
 // per-species EYE styles: the open-eyed faces (idle/lookL/lookR) are
-// generated from 4x5 templates stamped at the eye's base x — rounded
-// corners, a chunky top-left shine, a bottom-right catchlight, and a
-// lighter `u` iris-depth row. seeded per species so every slime's gaze
-// is a little different. chars: e=eye w=shine u=depth c=gold glint .=none
+// generated from 5x5 templates stamped at the eye's base x — each is a
+// cute-animal eye: authored for the LEFT eye with col0 at the temple,
+// then mirrored onto the right eye so droops/flicks/lashes face outward.
+// chars: e=eye w=shine u=depth c=gold glint .=none
 const EYE_TPL = [
-  // 0 round — the new default
-  [".ee.", "wwee", "weee", "eeew", ".uu."],
-  // 1 sparkle — oversized shine cluster
-  ["wee.", "wwee", "weee", "eewe", ".uu."],
-  // 2 dot — tiny bead eyes
-  ["....", ".we.", ".ee.", ".ee.", "...."],
-  // 3 starry — gold catchlight
-  [".ee.", "wwee", "weee", "eece", ".uu."],
-  // 4 mellow — half-lidded, relaxed
-  ["....", "eeee", "weee", "eeew", ".uu."],
+  // 0 puppy — begging eyes: droopy outer corner, fat shine
+  [".eee.", "wweee", "weeee", "eeeee", "e.uu."],
+  // 1 kitty — upturned flick at the temple, confident gleam
+  ["eeee.", "weeee", "weeee", "e.ee.", ".uuw."],
+  // 2 hamster — small glossy bead, tucked glint
+  [".....", ".wee.", "weee.", ".eee.", "....."],
+  // 3 fawn — watery doe eyes: gold fleck, outer lash hint
+  ["e....", "wweee", "weeee", "eecww", ".uuu."],
+  // 4 sleepy — heavy lid sagging at the temple
+  [".....", "weeee", "eeeee", "eeeee", ".wu.."],
 ];
 function eyeStyle(i) {
   const id = SPECIES[i] && SPECIES[i].id;
@@ -1075,21 +1336,62 @@ function eyeStyle(i) {
 }
 // faces with generated eyes — the rest of the face (mouth/blush/etc)
 // rides the authored table untouched
-const EYE_BASE = { idle: [10, 22], lookL: [9, 21], lookR: [11, 23] };
+const EYE_BASE = { idle: [11, 21], lookL: [10, 20], lookR: [12, 22] };
+// open-mouth expression faces get their eyes from the SAME species
+// template — each pose just shifts, lifts or lids it, so an excited
+// fawn keeps its doe eyes instead of falling back to a generic speck.
+// dy/dx offset the stamp, keepFrom/dropTop trim lid rows, side pins a
+// trim to one eye only (0=left, 1=right)
+const EYE_EXPR = {
+  excited:  {},                       // the plain pretty eye + a big grin
+  gasp:     {},                       // plain wide eyes + the little O
+  sad:      { dropTop: 1 },           // brow droops over the shine
+  sideeye:  { dx: -2 },               // same eyes, glancing sideways
+  doze:     { keepFrom: 2 },          // heavy lid leaves the lower rows
+  mischief: { dropTop: 3, side: 0 },  // one squeezed eye, one clear
+  jealous:  { dx: -2, dropTop: 2 },   // narrowed glare slid at the rival
+  curious:  { dropTop: 2, side: 1 },  // right eye squints — quizzical
+  worry:    { dropTop: 1 },           // same brow lift as sad, new mouth
+  hmph:     { dx: 2, dropTop: 1 },    // turned-away lids + puffed cheeks
+  drool:    {},                     // plain eager eyes, food locked on
+  serious:  { dropTop: 1 },           // lids down, brow set — game face
+  meh:      { dropTop: 2, dx: -1 },   // half-mast eyes glancing away
+  excited2: {},                     // frame-2 of excited — same eyes
+  drool2:   {},                     // frame-2 of drool — drip falls
+  worry2:   { dropTop: 1 },           // frame-2 of worry — mouth wobble
+};
 function faceSet(spIdx) {
   if (spIdx == null) return FACES;
   const c = (faceSet.c ||= {});
   if (c[spIdx]) return c[spIdx];
   const tpl = EYE_TPL[eyeStyle(spIdx)];
   const set = Object.assign({}, FACES);
+  // one stamp pass per eye — shapes mirror for the right eye, shines don't
+  const stamp = (px, bi, bx, dx, dy, keep) => {
+    for (let y = 0; y < 5; y++) {
+      if (keep && !keep(y, bi)) continue;
+      for (let x = 0; x < 5; x++) {
+        const ch = tpl[y][x];
+        if (ch !== ".") px[ch].push([bx + (bi && ch !== "w" ? 4 - x : x) + dx, 10 + y + dy]);
+      }
+    }
+  };
   for (const f in EYE_BASE) {
     const px = { e: [], w: [], u: [], c: [] };
-    for (const bx of EYE_BASE[f])
-      for (let y = 0; y < 5; y++)
-        for (let x = 0; x < 4; x++) {
-          const ch = tpl[y][x];
-          if (ch !== ".") px[ch].push([bx + x, 10 + y]);
-        }
+    stamp(px, 0, EYE_BASE[f][0], 0, 0, null);
+    stamp(px, 1, EYE_BASE[f][1], 0, 0, null);
+    set[f] = Object.assign({}, FACES[f], px);
+  }
+  // expression eyes: same template, different pose — keepFrom/dropTop trim
+  // lid rows, dx slides the stamp, dy lifts it; mouths/blush survive
+  for (const f in EYE_EXPR) {
+    const spec = EYE_EXPR[f];
+    const px = { e: [], w: [], u: [], c: [] };
+    const keep = (y, bi) =>
+      !(spec.keepFrom != null && y < spec.keepFrom)
+      && !(spec.dropTop && y < spec.dropTop && (spec.side == null || spec.side === bi));
+    stamp(px, 0, 11, spec.dx || 0, spec.dy || 0, keep);
+    stamp(px, 1, 21, spec.dx || 0, spec.dy || 0, keep);
     set[f] = Object.assign({}, FACES[f], px);
   }
   return (c[spIdx] = set);
@@ -1103,6 +1405,10 @@ function mixRgb(a, b, f) {
 }
 const SWEAT = hexRgb("#8fd4f0");
 const FIXED = { d: SWEAT, c: hexRgb("#ffd75e"), g: hexRgb("#2f2f3a"), v: hexRgb("#ff8fb8") };
+// face-mass chars — eyes, shines, iris, glints, blush. these get an
+// anti-aliased rim: outer quadrants blend toward the body they border,
+// so faces read round and glossy at 2x instead of stepped pixel blobs
+const FACE_SOFT = { e: 1, w: 1, u: 1, c: 1, k: 1 };
 
 // per-species silhouette variation: every slime is the same base shape
 // but a slightly different blob — seeded by species index so it's stable
@@ -1151,7 +1457,7 @@ function animProf(i) {
   let s = (i * 2654435761 + 0x85ebca6b) >>> 0;
   const rnd = () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296;
   return (animCache[i] = {
-    blink: 2400 + rnd() * 2800,      // ms between blinks
+    blink: 3800 + rnd() * 3600,      // ms between blinks — rested eyes, not twitchy
     blinkLen: 100 + rnd() * 80,      // blink duration ms
     fidget: 0.65 + rnd() * 1.0,      // idle squash cadence multiplier
     breathe: 0.88 + rnd() * 0.3,     // breathing rate multiplier
@@ -1160,6 +1466,9 @@ function animProf(i) {
     waddle: 0.8 + rnd() * 0.5,       // walk-bob rhythm — waddlers vs gliders
     arc: 0.85 + rnd() * 0.5,         // hop hang-time — floaty vs darting
     glee: rnd(),                     // reaction-face bias: low=wink, high=hearts
+    squash: 0.7 + rnd() * 0.7,       // jelly elasticity — jiggly vs firm bodies
+    bop: 0.5 + rnd() * 0.9,          // hop energy — springy vs grounded species
+    sway: 0.6 + rnd() * 0.8,         // idle rock tempo — each pal drifts its own rhythm
   });
 }
 
@@ -1170,17 +1479,27 @@ function buildSprite(faceName, pal, top, hw, sil, spIdx, opa) {
   for (let y = 0; y < SH; y++) {
     for (let x = CX - hhw[y]; x < CX + hhw[y]; x++) {
       let c = "b";
-      const dx = x - 12, dy = y - 6;
-      if (dx * dx + dy * dy < 20) c = "l";
-      if (y >= 21 || (x - CX >= 8 && y >= 17)) c = "s";
+      // highlight blob hugs the top-left crown — kept clear of the eye zone
+      // (x11-25, y10-14) so it can't paint a bright strip between the eyes
+      const dx = x - 10, dy = y - 4;
+      if (dx * dx + dy * dy < 14) c = "l";
+      if (y >= 21 || (x - CX >= 8 + ((x * 31 + y * 17) & 3) && y >= 17)) c = "s";
       // translucent jelly core — a broad bright mass normalized to each
       // row's halfwidth, so the glow hugs round/tall/flat shapes alike.
       // the rim dithers into the body: a checkerboard falloff instead of
       // a hard ellipse edge, which reads as soft pixel translucency
-      if (c === "b") {
-        const gx = (x - CX) / Math.max(5, hhw[y] * 0.7), gy = (y - 12) / 7.5;
+      if (c === "b" && y >= 15) {
+        // jelly glow lives in the belly — centered at (CX, 19) it can never
+        // paint a bright column through the eye gap (x16-20, y9-14)
+        const gx = (x - CX) / Math.max(5, hhw[y] * 0.7), gy = (y - 19) / 6.5;
         const d2 = gx * gx + gy * gy;
-        if (d2 < 1 && (d2 < 0.75 || ((x + y) & 1) === 0)) c = "i";
+        // the glow feathers out over ~2px of speckle instead of a thin
+        // checker ring — a hard i/b edge read as vertical banding on
+        // bright backgrounds behind the translucent body
+        const dh = (x * 31 + y * 17) & 3;
+        if (d2 < 0.55) c = "i";
+        else if (d2 < 0.8) { if (dh !== 0) c = "i"; }
+        else if (d2 < 1.0) { if (dh === 0) c = "i"; }
       }
       grid[y][x] = c;
     }
@@ -1218,10 +1537,10 @@ function buildSprite(faceName, pal, top, hw, sil, spIdx, opa) {
     for (const [x, y] of F[ch]) { const [nx, ny] = tfm(x, y); grid[ny][nx] = ch; }
   }
   const off = document.createElement("canvas");
-  // 2x supersampled: every logical pixel becomes a 2x2 block — finer
-  // visible grain for every slime, plus per-quadrant shading and soft
-  // silhouette edges instead of hard chunky corners
-  const SS = 2;
+  // 3x supersampled: every logical pixel becomes a 3x3 block — the extra
+  // source detail keeps pals crisp at fractional squash/scale factors,
+  // where a smaller source blurs under bilinear or stripes under NN
+  const SS = 3;
   off.width = SW * SS;
   off.height = SH * SS;
   const octx = off.getContext("2d");
@@ -1239,14 +1558,15 @@ function buildSprite(faceName, pal, top, hw, sil, spIdx, opa) {
   const bl = bR ? bR[0] * 0.299 + bR[1] * 0.587 + bR[2] * 0.114 : 128;
   const lift = bR && bl < 76 ? Math.min(0.3, (76 - bl) / 76 * 0.34) : 0;
   const bIn = sil ? null : mixRgb(mixRgb(bR, lR, 0.24), WHT, 0.14 + lift);       // pastel body
-  const iIn = sil ? null : mixRgb(mixRgb(bR, lR, 0.74), WHT, 0.20 + lift);       // glowing core
+  const iIn = sil ? null : mixRgb(mixRgb(bR, lR, 0.30), WHT, 0.18 + lift); // gentle center glow — same alpha as b so no boundary
   const sIn = sil ? null : mixRgb(mixRgb(sR, lR, 0.32), WHT, 0.16 + lift * 0.6); // pastel shade, not darkness
   const oIn = sil ? null : mixRgb(oR, mixRgb(bR, lR, 0.35), 0.45 + lift);        // soft tinted outline
   const lIn = sil ? null : mixRgb(lR, WHT, 0.16);                    // milky highlight
-  const uIn = sil ? null : mixRgb(hexRgb(pal.e || "#26262e"), lR, 0.45); // iris depth row
-  // The center transmits the desktop like jelly while the shaded rim stays
-  // substantial; companions get a slightly firmer center (opa variant).
-  const ALPHA = opa ? { i: 146, b: 226, s: 238, l: 252 } : { i: 124, b: 212, s: 224, l: 246 };
+  const eIn = sil ? null : hexRgb(pal.e || "#26262e");
+  const uIn = sil ? null : mixRgb(hexRgb(pal.e || "#26262e"), lR, 0.45); // iris depth row — lighter than the pupil
+  // Fully opaque interior — any translucency lets window text/UI ghost through
+  // the body (reads as phantom bright strips, e.g. between the eyes).
+  const ALPHA = opa ? { i: 252, b: 252, s: 253, l: 254 } : { i: 252, b: 252, s: 253, l: 254 };
   const cellAt = (x, y) => (x < 0 || y < 0 || x >= SW || y >= SH) ? "." : grid[y][x];
   for (let y = 0; y < SH; y++) {
     for (let x = 0; x < SW; x++) {
@@ -1263,6 +1583,14 @@ function buildSprite(faceName, pal, top, hw, sil, spIdx, opa) {
         : c === "u" ? uIn
         : (FIXED[c] || hexRgb(pal[c] || pal.b));
       const baseA = sil ? 255 : (ALPHA[c] !== undefined ? ALPHA[c] : 255);
+      // eyelid rim zone: a body cell hugging the eye's OUTER edge — 1-3 eye
+      // neighbors in its 8-ring. interior template holes are fully enclosed
+      // (4+) so they stay clean catchlight specks, not smudges
+      const ec = !sil && (c === "b" || c === "i" || c === "s" || c === "l")
+        ? [cellAt(x - 1, y), cellAt(x + 1, y), cellAt(x, y - 1), cellAt(x, y + 1),
+           cellAt(x - 1, y - 1), cellAt(x + 1, y - 1), cellAt(x - 1, y + 1), cellAt(x + 1, y + 1)]
+            .reduce((n, ch) => n + (ch === "e" || ch === "u" || ch === "w" || ch === "c" ? 1 : 0), 0)
+        : 0;
       // write the 2x2 sub-block: each quadrant shades by its own outward
       // neighbor — empty = translucent feather edge, outline = contact
       // shadow, lit cells = a little bounce light. deterministic hash
@@ -1275,6 +1603,32 @@ function buildSprite(faceName, pal, top, hw, sil, spIdx, opa) {
           if (nx === "." || ny === "." || nc === ".") {
             a = baseA * 0.45; // feathered silhouette edge
             r = mixRgb(rgb, oIn || rgb, 0.4)[0]; g = mixRgb(rgb, oIn || rgb, 0.4)[1]; b = mixRgb(rgb, oIn || rgb, 0.4)[2];
+          } else if (!sil && FACE_SOFT[c]) {
+            // round the face mass: a quadrant that faces non-face pixels
+            // borrows that neighbor's color — corners blend hardest, edge
+            // halves a little, diagonal nicks just a touch. the eye stops
+            // being a jagged stamp and reads as a smooth glossy bead
+            const ff = (ch) => !!FACE_SOFT[ch];
+            const out = !ff(nx) ? nx : !ff(ny) ? ny : !ff(nc) ? nc : null;
+            let ext = !ff(nx) && !ff(ny) ? 0.5 : !ff(nx) || !ff(ny) ? 0.32 : !ff(nc) ? 0.14 : 0;
+            if (c === "e") ext *= 0.45; // pupils keep a crisp edge — the soft blend reads blurry
+            if (ext > 0 && out) {
+              const nr = out === "i" ? iIn : out === "b" ? bIn : out === "s" ? sIn : out === "o" ? oIn
+                : out === "l" ? lIn : out === "u" ? uIn : (FIXED[out] || hexRgb(pal[out] || pal.b));
+              const mx = mixRgb(rgb, nr, ext);
+              r = mx[0]; g = mx[1]; b = mx[2];
+              a = baseA * (1 - ext * 0.2);
+            }
+          } else if (!sil && ec >= 1 && ec <= 3 &&
+                     (nx === "e" || nx === "u" || nx === "w" || nx === "c" ||
+                      ny === "e" || ny === "u" || ny === "w" || ny === "c" ||
+                      nc === "e" || nc === "u" || nc === "w" || nc === "c")) {
+            // eyelid rim: the quadrant facing the eye darkens toward the
+            // pupil — a soft line nesting the bead eyes, not a smudge
+            const eyeQ = nx === "e" || nx === "u" || nx === "w" || nx === "c" ||
+                         ny === "e" || ny === "u" || ny === "w" || ny === "c";
+            const mx = mixRgb(rgb, eIn, eyeQ ? 0.3 : 0.14);
+            r = mx[0]; g = mx[1]; b = mx[2];
           } else if (nx === "o" || ny === "o") {
             r *= 0.86; g *= 0.86; b *= 0.86; // contact shadow against the rim
           } else if ((nx === "l" || ny === "l" || nc === "i") && (c === "b" || c === "i")) {
@@ -1304,6 +1658,49 @@ function sprite(face, spIdx, sil, opa) {
     spriteCache[key] = buildSprite(face, sil ? SILH : shiny ? SHINY_PAL(sp.pal) : sp.pal, sp.top, SHAPES[sp.shape], sil, spIdx, opa);
   }
   return spriteCache[key];
+}
+
+// face animation: these faces loop a 2-frame sequence — the BASE id
+// drives timers, the status card and body jiggle; only the sprite
+// lookup swaps to the frame-2 variant. pals desync via their own ph
+// so a crowd of laughing slimes never marches in lockstep
+const FACE_ANIM = {
+  happy:   ["happy", "happy2"],     // tongue bobs in the grin
+  laugh:   ["laugh", "laugh2"],     // rocking open/shut laugh
+  excited: ["excited", "excited2"], // big grin pulses
+  love:    ["love", "love2"],       // hearts bob
+  star:    ["star", "star2"],       // sparkles twinkle cross/diamond
+  drool:   ["drool", "drool2"],     // the drip descends
+  dizzy:   ["dizzy", "dizzy2"],     // spiral eyes spin x/+
+  worry:   ["worry", "worry2"],     // mouth wobbles, sweat shifts
+  sleeping:["sleeping", "sleeping2"],// breath opens the mouth a crack
+  cry:     ["cry", "cry2"],         // tears stream down
+};
+// dream reel: a napping pal's face isn't a flat "asleep" the whole
+// time — each nap rolls a little dream, and laughing in your sleep
+// is a real thing slimes do
+const DREAM_FACES = ["content", "content", "happy", "laugh"];
+function faceFrame(f, ph) {
+  const s = FACE_ANIM[f];
+  return s ? s[Math.floor(performance.now() / 240 + (ph || 0)) & 1] : f;
+}
+
+// face-driven body micro-motion — tiny translate/squash pulses on top
+// of the normal gait bob, keyed by the BASE face id: laughing bodies
+// rock, excited bodies shiver, sleeping bodies breathe, worried bodies
+// tremble. skipped under reduceMotion
+const FACE_JIG = {
+  laugh:   { x: 1.3, f: 9 },   excited: { y: -0.9, f: 12 }, star:  { y: -0.6, f: 8 },
+  worry:   { x: 0.8, f: 13 },  cry:     { x: 0.9, f: 9 },    dizzy: { x: 1.1, f: 5.5 },
+  sneeze:  { x: 1.4, f: 15 },  plead:   { y: -0.5, f: 2.6 }, love:  { y: -0.6, f: 2.4 },
+  sleeping:{ sq: 0.05, f: 1.5 },happy:  { sq: 0.018, f: 6 }, curious:{ x: 0.4, f: 3 },
+  tearjoy: { x: 1.3, f: 9 },
+};
+function faceJig(f, ph) {
+  const j = FACE_JIG[f];
+  if (!j || reduceMotion) return { x: 0, y: 0, sq: 0 };
+  const w = performance.now() / 1000 * (j.f || 8) + (ph || 0);
+  return { x: (j.x || 0) * Math.sin(w), y: (j.y || 0) * Math.sin(w * 1.13), sq: (j.sq || 0) * Math.sin(w) };
 }
 
 // ---------- audio: all sounds synthesized, no assets ----------
@@ -1392,6 +1789,9 @@ const TREATS = [
   { id: "chili",  xp: 60 },   // hyper mode for 60s
   { id: "coffee", xp: 40 },   // can't sleep for 5min
 ];
+// every trait has a favorite snack — seeing ITS kind turns a glance into
+// full drool, losing the race for it into a genuine sulk
+const TREAT_PREF = { spark: 2, chomp: 2, glint: 1, royal: 1, drip: 1, wisp: 3, gravity: 3, bubble: 0, climb: 0, web: 0 };
 
 let xp = 0;
 let level = 0;
@@ -1471,6 +1871,18 @@ function sanitizePanelPositions(value) {
 
 let state = "idle";
 let awakeAt = Date.now();   // last user activity: cursor motion, touch, snacks
+// power saver: the frame cap. OFF renders full rate; AUTO drops to ~24fps
+// after 90s of no interaction and ~12fps after 4min; ON caps always.
+// dt clamps at 50ms so the world just idles calmer, it never jumps
+let saverMode = 1;
+let lastRun = 0;
+const SAVER_LABEL = ["OFF", "AUTO", "ON"];
+function saverCapMs() {
+  if (saverMode === 2) return 40;
+  if (saverMode !== 1) return 0;
+  const idle = Date.now() - Math.max(awakeAt, lastUiTap);
+  return idle > 240000 ? 80 : idle > 90000 ? 40 : 0;
+}
 // direct slime contact — updates the sleep clock. a long-ignored slime
 // greets you grumpy instead of cheerful
 function touch() {
@@ -1503,6 +1915,26 @@ let annoyedUntil = 0;
 let contentUntil = 0;
 let smugUntil = 0;    // smug smirk: nailed the pounce, dodged your poke
 let blepUntil = 0;    // tongue-out goofball mode
+let yawnUntil = 0;    // wake-up yawn after a real nap
+let dozeUntil = 0;    // heavy-lidded winddown at low energy
+let sadUntil = 0;     // a beg nobody answered, gentle letdown
+let excitedUntil = 0; // keyed-up: treat aimed, about to pounce
+let mischiefUntil = 0;// plotting face while stalking the cursor
+let sideeyeUntil = 0; // suspicious sideways glance
+let stuffedUntil = 0; // post-snack puffed cheeks
+let gaspUntil = 0;    // wide-eyed little "oh!"
+let embarUntil = 0;   // flustered blush tail after a melt
+let droolUntil = 0;   // snack inbound — the lip-smack stare
+let worryUntil = 0;   // a pal just got hurled — the creased wince
+let jealousUntil = 0; // someone else got the scritch — the flat stare
+let curiousUntil = 0; // a newcomer just beamed in — the squinted "?"
+let tearjoyUntil = 0; // tickled past the point of laughing — the tears fly
+let sneezeUntil = 0;  // pollen up the nose — the scrunched ACHOO face
+let happyUntil = 0;   // beaming open grin — hellos, tunes, little wins
+let tickleStreak = 0; // consecutive tickles within a window — escalates laugh
+let lastTickleAt = 0;
+let petWasSleeping = false; // wake transition detector (frame diff)
+let begWasActive = false;   // ignored-beg detector for the sad letdown
 let cuddleUntil = 0;  // hold-cuddle: settles into your palm
 let cuddleT = 0;      // still-hold accumulator
 let circScore = 0;    // cursor-circle windup around the pet
@@ -1546,6 +1978,7 @@ let hopWind = 0;  // anticipation crouch before a leap
 let sitUntil = 0;
 let lookFlipT = 0;
 let stretchUntil = 0;
+let jiggleUntil = 0;               // jelly-shimmy fidget window — decays over ~500ms
 let spinT0 = 0;
 let danceT0 = 0;
 let climbPhase = 0;
@@ -1556,6 +1989,26 @@ let snack = null;
 let treatAim = false;
 let treatFly = null;
 let treatFlySeen = false; // rising-edge flag for the dinner-bell broadcast
+let propNewAt = -1e9, propNewX = 0; // a fresh prop pings nearby pals' curiosity
+let petWatchCd = 0;   // pet audience: notices pal scenes/group antics nearby
+let petBoxTapCd = 0;  // knock-knock: last time the pet tapped the box
+let petAsleepPrev = false; // edge-detects the pet waking so pals can greet it
+let petStillT = 0;      // how long the pet has stood alone — lonely clock
+let petPalCd = 0;     // pet-initiated nuzzle cooldown
+let drizzleUntil = 0; // soft-rain weather spell active until
+let drizzleNext = 0;  // next allowed drizzle roll
+let drizSec = -1;     // last whole-second the weather roll ran
+let seasSec = -1;     // last whole-second the seasonal-drift roll ran
+let wasDrizzle = false; // last-frame rain state — for the after-rain beat
+let thunderAt = -1e9; // last lightning flash (rare, only mid-drizzle)
+let thunderBoltX = 0; // where the next bolt strikes — rolled at flash time
+let rainbowUntil = 0; // post-rain arc in the sky
+let wetUntil = 0;     // the floor stays damp for a while after rain
+let snowUntil = 0;    // ...and dusted white for a while after snow
+let petEavesCd = 0;   // last time the pet leaned in on a pal gossip session
+let drizzleKind = "rain"; // "rain" or "snow" — winters get flakes instead
+let snowAcc = 0;      // snow dusting on the floor, builds then melts
+const drips = [];     // raindrops live outside fx — weather, not creature fx
 let treat = null;
 let treatKind = 0;
 let hyperUntil = 0;     // chili rush (perf clock)
@@ -1647,6 +2100,7 @@ let rubDir = 0, rubCount = 0, rubCd = 0; // cursor scritches: direction flips ov
 let ball = null;           // the ball toy: a physics prop the slimes nudge and chase
 let ballHeld = false, ballDX = 0, ballDY = 0;
 let ballVX = 0, ballVY = 0, ballLX = 0, ballLY = 0, ballLT = 0;
+let ballDownX = 0, ballDownY = 0, ballDownT = 0; // tap vs toss on release
 // placed props from the toybox: static furniture slimes use on their own
 let bowl = null;           // {x, y, plat} — walk up, face it, munch a snack
 let cushion = null;        // {x, y, plat} — walk up, turn, plop down, nap
@@ -1698,6 +2152,7 @@ let matPoof = 0;           // bounce-mat over-inflate timestamp
 let fabX = null, fabY = null;   // null = default top-right spot
 let fabOpen = false;
 let fabDrag = null;             // {ox,oy,sx,sy,moved} while held
+let fabZzzT = 0;                // snot-bubble cadence while the pet is parked
 const FAB_ITEMS = ["recall", "snack", "toys", "barn", "gear"];
 function clampWorkPoint(x, y, inset = 24) {
   const safe = usableRectAt(x, y);
@@ -1741,6 +2196,7 @@ let boxHide = 0;         // main pet is inside the box until this frame-clock ti
 let cushionNapW = 0; // wall-clock twin of cushionNap — perf-time callers can't compare the frame clock
 let turnPause = 0;         // anticipation beat: a brief stop before a sharp reversal
 let lastFace = "", faceSwapT = 0; // face-change transition squash
+let petSwapBlink = 0;               // 90ms eye-close that eases a face swap
 let landPeak = 0;          // hardest fall speed seen — scales the landing impact
 let idleSkip = 0;          // deep-idle quarter-rate frame counter
 let hintsSeen = {};        // discovery hints already taught (persisted)
@@ -1857,6 +2313,18 @@ function sanitizeBond(value) {
   for (const [id, raw] of boundedSavedEntries(value)) {
     if (!ownedSpecies.has(id) || !Number.isFinite(raw) || raw < 0) continue;
     clean[id] = Math.min(Number.MAX_SAFE_INTEGER - 1, Math.floor(raw));
+  }
+  return clean;
+}
+function sanitizePairBonds(value) {
+  // "speciesA+speciesB" keys, both halves must be real species; scores are
+  // small integers capped like the in-memory counter
+  const clean = {};
+  const known = new Set(SPECIES.map((sp) => sp.id));
+  for (const [k, raw] of boundedSavedEntries(value)) {
+    const ids = String(k).split("+");
+    if (ids.length !== 2 || !ids.every((id) => known.has(id)) || !Number.isFinite(raw) || raw < 0) continue;
+    clean[k] = Math.min(9, Math.floor(raw));
   }
   return clean;
 }
@@ -2252,16 +2720,27 @@ const SIZE_STEPS = [0.8, 1, 1.2];
 // inside a clipped viewport — footer stats stay pinned to the bottom
 let setScroll = 0;
 function settingsRect() {
-  // 474px exposes all 16 rows plus the pinned footer on roomy screens;
-  // shorter desktops still get the same clipped, scrollable panel.
-  const ph = Math.min(474, Math.max(220, winH - 70));
-  return [Math.round(winW / 2 - 95), Math.round(winH / 2 - ph / 2), 190, ph];
+  // 500px exposes the whole sectioned list plus the pinned footer on roomy
+  // screens; shorter desktops still get the same clipped, scrollable panel.
+  const ph = Math.min(500, Math.max(220, winH - 70));
+  return [Math.round(winW / 2 - 100), Math.round(winH / 2 - ph / 2), 200, ph];
 }
-const SET_VIEW_TOP = 26, SET_VIEW_BOT = 34; // title gap + footer reserve
-// 440 = last row's bottom edge (30 + 15*26 + 20) relative to panel top
-function setMaxScroll() { return Math.max(0, settingsRowIds().length * 26 + 24 - (settingsRect()[3] - SET_VIEW_BOT)); }
-// 0 VOL 1 SIZE 2 MOTION 3 PHOTO 4 ALBUM 5 POMO 6 FOCUS 7 BREAK
-// 8 SHARE 9 WEATHER 10 BOOT 11 JELLY 12 REDEEM 13 ID 14 RESET 15 QUIT
+const SET_VIEW_TOP = 28, SET_VIEW_BOT = 34; // title gap + footer reserve
+// logical row ids — 0 VOL 1 SIZE 2 MOTION 3 PHOTO 4 ALBUM 5 POMO 6 FOCUS
+// 7 BREAK 8 SHARE 9 WEATHER 10 BOOT 11 JELLY 12 REDEEM 13 ID 14 RESET 15 QUIT
+// 16 POWER (battery saver frame cap)
+// visual layout: captioned sections; a two-id row splits into half cells.
+// cell rects are the only hit areas — captions are decorative and gap-filling
+const SET_LAYOUT = [
+  { cap: "DISPLAY", rows: [[0], [1], [2, 16]] },
+  { cap: "MEMORIES", rows: [[3, 4], [8]] },
+  { cap: "TIMER", rows: [[5], [6, 7]] },
+  { cap: "SYSTEM", rows: [[9, 10]] },
+  { cap: "JELLY", rows: [[11, 12], [13]] },
+  { cap: "CAREFUL", rows: [[14, 15]] },
+];
+const SET_CAP_H = 18;   // caption band above each section
+const SET_ROW_P = 30;   // row pitch (20px row + 10px air)
 // The store SKU drops rows that cannot exist in a sandboxed app:
 // BOOT (LaunchAgents — re-shown only where SMAppService exists), REDEEM
 // (license codes — Apple wants IAP for digital goods; the store JELLY row
@@ -2270,14 +2749,47 @@ function setMaxScroll() { return Math.max(0, settingsRowIds().length * 26 + 24 -
 const STORE_HIDDEN_ROWS = new Set([9, 10, 12]);
 function settingsRowIds() {
   const ids = [];
-  for (let i = 0; i < 16; i++) if (!STORE || !STORE_HIDDEN_ROWS.has(i)) ids.push(i);
+  for (let i = 0; i < 17; i++) if (!STORE || !STORE_HIDDEN_ROWS.has(i)) ids.push(i);
   return ids;
 }
-function settingsRows() {
+function setContentH() {
+  const vis = new Set(settingsRowIds());
+  let h = 0;
+  for (const sec of SET_LAYOUT) {
+    const rows = sec.rows.map((r) => r.filter((id) => vis.has(id))).filter((r) => r.length);
+    if (rows.length) h += SET_CAP_H + rows.length * SET_ROW_P;
+  }
+  return h;
+}
+function setMaxScroll() {
+  const ph = settingsRect()[3];
+  return Math.max(0, setContentH() - (ph - SET_VIEW_TOP - SET_VIEW_BOT));
+}
+// flat cell list for draw + hit-test: {cap, y} marks a section caption,
+// {id, r:[x,y,w,h]} marks an interactive row cell
+function settingsCells() {
   const [px, py] = settingsRect();
   // self-clamp: a window shrink mid-scroll can't leave the list overscrolled
   setScroll = Math.max(0, Math.min(setMaxScroll(), setScroll));
-  return settingsRowIds().map((id, i) => [px + 16, py + 30 + i * 26 - Math.round(setScroll), 158, 20]);
+  const vis = new Set(settingsRowIds());
+  const cells = [];
+  let y = py + SET_VIEW_TOP + 2 - Math.round(setScroll);
+  for (const sec of SET_LAYOUT) {
+    const rows = sec.rows.map((r) => r.filter((id) => vis.has(id))).filter((r) => r.length);
+    if (!rows.length) continue;
+    cells.push({ cap: sec.cap, y });
+    y += SET_CAP_H;
+    for (const row of rows) {
+      const w = row.length > 1 ? 83 : 172;
+      row.forEach((id, k) => cells.push({ id, r: [px + 14 + k * 89, y, w, 20] }));
+      y += SET_ROW_P;
+    }
+  }
+  return cells;
+}
+function closeSettings() {
+  settingsOpen = false;
+  resetArm = 0; // an armed wipe must not survive the panel closing
 }
 
 // gem shop: the paid-gem surface. packs are bought through Stripe Payment
@@ -2507,7 +3019,8 @@ function dailySelfie() {
   drawSpr(c, "star5", W - 40, H - 34, 1.6);
   drawText(c, "DAILY SELFIE", 22, H - 24, 1, dim);
   return saveCanvasPng(oc, `selfie_${Date.now()}`).then(() => {
-    bangs.push({ x: petX, y: petY - 110, life: 2, t: "SELFIE!" });
+    winkUntil = performance.now() + 1200; // it knows it looked cute in that one
+    petStamp("POSED!", "wink");
     hearts.push({ x: petX + 18, y: petY - 70, life: 1.4 });
     sfx.reveal();
     lastSelfie = selfieDay;
@@ -2724,6 +3237,7 @@ invokeAsync("load_state").then((txt) => {
   if (pomo) { pomoPhase = "focus"; pomoLen = pomoFocusMin * 60000; pomoUntil = Date.now() + pomoLen; }
   if (SIZE_STEPS.includes(s.sizeMul)) sizeMul = s.sizeMul;
   reduceMotion = s.reduceMotion === true;
+  saverMode = s.saverMode === 2 ? 2 : s.saverMode === 0 ? 0 : 1; // missing/malformed falls back to AUTO
   treatKind = sanitizeSavedInt(s.treatKind, 0, TREATS.length - 1);
   stats = sanitizeStats(s.stats);
   dexMile = sanitizeSavedInt(s.dexMile, 0, DEX_MILES.length);
@@ -2789,6 +3303,7 @@ invokeAsync("load_state").then((txt) => {
     if (jar) jar.fill = sanitizePropFill(s.props.jar.fill);
   }
   bond = sanitizeBond(s.bond);
+  pairBonds = sanitizePairBonds(s.pairBonds);
   lastEgg = sanitizeLocalDayKey(s.lastEgg);
   if (Array.isArray(s.fab) && s.fab.length === 2 && s.fab.every((v) => Number.isFinite(v) && v > -9000)) {
     // work-area clamp, not raw winH — a saved spot inside the Dock strip
@@ -2870,12 +3385,12 @@ function persist() {
       ver: 2, xp, x: petX, jelly, owned, active: SPECIES[active].id,
       pityRare, pityLeg, hybSeq, accOwned, accEquip, breedReadyAt,
       muted, vol, sizeMul, seen, savedAt: Date.now(),
-      reduceMotion, treatKind, stats, volStep, pomo, dexMile,
+      reduceMotion, treatKind, stats, volStep, pomo, dexMile, saverMode,
       lastDaily, dailyStreak, lastWeekly, pomoFocusMin, pomoBreakMin,
       redeemed, redeemedBound, uid, claimed: claimedNonces, iapTx: iapTxIds,
       panelPos, petHome, weatherOn, bootOn, lastSelfie, hints: hintsSeen,
       props: { bowl: bowl ? { x: bowl.x, y: bowl.y, fill: bowl.fill ?? 2 } : null, cushion: cushion ? { x: cushion.x, y: cushion.y } : null, box: box ? { x: box.x, y: box.y } : null, plant: plant ? { x: plant.x, y: plant.y } : null, music: music ? { x: music.x, y: music.y } : null, mirror: mirror ? { x: mirror.x, y: mirror.y } : null, mat: mat ? { x: mat.x, y: mat.y } : null, jar: jar ? { x: jar.x, y: jar.y, fill: jar.fill ?? 2 } : null },
-      bond, lastEgg, fab: [fabX, fabY],
+      bond, pairBonds, lastEgg, fab: [fabX, fabY],
       names: customNames, shiny: shinyOwned,
       pals: pals.map((p) => (SPECIES[p.sp] ? SPECIES[p.sp].id : null)).filter(Boolean),
       hybrids: SPECIES.filter((p) => p.id.startsWith("hyb")),
@@ -2911,6 +3426,7 @@ function dripTick() {
   if (lucky && !petHome && performance.now() >= boxHide) {
     bangs.push({ x: petX, y: petY - 100, life: 2.5, t: "LUCKY +30!" });
     starUntil = performance.now() + 1200;
+    petStamp("LUCKY!", "star");
     sfx.reveal();
     // jelly-hungry species visibly munch the windfall
     if (SPECIES[active].kr) munchUntil = performance.now() + 500;
@@ -2952,6 +3468,46 @@ function propArrive(g, now) {
   // errand aimed at — a treat/ball target reassigned mid-walk shouldn't
   // fire the ritual; (b) the prop itself must still be close by
   if (g.tx !== undefined && Math.abs(petX - g.tx) > 46) return;
+  if (g.kind === "inspect") {
+    // walked over to check out the new furniture — a sniff, a tilt, done
+    lookDir = Math.sign((g.px ?? g.tx) - petX) || 1;
+    lookUntil = now + 1400;
+    curiousUntil = now + 1500;
+    petStamp("NEW TOY", "curious");
+    squashV += 1.2;
+    return;
+  }
+  if (g.kind === "nuzzle") {
+    // walked all this way just to say hi — the pal must still be there
+    const q = g.pal;
+    if (q && pals.includes(q) && !q.fly && q !== palHeld && now > (q.restUntil || 0) &&
+        !(now < (q.hideUntil || 0)) && Math.abs(q.x - petX) < 80 && Math.abs(q.y - petY) < 40) {
+      petPalCd = now + 50000;
+      lookDir = Math.sign(q.x - petX) || 1;
+      lookUntil = now + 1400;
+      q.lookDir = -lookDir; q.lookUntil = now + 1300;
+      happyUntil = now + 1800;
+      hearts.push({ x: (petX + q.x) / 2, y: petY - 62, life: 1.1 });
+      // being nuzzled by THE pet — most pals melt, some get flustered
+      petStamp("NUZZLED", "happy");
+      q.faceId = Math.random() < 0.45 ? "embar" : "happy";
+      q.faceT = now + 1400;
+      q.faceWhy = "NUZZLED"; q.faceWhyId = q.faceId;
+      bondGain(SPECIES[q.sp].id, 2);
+      // the gallery notices: a nearby pal watching its friend get THE
+      // nuzzle turns a little green — impossible to unsee
+      for (const o of pals) {
+        if (o !== q && o !== palHeld && !o.fly && Math.abs(o.x - petX) < 200 &&
+            Math.abs(o.y - petY) < 30 && Math.random() < 0.4 && now > (o.faceT || 0)) {
+          o.faceId = Math.random() < 0.5 ? "jealous" : "sideeye"; o.faceT = now + 1200;
+          o.faceWhy = "PET'S FAVORITE"; o.faceWhyId = o.faceId;
+          o.lookDir = Math.sign(petX - o.x) || 1; o.lookUntil = now + 900;
+        }
+      }
+      sfx.heart();
+    }
+    return;
+  }
   if (g.kind === "egg" && egg && Math.abs(petX - egg.x) < 55) {
     // peck, peck… crack! the slime taps the shell until it opens
     lookDir = Math.sign(egg.x - petX) || 1;
@@ -2968,14 +3524,15 @@ function propArrive(g, now) {
       // came all this way for crumbs — an empty bowl earns a pout
       lookUntil = now + 1400;
       poutUntil = now + 1600;
+      petStamp("BOWL", "pout");
       bowlCd = now + 60000;
-      bangs.push({ x: petX, y: petY - blobSize().h - 14, life: 1.1, t: "?" });
       return;
     }
     bowl.fill = Math.max(0, (bowl.fill ?? 2) - 1);
     dirty = true;
     lookUntil = now + 2600;
     munchUntil = now + 2400;
+    stuffedUntil = now + 3700;
     bowlCd = now + 45000;
     bondGain(SPECIES[active].id, 2);
     for (let i = 0; i < 7; i++) fx.push({ x: bowl.x + Math.random() * 14 - 7, y: bowl.y - 10, vx: Math.random() * 40 - 20, vy: -Math.random() * 60 - 10, life: 0.5, c: "#eec23f" });
@@ -2990,7 +3547,6 @@ function propArrive(g, now) {
         q.fly = true; q.vy = -190;
         q.vx = (Math.sign(q.x - petX) || (Math.random() < 0.5 ? -1 : 1)) * 150;
         q.faceId = "shock"; q.faceT = now + 900;
-        bangs.push({ x: q.x, y: q.y - 58, life: 1, t: "!" });
       }
     }
     petX = cushion.x; // settles dead-center on the puff
@@ -3023,7 +3579,13 @@ function propArrive(g, now) {
     lookDir = 1;
     squashV += 4;
     for (let i = 0; i < 6; i++) fx.push({ x: box.x + (i - 2.5) * 7, y: box.y - 12, vx: (i - 2.5) * 14, vy: -30 - Math.random() * 20, life: 0.5, c: "#d8c49a" });
-    bangs.push({ x: box.x, y: box.y - 40, life: 1, t: "?" });
+    // a witness squints at the box — where did it GO?
+    let bxq = null, bxd = 300;
+    for (const q of pals) {
+      const d = Math.abs(q.x - box.x);
+      if (d < bxd && Math.abs(q.y - box.y) < 40 && now > (q.faceT || 0)) { bxd = d; bxq = q; }
+    }
+    if (bxq) { bxq.faceId = "curious"; bxq.faceT = now + 1400; bxq.lookDir = Math.sign(box.x - bxq.x) || 1; bxq.lookUntil = now + 1400; }
     sfx.pop();
     dirty = true;
   } else if (g.kind === "plant" && plant && Math.abs(petX - plant.x) < 60) {
@@ -3033,10 +3595,9 @@ function propArrive(g, now) {
     plantCd = now + 50000;
     bondGain(SPECIES[active].id, 1);
     if (Math.random() < 0.25) {
-      shockUntil = now + 700;
+      sneezeUntil = now + 1000;
       squashV += 6;
       for (let i = 0; i < 6; i++) fx.push({ x: plant.x + (Math.random() - 0.5) * 16, y: plant.y - 26, vx: (Math.random() - 0.5) * 90, vy: -40 - Math.random() * 50, life: 0.6, c: "#9adf8a" });
-      bangs.push({ x: petX, y: petY - blobSize().h - 14, life: 1, t: "!" });
       sfx.pop();
     } else {
       contentUntil = now + 2200;
@@ -3050,12 +3611,13 @@ function propArrive(g, now) {
     music.spinUntil = Date.now() + 3200;
     musicCd = now + 60000;
     danceT0 = now;
+    happyUntil = now + 2000;
+    petStamp("THE TUNE", "happy");
     bondGain(SPECIES[active].id, 2);
-    for (let i = 0; i < 5; i++) bangs.push({ x: music.x - 14 + i * 9, y: music.y - 28 - i * 7, life: 1.1 + i * 0.14, t: "♪" });
-    // the tune carries — nearby pals bounce too
+    // the tune carries — nearby pals bounce too; a seated pal just vibes
     for (const p of pals) {
       if (Math.abs(p.x - music.x) < 320 && Math.abs(p.y - music.y) < 40 && !p.fly && p !== palHeld && now > (p.restUntil || 0) && !(now < (p.hideUntil || 0))) {
-        p.fly = true; p.vy = -170 - Math.random() * 60; p.vx = (Math.random() - 0.5) * 80; p.hopT = now;
+        if (!(now < (p.settleUntil || 0))) { p.fly = true; p.vy = -170 - Math.random() * 60; p.vx = (Math.random() - 0.5) * 80; p.hopT = now; }
         p.faceId = "happy"; p.faceT = now + 1000;
       }
     }
@@ -3070,12 +3632,12 @@ function propArrive(g, now) {
     if ((PSYCH[SPECIES[active].ps] || {}).flee) {
       shockUntil = now + 900;
       poutUntil = now + 1400;
+      petStamp("MIRROR", "pout");
       flying = true; petVY = -150; petVX = -lookDir * 130;
-      bangs.push({ x: petX, y: petY - blobSize().h - 14, life: 1.1, t: "!" });
       sfx.drop();
     } else {
       smugUntil = now + 1800;
-      bangs.push({ x: petX, y: petY - blobSize().h - 14, life: 1.2, t: "✦" });
+      petStamp("MIRROR", "smug");
       if (Math.random() < 0.4) hearts.push({ x: petX + 12, y: petY - 60, life: 1 });
     }
   } else if (g.kind === "mat" && mat && Math.abs(petX - mat.x) < 60) {
@@ -3084,9 +3646,9 @@ function propArrive(g, now) {
     matCd = now + 40000;
     matPoof = now + 800;
     flying = true; petVY = -300; petVX = (Math.random() - 0.5) * 70;
-    contentUntil = now + 1600;
+    happyUntil = now + 1600;
+    petStamp("MAT", "happy");
     squashV += 5;
-    bangs.push({ x: mat.x, y: mat.y - 34, life: 1, t: "♪" });
     sfx.boing();
   } else if (g.kind === "jar" && jar && Math.abs(petX - jar.x) < 60) {
     // the cookie jar: a stolen nibble if there's any left, else a sad poke
@@ -3095,7 +3657,7 @@ function propArrive(g, now) {
     jarCd = now + 50000;
     if ((jar.fill ?? 2) <= 0) {
       poutUntil = now + 1500;
-      bangs.push({ x: jar.x, y: jar.y - 36, life: 1, t: "?" });
+      petStamp("JAR", "pout");
     } else {
       jar.fill--;
       // Stock is persisted independently of bond gain. The global bond
@@ -3104,6 +3666,7 @@ function propArrive(g, now) {
       dirty = true;
       jar.raidUntil = Date.now() + 1500;
       munchUntil = now + 1300;
+      stuffedUntil = now + 2600;
       contentUntil = now + 1600;
       bondGain(SPECIES[active].id, 1);
       for (let i = 0; i < 6; i++) fx.push({ x: jar.x + (Math.random() - 0.5) * 16, y: jar.y - 18 - Math.random() * 8, vx: (Math.random() - 0.5) * 50, vy: -20 - Math.random() * 26, life: 0.5, c: "#d9a05b" });
@@ -3117,19 +3680,22 @@ function propTap(kind, q) {
     q.fill = 3;
     q.steamUntil = performance.now() + 15000; // fresh kibble, still warm
     for (let i = 0; i < 8; i++) fx.push({ x: q.x + (Math.random() - 0.5) * 16, y: q.y - 14 - Math.random() * 8, vx: (Math.random() - 0.5) * 30, vy: -20 - Math.random() * 30, life: 0.6, c: "#eec23f" });
-    bangs.push({ x: q.x, y: q.y - 30, life: 0.9, t: "♪" });
+    // a fresh bowl perks up whoever's watching — a nearby pal starts drooling
+    const bw = performance.now();
+    for (const p of pals) {
+      if (Math.abs(p.x - q.x) < 260 && Math.abs(p.y - q.y) < 40 && bw > (p.faceT || 0)) { p.faceId = "drool"; p.faceT = bw + 1400; }
+    }
+    if (Math.abs(petX - q.x) < 300) droolUntil = bw + 1200;
   } else if (kind === "box") {
     if (performance.now() < boxHide && Math.abs(petX - q.x) < 40) {
       // rattling an occupied box startles the squatter back out
       boxHide = 0;
       flying = true; petVY = -240; petVX = (Math.random() - 0.5) * 90;
       shockUntil = performance.now() + 900;
-      bangs.push({ x: q.x, y: q.y - 44, life: 1.1, t: "!" });
       sfx.drop();
     } else {
       // rattle the box — something rustles inside
       for (let i = 0; i < 6; i++) fx.push({ x: q.x + (Math.random() - 0.5) * 30, y: q.y - 10 - Math.random() * 8, vx: (Math.random() - 0.5) * 50, vy: -18 - Math.random() * 22, life: 0.5, c: "#d8c49a" });
-      bangs.push({ x: q.x, y: q.y - 34, life: 0.9, t: "?" });
     }
   } else if (kind === "plant") {
     // a sprinkle of water — droplets, then the leaves perk up
@@ -3139,7 +3705,6 @@ function propTap(kind, q) {
     // wind it up — a bar of notes spills out, nearby pals can't help
     // but bounce along
     q.spinUntil = Date.now() + 2800;
-    for (let i = 0; i < 4; i++) bangs.push({ x: q.x - 12 + i * 10, y: q.y - 30 - i * 7, life: 1 + i * 0.15, t: "♪" });
     const mnow = performance.now();
     for (const p of pals) {
       if (Math.abs(p.x - q.x) < 300 && Math.abs(p.y - q.y) < 40 && !p.fly && p !== palHeld && mnow > (p.restUntil || 0) && !(mnow < (p.hideUntil || 0))) {
@@ -3150,7 +3715,6 @@ function propTap(kind, q) {
   } else if (kind === "mirror") {
     // polish the glass — a flash of sparkles ripples down the pane
     for (let i = 0; i < 10; i++) fx.push({ x: q.x + (Math.random() - 0.5) * 20, y: q.y - 40 + Math.random() * 30, vx: (Math.random() - 0.5) * 26, vy: -14 - Math.random() * 20, life: 0.6, c: "#ffffff" });
-    bangs.push({ x: q.x, y: q.y - 44, life: 0.9, t: "✦" });
   } else if (kind === "mat") {
     // a stomp test — the pad over-inflates and settles, like the cushion
     matPoof = performance.now() + 800;
@@ -3165,9 +3729,8 @@ function propTap(kind, q) {
     if (!treat && tnow > (q.spillCd || 0)) {
       q.spillCd = tnow + 15000;
       treat = { x: q.x + (Math.random() < 0.5 ? -30 : 30), y: q.y, kind: 0, t0: tnow };
-      bangs.push({ x: q.x, y: q.y - 42, life: 1.1, t: "!" });
-    } else {
-      bangs.push({ x: q.x, y: q.y - 42, life: 0.9, t: "♪" });
+      // a cookie tumbles out — the pet's eyes lock on, the lip-smack starts
+      if (Math.abs(petX - q.x) < 360) { droolUntil = tnow + 1400; lookDir = Math.sign(q.x - petX) || 1; lookUntil = tnow + 1200; }
     }
   } else {
     cushionPoof = performance.now() + 700;
@@ -3187,7 +3750,13 @@ function dropEgg() {
     x: clampPlatformX(petX + side * (120 + Math.random() * 60), sup, 50),
     y: sup.y, plat: sup, t0: performance.now(), wob: Math.random() * 5,
   };
-  bangs.push({ x: egg.x, y: egg.y - 44, life: 1.4, t: "!" });
+  // the pet clocks the thump — head turns, one squinted "what was THAT"
+  if (!petHome) {
+    curiousUntil = performance.now() + 1500;
+    petStamp("EGG POPPING", "curious");
+    lookDir = Math.sign(egg.x - petX) || 1;
+    lookUntil = performance.now() + 1400;
+  }
   sfx.drop();
 }
 function hatchEgg() {
@@ -3207,6 +3776,16 @@ function hatchEgg() {
     bangs.push({ x: ex, y: ey - 50, life: 1.6, t: "+60" });
   }
   hearts.push({ x: ex, y: ey - 40, life: 1.2 });
+  // the crowd gasps — watchers who gathered for the hatch get their payoff
+  for (const p of pals) {
+    if (Math.abs(p.x - ex) < 320 && Math.abs(p.y - ey) < 70 && p !== palHeld && !(performance.now() < (p.restUntil || 0))) {
+      p.faceId = Math.random() < 0.5 ? "star" : "gasp";
+      p.faceT = performance.now() + 1400;
+      p.faceWhy = "HATCHED!"; p.faceWhyId = p.faceId;
+      p.squashV += 3;
+      p.lookDir = Math.sign(ex - p.x) || 1; p.lookUntil = performance.now() + 1200;
+    }
+  }
   sfx.reveal();
   dirty = true;
 }
@@ -3240,7 +3819,45 @@ function spawnPal(i) {
     settleUntil: 0, sitMate: null, settleCd: 0, // parked-quietly mode
     hovT: 0, hovCd: 0, copyCd: 0, watched: false,
   });
+  // first day on the desk: the newcomer lands curious, and anyone close
+  // enough turns to size up the new face — a little welcome committee
+  const nown = performance.now();
+  const np = pals[pals.length - 1];
+  np.faceId = "curious"; np.faceT = nown + 1600;
+  np.faceWhy = "JUST ARRIVED"; np.faceWhyId = "curious";
+  for (const q of pals.slice(0, -1)) {
+    if (Math.abs(q.x - np.x) < 300 && Math.abs(q.y - np.y) < 80 && nown > q.faceT &&
+        nown > (q.restUntil || 0) && nown > (q.hideUntil || 0) && q !== palHeld) {
+      q.lookDir = Math.sign(np.x - q.x) || 1; q.lookUntil = nown + 1400;
+      q.faceId = Math.random() < 0.4 ? "curious" : "happy"; q.faceT = nown + 1200;
+      q.faceWhy = "NEW PAL"; q.faceWhyId = q.faceId;
+    }
+  }
   return true;
+}
+// the desktop notices a pal beaming in: the pet squints a "?" at it and
+// the nearest resident turns to look — first-contact etiquette
+function palSummonReact(i) {
+  const now = performance.now();
+  const np = pals[pals.length - 1];
+  if (!np || np.sp !== i) return;
+  if (!petHome) {
+    curiousUntil = now + 1900;
+    petStamp("NEW PAL", "curious");
+    lookDir = Math.sign(np.x - petX) || 1;
+    lookUntil = now + 1800;
+  }
+  let near = null, nd = 1e9;
+  for (const q of pals) {
+    if (q === np) continue;
+    const d = Math.abs(q.x - np.x);
+    if (d < nd) { nd = d; near = q; }
+  }
+  if (near && nd < 300) {
+    near.faceId = "curious"; near.faceT = now + 1300;
+    near.faceWhy = "NEW PAL"; near.faceWhyId = "curious";
+    near.lookDir = Math.sign(np.x - near.x) || 1; near.lookUntil = now + 1200;
+  }
 }
 // splice a pal out of the world — clears the live drag ref plus every
 // social tie other pals hold on it, so a send-home or species-cull can't
@@ -3257,6 +3874,7 @@ function removePal(p) {
     if (q.sitMate === p) { q.sitMate = null; }
     if (q.stackOn === p) { q.stackOn = null; q.fly = true; q.vy = 60; }
     if (q.propGoal && q.propGoal.mate === p) { q.propGoal = null; q.walkT = null; }
+    if (q.scene && (q.scene.a === p || q.scene.b === p)) q.scene = null;
   }
   return true;
 }
@@ -3267,7 +3885,21 @@ function sendPalHome(p) {
   for (let k = 0; k < 12; k++) {
     fx.push({ x: p.x + Math.random() * 34 - 17, y: p.y - Math.random() * 44 - 8, vx: Math.random() * 80 - 40, vy: -Math.random() * 70 - 10, life: 0.8, c: "#e8e0c8" });
   }
-  bangs.push({ x: p.x, y: p.y - 72, life: 1.4, t: "BYE!" });
+  // a neighbor watching the send-off droops — and it droops hardest for
+  // its best friend: the mourner is whoever bonded with it most
+  let near = null, nb = -1;
+  for (const q of pals) {
+    if (q === p || Math.abs(q.x - p.x) >= 200 || Math.abs(q.y - p.y) >= 40) continue;
+    const b = pairBondLvl(p, q);
+    if (b > nb) { nb = b; near = q; }
+  }
+  if (near) {
+    near.faceId = nb >= 6 ? "cry" : "sad";
+    near.faceT = performance.now() + (nb >= 2 ? 1900 : 1200);
+    near.faceWhy = "GOODBYE"; near.faceWhyId = near.faceId;
+    near.squashV += 1.5;
+    if (nb >= 2) hearts.push({ x: near.x, y: near.y - 58, life: 1 }); // a last little heart for a friend
+  }
   removePal(p);
   // the main pet wells up a little when a friend leaves
   if (Math.abs(p.x - petX) < 400) cryUntil = performance.now() + 1100;
@@ -3280,7 +3912,10 @@ function sendPetHome() {
   for (let k = 0; k < 12; k++) {
     fx.push({ x: petX + Math.random() * 40 - 20, y: petY - Math.random() * 50 - 8, vx: Math.random() * 80 - 40, vy: -Math.random() * 70 - 10, life: 0.8, c: "#e8e0c8" });
   }
-  bangs.push({ x: petX, y: petY - 76, life: 1.4, t: "BYE!" });
+  // the pals watch their friend leave — whoever's closest wells up
+  for (const q of pals) {
+    if (Math.abs(q.x - petX) < 220 && Math.abs(q.y - petY) < 40) { q.faceId = "sad"; q.faceT = performance.now() + 1300; q.faceWhy = "GOODBYE"; q.faceWhyId = "sad"; break; }
+  }
   petHome = true;
   held = false;
   cuddleT = 0;
@@ -3318,6 +3953,14 @@ function sendPetHome() {
   poutUntil = 0;
   cryUntil = 0;
   tickleUntil = 0;
+  tearjoyUntil = 0;
+  sneezeUntil = 0;
+  happyUntil = 0;
+  embarUntil = 0;
+  droolUntil = 0;
+  worryUntil = 0;
+  jealousUntil = 0;
+  curiousUntil = 0;
   wiggleBuf.length = 0;
   petUntil = 0;
   rubDir = 0;
@@ -3360,8 +4003,9 @@ function bringPetHome() {
   for (let k = 0; k < 10; k++) {
     fx.push({ x: petX + Math.random() * 40 - 20, y: petY - Math.random() * 30, vx: Math.random() * 60 - 30, vy: -Math.random() * 40, life: 0.7, c: "#e8e0c8" });
   }
-  bangs.push({ x: petX, y: petY - 50, life: 1.4, t: "HI!" });
+  happyUntil = performance.now() + 1600;
   contentUntil = performance.now() + 1500;
+  petStamp("HELLO!", "happy");
   sfx.reveal();
   dirty = true;
 }
@@ -3413,6 +4057,7 @@ function legFlair(sp, now) {
       break;
     case "gold": // flips a coin-sparkle over her head, catches it beaming
       starUntil = now + 800;
+      petStamp("LUCKY!", "star");
       for (let i = 0; i < 7; i++) {
         fx.push({ x: petX + Math.random() * 20 - 10, y: petY - 40 - i * 6, vx: (Math.random() - 0.5) * 30, vy: -50 - i * 12, life: 0.6, c: "#ffd75e" });
       }
@@ -3424,10 +4069,8 @@ function legFlair(sp, now) {
       fx.push({ x: petX, y: petY - 54, vx: 0, vy: -14, life: 0.9, c: "#ffd75e", spr: "star5" });
       sfx.pop();
       break;
-    case "siren": // rising three-note run, heart drifting after
-      for (let i = 0; i < 3; i++) {
-        bangs.push({ x: petX - 16 + i * 16, y: petY - 62 - i * 10, life: 1.2 + i * 0.15, t: "♪" });
-      }
+    case "siren": // rising three-note run — she beams mid-song, a heart drifts after
+      happyUntil = now + 1700;
       hearts.push({ x: petX + 14, y: petY - 60, life: 1 });
       sfx.heart();
       break;
@@ -3576,47 +4219,487 @@ const gravRings = []; // pulsar's collapsing vacuum rings {x,y,r,life}
 
 // pal mini-signatures: companions don't run the full act state machine,
 // but they still show off a ~1s flourish themed on their species' skill.
-// pat = particle pattern, t = the bang glyph it ends with
+// pat = particle pattern, f = the finale face it resolves into
+// each flourish resolves into a FACE now, not a floating glyph — f is the
+// finale expression the pal wears as the particles fade
 const PAL_FLAIR = {
-  shower:      { c: ["#ffd75e", "#ffe9a8"], pat: "rain", t: "✦" },
-  starburst:   { c: ["#ffd75e", "#e8f0ff"], pat: "ring", t: "✦" },
-  landslide:   { c: ["#8a7a66", "#a89478", "#c9b89a"], pat: "rain", t: "!" },
-  frenzy:      { c: ["#ffb0a0", "#e8d8bc"], pat: "zig", t: "!" },
-  reentry:     { c: ["#ff8a3f", "#ffd75e"], pat: "rise", t: "!" },
-  eruption:    { c: ["#ff8a3f", "#e05a3a"], pat: "rise", t: "!" },
-  song:        { c: ["#8fd4f0", "#b8e8f5"], pat: "drift", t: "♪" },
-  webshot:     { c: ["#eef2f6"], pat: "drift", t: "✦" },
-  firebreath:  { c: ["#ff8a3f", "#e05a3a", "#ffd75e"], pat: "cone", t: "!" },
-  singularity: { c: ["#8ad4f0", "#6b5a9e"], pat: "implode", t: "✦" },
-  decree:      { c: ["#ffd75e"], pat: "ring", t: "★" },
-  pounce:      { c: ["#8fd4f0"], pat: "hop", t: "!" },
-  zap:         { c: ["#8fd4f0"], pat: "crackle", t: "!" },
-  voidpull:    { c: ["#6b5a9e"], pat: "implode", t: "✦" },
-  veil:        { c: ["#5ad4c4", "#b88ad4", "#7a9fe8"], pat: "drift", t: "✦" },
-  bubbleup:    { c: ["#8ee03f"], pat: "rise", t: "♪" },
-  beep:        { c: ["#8fd4f0"], pat: "crackle", t: "!" },
-  phase:       { c: ["#c4b2f0"], pat: "drift", t: "✦" },
-  orbit:       { c: ["#ffd75e"], pat: "ring", t: "✦" },
-  smokebomb:   { c: ["#9aa7b8"], pat: "drift", t: "!" },
-  burst:       { c: ["#e05a6e", "#ffd75e"], pat: "ring", t: "!" },
-  flare:       { c: ["#ffb35c"], pat: "cone", t: "✦" },
-  rollout:     { c: ["#ffd75e"], pat: "zig", t: "!" },
-  ribbit:      { c: ["#7ec860"], pat: "hop", t: "!" },
-  umbral:      { c: ["#43346b"], pat: "drift", t: "✦" },
-  spectrum:    { c: ["#ff5a6e", "#ff8a2a", "#ffd75e", "#5ad46e", "#5aa8f0", "#b88ad4"], pat: "ring", t: "✦" },
-  jingle:      { c: ["#ffffff", "#e0455a", "#4fbd63"], pat: "rain", t: "♪" },
+  shower:      { c: ["#ffd75e", "#ffe9a8"], pat: "rain", f: "star" },
+  starburst:   { c: ["#ffd75e", "#e8f0ff"], pat: "ring", f: "star" },
+  landslide:   { c: ["#8a7a66", "#a89478", "#c9b89a"], pat: "rain", f: "serious" },
+  frenzy:      { c: ["#ffb0a0", "#e8d8bc"], pat: "zig", f: "excited" },
+  reentry:     { c: ["#ff8a3f", "#ffd75e"], pat: "rise", f: "excited" },
+  eruption:    { c: ["#ff8a3f", "#e05a3a"], pat: "rise", f: "excited" },
+  song:        { c: ["#8fd4f0", "#b8e8f5"], pat: "drift", f: "happy" },
+  webshot:     { c: ["#eef2f6"], pat: "drift", f: "mischief" },
+  firebreath:  { c: ["#ff8a3f", "#e05a3a", "#ffd75e"], pat: "cone", f: "serious" },
+  singularity: { c: ["#8ad4f0", "#6b5a9e"], pat: "implode", f: "gasp" },
+  decree:      { c: ["#ffd75e"], pat: "ring", f: "smug" },
+  pounce:      { c: ["#8fd4f0"], pat: "hop", f: "mischief" },
+  zap:         { c: ["#8fd4f0"], pat: "crackle", f: "excited" },
+  voidpull:    { c: ["#6b5a9e"], pat: "implode", f: "smug" },
+  veil:        { c: ["#5ad4c4", "#b88ad4", "#7a9fe8"], pat: "drift", f: "star" },
+  bubbleup:    { c: ["#8ee03f"], pat: "rise", f: "blep" },
+  beep:        { c: ["#8fd4f0"], pat: "crackle", f: "curious" },
+  phase:       { c: ["#c4b2f0"], pat: "drift", f: "smug" },
+  orbit:       { c: ["#ffd75e"], pat: "ring", f: "star" },
+  smokebomb:   { c: ["#9aa7b8"], pat: "drift", f: "mischief" },
+  burst:       { c: ["#e05a6e", "#ffd75e"], pat: "ring", f: "excited" },
+  flare:       { c: ["#ffb35c"], pat: "cone", f: "star" },
+  rollout:     { c: ["#ffd75e"], pat: "zig", f: "excited" },
+  ribbit:      { c: ["#7ec860"], pat: "hop", f: "happy" },
+  umbral:      { c: ["#43346b"], pat: "drift", f: "smug" },
+  spectrum:    { c: ["#ff5a6e", "#ff8a2a", "#ffd75e", "#5ad46e", "#5aa8f0", "#b88ad4"], pat: "ring", f: "star" },
+  jingle:      { c: ["#ffffff", "#e0455a", "#4fbd63"], pat: "rain", f: "happy" },
 };
 // elemental pair synergy: when pals whose traits react bump into each
 // other, the meeting produces something — fire+water steams, spark+wisp
 // ignites a will-o-wisp ring, drips scatter bubbles. keyed on sorted pair
 const SYNERGY = {
-  "drip+spark":  { n: 8, v: 26, up: true,  c: ["#e8e8e8", "#cfd8e0"], t: "!" },          // steam
-  "glint+spark": { n: 7, v: 60, up: false, c: ["#ffd75e", "#fff0a8"], t: "✦" },          // fireworks
-  "drip+glint":  { n: 6, v: 34, up: true,  c: ["#ff9ad5", "#9ad5ff", "#c8ff9a"], t: "✦" }, // prism drops
-  "spark+wisp":  { n: 7, v: 40, up: true,  c: ["#b48cff", "#7fd8ff"], t: "✦" },          // will-o-wisp
-  "bubble+drip": { n: 8, v: 30, up: true,  c: ["#aee8ff", "#d8f4ff"], t: "o" },          // bubble burst
-  "glint+wisp":  { n: 6, v: 30, up: true,  c: ["#c9f2ff", "#e8ccff"], t: "★" },          // aurora motes
+  "drip+spark":  { n: 8, v: 26, up: true,  c: ["#e8e8e8", "#cfd8e0"] },          // steam
+  "glint+spark": { n: 7, v: 60, up: false, c: ["#ffd75e", "#fff0a8"] },          // fireworks
+  "drip+glint":  { n: 6, v: 34, up: true,  c: ["#ff9ad5", "#9ad5ff", "#c8ff9a"] }, // prism drops
+  "spark+wisp":  { n: 7, v: 40, up: true,  c: ["#b48cff", "#7fd8ff"] },          // will-o-wisp
+  "bubble+drip": { n: 8, v: 30, up: true,  c: ["#aee8ff", "#d8f4ff"] },          // bubble burst
+  "glint+wisp":  { n: 6, v: 30, up: true,  c: ["#c9f2ff", "#e8ccff"] },          // aurora motes
 };
+
+// ---------- pair scenes ----------
+// choreographed two-pal set-pieces: bigger than a bump, rarer than a
+// chat. a scene reserves BOTH actors — one shared [ms, fn] script drives
+// them; the initiator (sc.a) owns the step cursor so it ticks once per
+// frame. anything disruptive (grab, flight, nap, tag, platform loss)
+// cancels the scene instantly
+let sceneCd = 0;
+const SCENES = {
+  // two feisty slimes square off: glares, a slow circling sidestep, then
+  // somebody yields — winner smugs, loser droops away
+  staredown: { dur: 3400, steps: [
+    [0, (a, b, now) => {
+      a.lookDir = Math.sign(b.x - a.x) || 1; b.lookDir = -a.lookDir;
+      a.lookUntil = b.lookUntil = now + 2400;
+      a.faceId = b.faceId = "sideeye"; a.faceT = b.faceT = now + 1500;
+    }],
+    [800, (a, b, now) => {
+      const d = Math.sign(a.x - b.x) || 1;
+      a.walkT = a.x + d * 22; b.walkT = b.x + d * 22;
+      a.squashV += 2; b.squashV += 2;
+    }],
+    [1700, (a, b, now) => {
+      const d = Math.sign(a.x - b.x) || 1;
+      a.walkT = a.x - d * 22; b.walkT = b.x - d * 22;
+      a.faceId = b.faceId = "mischief"; a.faceT = b.faceT = now + 1100;
+    }],
+    [2600, (a, b, now) => {
+      const aS = (PSYCH[(SPECIES[a.sp] || {}).ps] || {}).startle || 1;
+      const bS = (PSYCH[(SPECIES[b.sp] || {}).ps] || {}).startle || 1;
+      const win = Math.random() < aS / (aS + bS) ? a : b, los = win === a ? b : a;
+      win.faceId = "smug"; win.faceT = now + 1400; win.squashV += 4;
+      los.faceId = "sad"; los.faceT = now + 1400;
+      los.walkT = los.x + (Math.sign(los.x - win.x) || 1) * 70;
+    }],
+    [3300, () => {}],
+  ] },
+  // leapfrog: one flattens, the other sails clean over — then roles swap.
+  // pure playground energy
+  leapfrog: { dur: 2700, steps: [
+    [0, (a, b, now) => {
+      a.lookDir = Math.sign(b.x - a.x) || 1; b.lookDir = -a.lookDir;
+      a.lookUntil = b.lookUntil = now + 1400;
+      a.faceId = b.faceId = "excited"; a.faceT = b.faceT = now + 1100;
+    }],
+    [350, (a, b, now) => {
+      a.squashV += 7;
+      const dir = Math.sign(a.x - b.x) || 1;
+      b.fly = true; b.vy = -240 * animProf(b.sp).hop;
+      b.vx = dir * (Math.abs(a.x - b.x) / 0.55 + 45); b.hopT = now;
+      sfx.boing();
+    }],
+    [1150, (a, b, now) => {
+      b.squashV += 7;
+      const dir = Math.sign(b.x - a.x) || 1;
+      a.fly = true; a.vy = -240 * animProf(a.sp).hop;
+      a.vx = dir * (Math.abs(b.x - a.x) / 0.55 + 45); a.hopT = now;
+      sfx.boing();
+    }],
+    [2100, (a, b, now) => {
+      a.faceId = b.faceId = "laugh"; a.faceT = b.faceT = now + 1000;
+      hearts.push({ x: (a.x + b.x) / 2, y: Math.min(a.y, b.y) - 62, life: 1 });
+      sfx.pop();
+    }],
+    [2650, () => {}],
+  ] },
+  // dash to the far edge: GO! and both take off — whoever's closer to
+  // the mark when the dust settles wins (star vs sulky)
+  race: { dur: 3000, steps: [
+    [0, (a, b, now, sc) => {
+      sc.dir = Math.random() < 0.5 ? -1 : 1;
+      sc.goal = (a.x + b.x) / 2 + sc.dir * 240;
+      a.lookDir = b.lookDir = sc.dir; a.lookUntil = b.lookUntil = now + 700;
+      a.faceId = b.faceId = "excited"; a.faceT = b.faceT = now + 1300;
+      sfx.pop();
+    }],
+    [500, (a, b, now, sc) => { a.walkT = sc.goal; b.walkT = sc.goal; }],
+    [1200, (a, b, now, sc) => {
+      if (Math.random() < 0.6) {
+        const r2 = Math.random() < 0.5 ? a : b;
+        r2.fly = true; r2.vy = -190 * animProf(r2.sp).hop;
+        r2.vx = (sc.goal - r2.x) * 1.5; r2.hopT = now;
+      }
+      a.faceId = b.faceId = "serious"; a.faceT = b.faceT = now + 1100; // game faces mid-sprint
+    }],
+    [2450, (a, b, now, sc) => {
+      const win = Math.abs(a.x - sc.goal) <= Math.abs(b.x - sc.goal) ? a : b, los = win === a ? b : a;
+      sc.win = win; sc.los = los; // the rematch hook reads these at scene end
+      win.faceId = "star"; win.faceT = now + 1500; win.squashV += 5;
+      los.faceId = Math.random() < 0.5 ? "sad" : "pout"; los.faceT = now + 1300;
+      sfx.pop();
+    }],
+    [2950, () => {}],
+  ] },
+  // gift: a pal spots a sparkle, scoops it up and carries it over —
+  // receiver melts into heart-eyes, giver just beams
+  gift: { dur: 3000, steps: [
+    [0, (a, b, now) => {
+      a.lookUntil = now + 500; a.squashV += 2;
+      for (let k = 0; k < 4; k++) fx.push({ x: a.x + 14, y: a.y - 6, vx: (Math.random() - 0.5) * 24, vy: -14 - Math.random() * 16, life: 0.6, c: "#ffd75e" });
+    }],
+    [500, (a, b, now) => {
+      a.carry = { since: now, gift: true };
+      a.squashV += 3; a.faceId = "mischief"; a.faceT = now + 900;
+    }],
+    [800, (a, b, now) => {
+      a.walkT = b.x + (a.x < b.x ? -26 : 26);
+      a.faceId = "content"; a.faceT = now + 1400;
+      b.lookDir = Math.sign(a.x - b.x) || 1; b.lookUntil = now + 1600;
+    }],
+    [2100, (a, b, now) => {
+      a.carry = null;
+      hearts.push({ x: (a.x + b.x) / 2, y: a.y - 64, life: 1 });
+      hearts.push({ x: b.x + 8, y: b.y - 60, life: 1.1 });
+      // the receiver melts into heart-eyes — or gets flustered by the
+      // attention, which reads even softer
+      b.faceId = Math.random() < 0.45 ? "embar" : "love"; b.faceT = now + 1600;
+      a.faceId = "content"; a.faceT = now + 1400;
+      pairBondGain(a, b, 2);
+      sfx.heart();
+    }],
+    [2800, () => {}],
+  ] },
+  // mirror play: face each other and copy hops one beat apart — the
+  // copycat game, formalized into a duet
+  mirror: { dur: 2500, steps: [
+    [0, (a, b, now) => {
+      a.lookDir = Math.sign(b.x - a.x) || 1; b.lookDir = -a.lookDir;
+      a.lookUntil = b.lookUntil = now + 2000;
+      a.faceId = b.faceId = "happy"; a.faceT = b.faceT = now + 900;
+    }],
+    [400, (a, b, now) => { a.fly = true; a.vy = -170 * animProf(a.sp).hop; a.vx = 0; a.hopT = now; }],
+    [750, (a, b, now) => { b.fly = true; b.vy = -170 * animProf(b.sp).hop; b.vx = 0; b.hopT = now; b.squashV += 2; }],
+    [1200, (a, b, now) => { b.faceId = "laugh"; b.faceT = now + 800; a.squashV += 3; }],
+    [1500, (a, b, now) => { a.fly = true; a.vy = -190 * animProf(a.sp).hop; a.hopT = now; }],
+    [1850, (a, b, now) => {
+      b.fly = true; b.vy = -190 * animProf(b.sp).hop; b.hopT = now;
+      a.faceId = b.faceId = "laugh"; a.faceT = b.faceT = now + 1000;
+      hearts.push({ x: (a.x + b.x) / 2, y: Math.min(a.y, b.y) - 60, life: 1 });
+    }],
+    [2400, () => {}],
+  ] },
+  // piggyback: one climbs aboard and the mount ambles a slow circuit —
+  // rider glows, mount huffs a little, then a clean hop-off. reuses the
+  // totem-stack machinery (rider x/y follow the mount automatically)
+  piggyback: { dur: 4400, steps: [
+    [0, (a, b, now, sc) => {
+      // the grown-up carries; a baby is always the passenger
+      sc.mount = isBaby(SPECIES[a.sp]) ? b : isBaby(SPECIES[b.sp]) ? a : b;
+      sc.rider = sc.mount === a ? b : a;
+      sc.dir = Math.random() < 0.5 ? -1 : 1;
+      sc.rider.stackOn = sc.mount;
+      sc.rider.stackT = now + 3900;
+      sc.rider.stackRise = 0;
+      sc.rider.faceId = "happy"; sc.rider.faceT = now + 1400;
+      sc.mount.faceId = "excited"; sc.mount.faceT = now + 1200;
+      sc.mount.squashV += 4;
+      hearts.push({ x: (a.x + b.x) / 2, y: a.y - 90, life: 1 });
+      sfx.pop();
+    }],
+    [1100, (a, b, now, sc) => { sc.mount.walkT = sc.mount.x + sc.dir * 80; }],
+    [2300, (a, b, now, sc) => { sc.mount.walkT = sc.mount.x - sc.dir * 80; sc.rider.faceId = "love"; sc.rider.faceT = now + 1300; }],
+    [3800, (a, b, now, sc) => {
+      sc.rider.stackT = 0; // stack code pops the rider off on its own
+      sc.mount.faceId = "content"; sc.mount.faceT = now + 1200;
+      pairBondGain(a, b, 1);
+    }],
+    [4300, () => {}],
+  ] },
+  // boop: the besties' secret handshake — they sidle nose to nose, squash
+  // together on a silent count, then spring apart laughing. only close
+  // pairs get it; it's the bond paying rent
+  boop: { dur: 2600, steps: [
+    [0, (a, b, now) => {
+      a.lookDir = Math.sign(b.x - a.x) || 1; b.lookDir = -a.lookDir;
+      a.lookUntil = b.lookUntil = now + 1600;
+      a.faceId = b.faceId = "mischief"; a.faceT = b.faceT = now + 1000;
+    }],
+    [450, (a, b, now) => { a.walkT = b.x + (a.x < b.x ? -16 : 16); }],
+    [1400, (a, b, now) => {
+      // the boop — both lean into the squash at the same instant
+      a.squashV += 4; b.squashV += 4;
+      a.faceId = b.faceId = "wink"; a.faceT = b.faceT = now + 900;
+      hearts.push({ x: (a.x + b.x) / 2, y: a.y - 52, life: 1 });
+      sfx.pop();
+    }],
+    [1900, (a, b, now) => {
+      a.fly = true; a.vy = -150 * animProf(a.sp).hop; a.vx = -(a.lookDir || 1) * 60; a.hopT = now;
+      b.fly = true; b.vy = -150 * animProf(b.sp).hop; b.vx = (a.lookDir || 1) * 60; b.hopT = now;
+      a.faceId = b.faceId = "laugh"; a.faceT = b.faceT = now + 1100;
+      pairBondGain(a, b, 1);
+      sfx.heart();
+    }],
+    [2500, () => {}],
+  ] },
+};
+// pair-bond memory: pals that keep playing together get tagged as
+// friends — keyed on the two pal OBJECTS' species pair so it survives
+// roster churn as long as both stay hired. friends favor warm scenes
+// (gifts, mirror play); rivals keep squaring off
+let pairBonds = {};
+function pairKey(a, b) {
+  return [SPECIES[a.sp].id, SPECIES[b.sp].id].sort().join("+");
+}
+function pairBondGain(a, b, n) {
+  const k = pairKey(a, b);
+  pairBonds[k] = Math.min(9, (pairBonds[k] || 0) + n);
+  dirty = true;
+}
+function pairBondLvl(a, b) { return pairBonds[pairKey(a, b)] || 0; }
+// card-mood reason names for social contexts — shared by tickScene/tickGroup
+// (stamping) and cardMood (fallback inference)
+const SC_WHY = { mirror: "MIRROR PLAY", leapfrog: "LEAPFROG", gift: "PRESENT", piggyback: "PIGGYBACK", staredown: "STAREDOWN", race: "RACE", boop: "BESTIE" };
+const GR_WHY = { wave: "THE WAVE", chorus: "SING-ALONG", huddle: "HUDDLE", gather: "GATHERING" };
+// errand-kind → cause name, so an errand face still gets its icon even
+// when the errand code didn't stamp a literal faceWhy on it
+const PROP_WHY = { settle: "PAL TIME", treat: "TREAT?", deliver: "DELIVERY", find: "FORAGING",
+  cuddle: "COMFORT", petCuddle: "COMFORT", boop: "BESTIE", bowl: "BOWL", cushion: "CUSHION",
+  box: "BOX", plant: "PLANT", music: "MUSIC", mirror: "MIRROR", mat: "MAT", jar: "JAR",
+  egg: "EGG POPPING", nuzzle: "NUZZLED", inspect: "NEW TOY" };
+// solo-act kind → cause name, same job PROP_WHY does for errands — a pal
+// darting about or daydreaming isn't "happy for no reason", it's PLAYING
+const ACT_WHY = { stretch: "STRETCH", roll: "WHEE!", dart: "WHEE!", dream: "SLEEPY",
+  peek: "PEEK", sniff: "FORAGING", groom: "GROOMED", puddle: "SLEEPY" };
+// a fresh face gets its cause stamped; an older face keeps its own why
+function stampWhy(p, why) {
+  if (p.faceId && p.faceWhyId !== p.faceId) { p.faceWhy = why; p.faceWhyId = p.faceId; }
+}
+function pickScene(a, b, apsy, bpsy) {
+  const feisty = (s) => (s.startle || 1) > 1.1 || (s.pace || 1) < 0.75;
+  const friends = pairBondLvl(a, b) >= 2;
+  const bag = ["mirror", "leapfrog", "gift"];
+  if (friends) bag.push("gift", "mirror", "piggyback"); // buddies get the warm scenes more often
+  if (pairBondLvl(a, b) >= 4) bag.push("boop", "boop", "boop"); // close pairs have a handshake
+  if (feisty(apsy) && feisty(bpsy) && !friends) bag.push("staredown", "staredown");
+  if (!apsy.flee && !bpsy.flee) bag.push("race", "leapfrog");
+  if (!isBaby(SPECIES[a.sp]) || !isBaby(SPECIES[b.sp])) bag.push("piggyback");
+  return bag[(Math.random() * bag.length) | 0];
+}
+function startScene(a, b, kind, now) {
+  const sc = { k: kind, a, b, t0: now, i: 0, until: now + SCENES[kind].dur };
+  a.scene = sc; b.scene = sc;
+  a.walkT = b.walkT = null;
+  a.propGoal = b.propGoal = null;
+  a.follow = b.follow = null;
+  a.act = b.act = null;
+  a.nextT = b.nextT = sc.until + 1500;
+}
+function tickScene(sc, now, dt) {
+  const a = sc.a, b = sc.b, st = SCENES[sc.k];
+  const busy = (q) => !pals.includes(q) || q === palHeld || q.fly && !(sc.k === "leapfrog" || sc.k === "mirror" || sc.k === "race") ||
+    now < (q.restUntil || 0) || now < (q.hideUntil || 0) || q.tag || (q.stackOn && q.stackOn !== a && q.stackOn !== b);
+  if (!st || busy(a) || busy(b) || now > sc.until || Math.abs(a.x - b.x) > 260 || Math.abs(a.y - b.y) > 70) {
+    if (a.scene === sc) a.scene = null;
+    if (b.scene === sc) b.scene = null;
+    sceneCd = Math.max(sceneCd, now + 8000); // a failed scene doesn't instantly retry
+    return;
+  }
+  const e = now - sc.t0;
+  while (sc.i < st.steps.length && st.steps[sc.i][0] <= e) { st.steps[sc.i][1](a, b, now, sc); sc.i++; }
+  // every face the scene produces carries its name — the card reads
+  // "LAUGHING · LEAPFROG" even for step-internal expressions
+  const why = SC_WHY[sc.k] || "PLAY";
+  stampWhy(a, why); stampWhy(b, why);
+  if (sc.i >= st.steps.length && e >= st.dur - 150) {
+    a.scene = null; b.scene = null;
+    a.playCd = b.playCd = now + 9000;
+    sceneCd = now + 16000 + Math.random() * 12000;
+    // the parting glance: a beat of eye contact after a scene lands —
+    // they look back at each other before wandering off
+    a.lookDir = Math.sign(b.x - a.x) || 1;
+    b.lookDir = Math.sign(a.x - b.x) || 1;
+    a.lookUntil = b.lookUntil = now + 2100;
+    if (now > a.faceT) { a.faceId = Math.random() < 0.5 ? "content" : "wink"; a.faceT = now + 1300; }
+    if (now > b.faceT) { b.faceId = "content"; b.faceT = now + 1300; }
+    // a sore loser wants a rematch — competitive pals sometimes run it back
+    if (sc.k === "race" && sc.los && pals.includes(sc.los) && pals.includes(sc.win) &&
+        (PSYCH[(SPECIES[sc.los.sp] || {}).ps] || {}).startle >= 1.3 && Math.random() < 0.35) {
+      sc.los.rematch = { mate: sc.win, at: now + 2600 };
+      sc.los.faceId = "serious"; sc.los.faceT = now + 1200;
+      sc.los.faceWhy = "REMATCH"; sc.los.faceWhyId = "serious";
+    }
+  }
+}
+
+// ---------- group events ----------
+// occasionally the whole flock does one thing together: a huddle that
+// ends in a synchronized pop-jump, a stadium wave rolling down the deck,
+// or a little chorus with notes drifting up. members keep a `p.group`
+// back-reference so pair scenes and solo whims don't yank them mid-event
+let groupEvt = null, groupCd = 0;
+function groupBusy(p, now) {
+  return !pals.includes(p) || p === palHeld || p.fly || p.tag || p.stackOn ||
+    p.scene || p.act || p.chatMate || p.propGoal || p.carry ||
+    now < (p.restUntil || 0) || now < (p.hideUntil || 0) || now < (p.settleUntil || 0);
+}
+function groupBondAll(members) {
+  for (let i = 0; i < members.length; i++)
+    for (let j = i + 1; j < members.length; j++) pairBondGain(members[i], members[j], 1);
+}
+function endGroup(e, now, cd) {
+  for (const p of e.members) { p.group = null; p.waved = false; }
+  groupEvt = null;
+  groupCd = now + cd;
+}
+function startGroup(kind, now) {
+  const anchor = pals[(Math.random() * pals.length) | 0];
+  const members = pals.filter(p => !groupBusy(p, now) && Math.abs(p.y - anchor.y) < 20);
+  if (members.length < 3 || groupBusy(anchor, now)) return;
+  groupEvt = { kind, t0: now, cx: anchor.x, members };
+  // a placed music box conducts the choir — the huddle forms around it
+  if (kind === "chorus" && music && Math.abs(music.y - anchor.y) < 20) groupEvt.cx = music.x;
+  for (const p of members) {
+    p.group = groupEvt; p.walkT = null; p.follow = null;
+    p.nextT = Math.max(p.nextT, now + 4200);
+  }
+  if (kind === "wave") {
+    anchor.fly = true; anchor.vy = -230 * animProf(anchor.sp).hop; anchor.vx = 0; anchor.hopT = now;
+    anchor.faceId = "excited"; anchor.faceT = now + 900;
+    sfx.boing();
+  } else {
+    // the instigator's "everyone over HERE" face — a bright rally grin
+    anchor.faceId = "excited"; anchor.faceT = now + 1200;
+    anchor.squashV += 3;
+  }
+}
+function tickGroup(now, dt, quiet) {
+  const e = groupEvt;
+  if (!e) {
+    // rare roll — needs a moment with at least three free pals on a deck
+    if (now > groupCd && pals.length >= 3 && !quiet && Math.random() < dt * 0.012) {
+      const r = Math.random();
+      // dusk is singalong hour — evenings favor the chorus over the wave
+      const hr = new Date().getHours();
+      const evening = hr >= 18 && hr < 22;
+      startGroup(evening ? (r < 0.3 ? "gather" : r < 0.5 ? "wave" : "chorus")
+        : (r < 0.45 ? "gather" : r < 0.8 ? "wave" : "chorus"), now);
+    }
+    return;
+  }
+  // drop members that got grabbed, tagged, napped or wandered off;
+  // the event collapses if it falls below a trio
+  e.members = e.members.filter(p => {
+    const stay = pals.includes(p) && p.group === e && p !== palHeld &&
+      !p.tag && !p.scene && !p.chatMate &&
+      now > (p.restUntil || 0) && now > (p.hideUntil || 0) && now > (p.settleUntil || 0);
+    if (!stay && p.group === e) p.group = null; // a dropped member must not stay excluded forever
+    return stay;
+  });
+  if (e.members.length < 3) { endGroup(e, now, 30000); return; }
+  const el = now - e.t0;
+  // group faces carry the event's name on the card
+  const gwhy = GR_WHY[e.kind] || "GROUP FUN";
+  for (const p of e.members) stampWhy(p, gwhy);
+  if (e.kind === "gather") {
+    if (el < 3000) {
+      // everyone shuffles to their slot in a loose huddle around the anchor
+      e.members.forEach((p, i) => {
+        const off = (i - (e.members.length - 1) / 2) * 46;
+        p.walkT = e.cx + off;
+        p.lookDir = Math.sign(e.cx - p.x) || p.lookDir;
+      });
+      if (Math.random() < dt * 3) {
+        const p = e.members[(Math.random() * e.members.length) | 0];
+        if (now > p.faceT) { p.faceId = "excited"; p.faceT = now + 700; }
+      }
+    } else if (!e.burst) {
+      e.burst = true;
+      // the payoff: everyone pops at once, hearts all around
+      for (const p of e.members) {
+        p.fly = true; p.vy = -(190 + Math.random() * 60) * animProf(p.sp).hop; p.vx = 0; p.hopT = now;
+        p.faceId = Math.random() < 0.4 ? "tearjoy" : "laugh"; p.faceT = now + 1400;
+        hearts.push({ x: p.x, y: p.y - 74, life: 1.2 });
+      }
+      groupBondAll(e.members);
+      sfx.pop(); sfx.heart();
+    } else if (el > 4300) {
+      endGroup(e, now, 90000 + Math.random() * 90000);
+    }
+  } else if (e.kind === "wave") {
+    // the ripple rolls outward from the anchor — each pal hops when the
+    // wavefront reaches it (delay scales with distance)
+    for (const p of e.members) {
+      const at = 300 + Math.abs(p.x - e.cx) * 6;
+      if (el >= at && !p.waved && !p.fly) {
+        p.waved = true;
+        p.fly = true; p.vy = -(180 + Math.random() * 50) * animProf(p.sp).hop; p.vx = 0; p.hopT = now;
+        if (Math.random() < 0.6 && now > p.faceT) { p.faceId = "excited"; p.faceT = now + 800; }
+        // the ripple is contagious — a free spectator beside the
+        // wavefront can't help a little echo hop of its own
+        if (Math.random() < 0.45) {
+          const sp2 = pals.find((o) => o !== p && !e.members.includes(o) && !o.fly && o !== palHeld &&
+            now > (o.restUntil || 0) && !(now < (o.hideUntil || 0)) && !o.tag && !o.scene && !o.group &&
+            Math.abs(o.x - p.x) < 110 && Math.abs(o.y - p.y) < 30);
+          if (sp2) {
+            sp2.fly = true; sp2.vy = -120 * animProf(sp2.sp).hop; sp2.vx = 0; sp2.hopT = now;
+            if (now > sp2.faceT) { sp2.faceId = "excited"; sp2.faceT = now + 700; }
+          }
+        }
+      }
+    }
+    if (el > 3600) {
+      // wave applause: the ripple ends in a shared warm beat — the pals
+      // smile at what they just pulled off
+      for (const p of e.members) {
+        if (Math.random() < 0.55 && now > p.faceT) { p.faceId = "content"; p.faceT = now + 1100; }
+        if (Math.random() < 0.4) hearts.push({ x: p.x, y: p.y - 58, life: 0.9 });
+      }
+      endGroup(e, now, 90000 + Math.random() * 90000);
+    }
+  } else {
+    // chorus: the huddle sways while notes drift up off random singers —
+    // ends in the same synchronized pop as a gather
+    if (el < 3400) {
+      e.members.forEach((p, i) => {
+        const off = (i - (e.members.length - 1) / 2) * 50;
+        if (p.walkT === null) p.walkT = e.cx + off;
+        p.lookDir = Math.sign(e.cx - p.x) || p.lookDir;
+      });
+      if (Math.random() < dt * 4) {
+        const p = e.members[(Math.random() * e.members.length) | 0];
+        p.squashV += 2.5;
+        if (now > p.faceT) { p.faceId = "happy"; p.faceT = now + 800; }
+      }
+    } else if (!e.burst) {
+      e.burst = true;
+      for (const p of e.members) {
+        p.fly = true; p.vy = -(170 + Math.random() * 50) * animProf(p.sp).hop; p.vx = 0; p.hopT = now;
+        p.faceId = Math.random() < 0.4 ? "tearjoy" : "laugh"; p.faceT = now + 1200;
+        hearts.push({ x: p.x, y: p.y - 70, life: 1 });
+      }
+      groupBondAll(e.members);
+      sfx.pop(); sfx.heart();
+    } else if (el > 4400) {
+      endGroup(e, now, 90000 + Math.random() * 90000);
+    }
+  }
+}
 function legTick(sp, x, y, dt, moving, airborne, kick) {
   const lg = LEG[sp.id];
   if (!lg) return;
@@ -3627,7 +4710,6 @@ function legTick(sp, x, y, dt, moving, airborne, kick) {
     fx.push({ x: x + Math.random() * 20 - 10, y: y - 4, vx: Math.random() * 8 - 4, vy: -34, life: 0.9, c: lg.glow });
   }
   if (lg.notes && Math.random() < dt * 0.55) {
-    bangs.push({ x: x + Math.random() * 40 - 20, y: y - SH * 1.6 - 8, life: 1.1, t: "♪" });
     // siren's song: a nearby pal stops to listen — really smitten ones
     // get heart-eyes
     if (lg.captivate) {
@@ -3701,6 +4783,7 @@ let palHeld = null;
 let palDX = 0, palDY = 0, palVX = 0, palVY = 0;
 let palLX = 0, palLY = 0, palLT = 0, palDownX = 0, palDownY = 0, palDownT = 0;
 let palRevX = null;
+let palShakeDir = 0, palShakeN = 0, palRattled = false; // fast shake = rattle
 function cancelPalDrag() {
   if (!palHeld) return false;
   // Grabbing pauses companion physics. A cancelled/lost terminal event must
@@ -3743,7 +4826,6 @@ function gainXp(n, bx, by) {
   if (Math.floor(xp / every) > Math.floor(prevXp / every)) {
     jelly = addSavedInt(jelly, 1);
     if (bx != null && !petHome && performance.now() >= boxHide) {
-      bangs.push({ x: bx, y: by, life: 1, t: "💎" });
       starUntil = performance.now() + 900;
       sfx.heart();
     }
@@ -3771,10 +4853,11 @@ function copyPeek(intense) {
   const now = performance.now();
   if (now < copyCd || petHome || held || now < boxHide) return;
   copyCd = now + (intense ? 6000 : 8000);
-  // the perk is always visible — the ? pops even mid-flight; the look and
-  // the investigative hop only apply when it's actually standing around
-  shockUntil = now + (intense ? 700 : 450);
-  bangs.push({ x: petX, y: petY - blobSize().h - 14, life: 1.3, t: intense ? "!?" : "?" });
+  // the face pops even mid-flight; the look and the investigative hop
+  // only apply when it's actually standing around. an intense catch earns
+  // a real gasp; a passing peek just earns a squint
+  if (intense) gaspUntil = now + 900;
+  else { shockUntil = now + 450; curiousUntil = now + 1100; }
   if (!flying && !sigT0 && state !== "sleeping" && Date.now() > cushionNapW) {
     lookDir = Math.sign(curX - petX) || 1;
     lookUntil = now + 1100;
@@ -3791,9 +4874,8 @@ function copyPeek(intense) {
         now > (p.restUntil || 0) && now > (p.hideUntil || 0)) { nd = d; np = p; }
   }
   if (np) {
-    np.faceId = "shock"; np.faceT = now + 700;
+    np.faceId = "curious"; np.faceT = now + 900;
     np.lookDir = Math.sign(curX - np.x) || 1; np.lookUntil = now + 900;
-    bangs.push({ x: np.x, y: np.y - 62, life: 0.8, t: "?" });
   }
   sfx.pop();
 }
@@ -3818,22 +4900,21 @@ const ACC_ACTS = {
 const ACC_RUNS = {
   inspect: [ // monocle/specs: stops, peers at what you're doing, verdict
     [0, () => { lookDir = Math.sign(curX - petX) || 1; lookUntil = performance.now() + 2600; }],
-    [1400, () => bangs.push({ x: petX, y: petY - blobSize().h - 14, life: 1.4, t: "HMM..." })],
+    [1400, () => { curiousUntil = performance.now() + 1500; }],
     [2000, () => fx.push({ x: petX + lookDir * 13, y: petY - 42, vx: 0, vy: -18, life: 0.7, c: "#ffffff", spr: "star5" })],
     [2800, () => { smugUntil = performance.now() + 1500; }],
     [3000, () => {}],
   ],
   strut: [ // stache: a proud little twirl-hop, then smug
     [0, () => { flying = true; petVY = -150; spinT0 = performance.now(); smugUntil = performance.now() + 2600; }],
-    [700, () => bangs.push({ x: petX, y: petY - blobSize().h - 14, life: 1.1, t: "HMPH!" })],
     [1200, () => fx.push({ x: petX + 14, y: petY - 46, vx: 0, vy: -16, life: 0.7, c: "#ffd75e", spr: "star5" })],
     [1600, () => {}],
   ],
   jam: [ // phones/mohawk: head-bobbing to music only it hears
-    [0, () => { contentUntil = performance.now() + 3200; }],
-    [350, () => { squashV += 1.8; bangs.push({ x: petX + 16, y: petY - 60, life: 0.8, t: "♪" }); }],
-    [950, () => { squashV += 1.8; bangs.push({ x: petX - 22, y: petY - 64, life: 0.8, t: "♫" }); }],
-    [1550, () => { squashV += 2.2; bangs.push({ x: petX + 18, y: petY - 64, life: 0.8, t: "♪" }); }],
+    [0, () => { contentUntil = performance.now() + 3200; happyUntil = performance.now() + 2800; }],
+    [350, () => { squashV += 1.8; }],
+    [950, () => { squashV += 1.8; }],
+    [1550, () => { squashV += 2.2; }],
     [2400, () => {}],
   ],
   bless: [ // halo: rises a touch, warm glow, nearby pals get happy
@@ -3845,7 +4926,7 @@ const ACC_RUNS = {
   signal: [ // antenna: freezes stock-still, then — a transmission!
     [0, () => { shockUntil = performance.now() + 700; }],
     [800, () => { for (let i = 0; i < 3; i++) fx.push({ x: petX, y: petY - blobSize().h - 16 - i * 8, vx: 0, vy: -30, life: 0.5, c: "#5ac8f0" }); }],
-    [1500, () => { bangs.push({ x: petX, y: petY - blobSize().h - 14, life: 1, t: "!" }); lookDir = Math.sign(curX - petX) || 1; lookUntil = performance.now() + 1400; }],
+    [1500, () => { gaspUntil = performance.now() + 900; lookDir = Math.sign(curX - petX) || 1; lookUntil = performance.now() + 1400; }],
     [2100, () => {}],
   ],
   bask: [ // leaf: sits and quietly photosynthesizes
@@ -3858,7 +4939,7 @@ const ACC_RUNS = {
     [0, () => { lookDir = -lookDir; lookUntil = performance.now() + 2200; smugUntil = performance.now() + 2400; }],
     [300, () => fx.push({ x: petX - lookDir * 18, y: petY - 34, vx: -lookDir * 46, vy: -8, life: 0.6, c: "#e8dcc8" })],
     [800, () => fx.push({ x: petX - lookDir * 20, y: petY - 30, vx: -lookDir * 52, vy: -10, life: 0.6, c: "#e8dcc8" })],
-    [1500, () => bangs.push({ x: petX, y: petY - blobSize().h - 14, life: 1, t: "..." })],
+    [1500, () => { sideeyeUntil = performance.now() + 1100; }],
     [2200, () => {}],
   ],
   cool: [ // shades: a low slide-hop like it owns the place
@@ -3876,13 +4957,13 @@ const ACC_RUNS = {
   spell: [ // wizard hat: a tiny sparkle from the hat tip
     [0, () => { lookUntil = performance.now() + 1600; lookDir = 1; }],
     [600, () => { for (let i = 0; i < 7; i++) fx.push({ x: petX + (Math.random() - 0.5) * 26, y: petY - blobSize().h - 8 - Math.random() * 16, vx: (Math.random() - 0.5) * 30, vy: -16 - Math.random() * 20, life: 0.8, c: "#b89af0" }); }],
-    [1300, () => bangs.push({ x: petX, y: petY - blobSize().h - 14, life: 1, t: "✦" })],
+    [1300, () => { starUntil = performance.now() + 1000; }],
     [1900, () => {}],
   ],
   sniff: [ // flower: sniff sniff… ACHOO — a pollen sneeze hop
     [0, () => { squashV += 1.5; lookDir = -lookDir; lookUntil = performance.now() + 900; }],
     [800, () => { squashV += 1.5; }],
-    [1500, () => { flying = true; petVY = -130; bangs.push({ x: petX, y: petY - blobSize().h - 14, life: 1, t: "ACHOO!" }); for (let i = 0; i < 5; i++) fx.push({ x: petX + (Math.random() - 0.5) * 20, y: petY - 44, vx: (Math.random() - 0.5) * 60, vy: -30 - Math.random() * 30, life: 0.7, c: "#ffe9a0" }); }],
+    [1500, () => { flying = true; petVY = -130; sneezeUntil = performance.now() + 1200; for (let i = 0; i < 5; i++) fx.push({ x: petX + (Math.random() - 0.5) * 20, y: petY - 44, vx: (Math.random() - 0.5) * 60, vy: -30 - Math.random() * 30, life: 0.7, c: "#ffe9a0" }); }],
     [2200, () => {}],
   ],
   stamp: [ // horns: two little stamps, then satisfied
@@ -3893,7 +4974,7 @@ const ACC_RUNS = {
   ],
   party: [ // party hat: confetti pop + a celebratory hop
     [0, () => { flying = true; petVY = -170; for (let i = 0; i < 10; i++) fx.push({ x: petX, y: petY - 46, vx: (Math.random() - 0.5) * 140, vy: -50 - Math.random() * 90, life: 0.9, c: ["#e05a6e", "#5ac8f0", "#ffd75e"][i % 3] }); }],
-    [400, () => { bangs.push({ x: petX, y: petY - blobSize().h - 14, life: 1, t: "♪" }); contentUntil = performance.now() + 2000; }],
+    [400, () => { contentUntil = performance.now() + 2000; happyUntil = performance.now() + 1800; }],
     [1200, () => {}],
   ],
   flutter: [ // wings: one graceful floaty hop
@@ -3909,24 +4990,24 @@ const ACC_RUN_ID = { monocle: "inspect", specs: "inspect", stache: "strut", phon
 // pals get the same idea in miniature — one or two timed beats each, no
 // choreography. propeller pals even take a little hop of their own
 const PAL_ACC_BITS = {
-  monocle: [[0, (p) => { p.lookDir = Math.sign(curX - p.x) || 1; p.lookUntil = performance.now() + 2000; }], [1200, (p) => bangs.push({ x: p.x, y: p.y - 64, life: 1, t: "..." })]],
+  monocle: [[0, (p) => { p.lookDir = Math.sign(curX - p.x) || 1; p.lookUntil = performance.now() + 2000; }], [1200, (p) => { p.faceId = "curious"; p.faceT = performance.now() + 1400; }]],
   specs: [[0, (p) => { p.lookDir = Math.sign(curX - p.x) || 1; p.lookUntil = performance.now() + 1600; }], [900, (p) => { p.faceId = "smug"; p.faceT = performance.now() + 1200; }]],
   stache: [[0, (p) => { p.faceId = "smug"; p.faceT = performance.now() + 2000; p.squashV += 2; }], [600, (p) => { p.fly = true; p.vy = -110; p.vx = p.lookDir * 40; }]],
-  phones: [[0, (p) => { p.faceId = "happy"; p.faceT = performance.now() + 2400; }], [400, (p) => { bangs.push({ x: p.x, y: p.y - 64, life: 0.8, t: "♪" }); p.squashV += 1.5; }], [1100, (p) => { bangs.push({ x: p.x, y: p.y - 64, life: 0.8, t: "♫" }); p.squashV += 1.5; }]],
+  phones: [[0, (p) => { p.faceId = "happy"; p.faceT = performance.now() + 2400; }], [400, (p) => { p.squashV += 1.5; }], [1100, (p) => { p.squashV += 1.5; }]],
   halo: [[0, (p) => { for (let i = 0; i < 5; i++) fx.push({ x: p.x + (Math.random() - 0.5) * 28, y: p.y - 40 - Math.random() * 18, vx: 0, vy: -14, life: 0.8, c: "#ffe9a0" }); hearts.push({ x: p.x, y: p.y - 56, life: 1 }); }]],
-  antenna: [[0, (p) => { p.faceId = "shock"; p.faceT = performance.now() + 900; }], [700, (p) => bangs.push({ x: p.x, y: p.y - 64, life: 0.9, t: "!" })]],
+  antenna: [[0, (p) => { p.faceId = "shock"; p.faceT = performance.now() + 900; }], [700, (p) => { p.faceId = "gasp"; p.faceT = performance.now() + 900; }]],
   leaf: [[0, (p) => { p.faceId = "content"; p.faceT = performance.now() + 2600; }]],
   scarf: [[0, (p) => { p.faceId = "smug"; p.faceT = performance.now() + 1800; p.lookDir = -p.lookDir; }]],
   shades: [[0, (p) => { p.faceId = "smug"; p.faceT = performance.now() + 2200; }]],
   crown: [[0, (p) => { p.faceId = "smug"; p.faceT = performance.now() + 1800; fx.push({ x: p.x, y: p.y - 54, vx: 0, vy: -14, life: 0.8, c: "#ffd75e", spr: "star5" }); }]],
   tiara: [[0, (p) => { p.faceId = "smug"; p.faceT = performance.now() + 1800; fx.push({ x: p.x, y: p.y - 54, vx: 0, vy: -14, life: 0.8, c: "#ffd75e", spr: "star5" }); }]],
   wiz: [[0, (p) => { for (let i = 0; i < 6; i++) fx.push({ x: p.x + (Math.random() - 0.5) * 22, y: p.y - 48 - Math.random() * 14, vx: (Math.random() - 0.5) * 30, vy: -18 - Math.random() * 18, life: 0.7, c: "#b89af0" }); }]],
-  flower: [[0, (p) => { p.squashV += 1.5; }], [800, (p) => { bangs.push({ x: p.x, y: p.y - 64, life: 0.9, t: "ACHOO" }); p.fly = true; p.vy = -100; p.vx = (Math.random() - 0.5) * 60; }]],
+  flower: [[0, (p) => { p.squashV += 1.5; }], [800, (p) => { p.faceId = "sneeze"; p.faceT = performance.now() + 1000; p.fly = true; p.vy = -100; p.vx = (Math.random() - 0.5) * 60; }]],
   horns: [[0, (p) => { p.squashV += 2.5; fx.push({ x: p.x - 12, y: p.y - 4, vx: -22, vy: -16, life: 0.4, c: "#c8b8a0" }); }], [450, (p) => { p.squashV += 2.5; fx.push({ x: p.x + 12, y: p.y - 4, vx: 22, vy: -16, life: 0.4, c: "#c8b8a0" }); }]],
   party: [[0, (p) => { p.faceId = "happy"; p.faceT = performance.now() + 2000; for (let i = 0; i < 8; i++) fx.push({ x: p.x, y: p.y - 42, vx: (Math.random() - 0.5) * 120, vy: -50 - Math.random() * 70, life: 0.8, c: ["#e05a6e", "#5ac8f0", "#ffd75e"][i % 3] }); }]],
   wings: [[0, (p) => { p.fly = true; p.vy = -240; p.vx = (Math.random() - 0.5) * 80; }]],
   prop: [[0, (p) => { p.fly = true; p.vy = -280; p.vx = (Math.random() - 0.5) * 120; p.faceId = "happy"; p.faceT = performance.now() + 1200; }]],
-  mohawk: [[0, (p) => { p.faceId = "happy"; p.faceT = performance.now() + 2200; }], [400, (p) => { bangs.push({ x: p.x, y: p.y - 64, life: 0.8, t: "♪" }); p.squashV += 1.5; }], [1100, (p) => { bangs.push({ x: p.x, y: p.y - 64, life: 0.8, t: "♫" }); p.squashV += 1.5; }]],
+  mohawk: [[0, (p) => { p.faceId = "happy"; p.faceT = performance.now() + 2200; }], [400, (p) => { p.squashV += 1.5; }], [1100, (p) => { p.squashV += 1.5; }]],
   bow: [[0, (p) => { p.lookDir = -p.lookDir; p.squashV += 1.5; }], [700, (p) => { p.fly = true; p.vy = -90; p.faceId = "happy"; p.faceT = performance.now() + 800; }]],
   ribbon: [[0, (p) => { p.lookDir = -p.lookDir; p.squashV += 1.5; }], [700, (p) => { p.fly = true; p.vy = -90; p.faceId = "happy"; p.faceT = performance.now() + 800; }]],
   patch: [[0, (p) => { p.lookDir = Math.sign(curX - p.x) || 1; p.lookUntil = performance.now() + 1500; p.faceId = "smug"; p.faceT = performance.now() + 1800; }]],
@@ -3953,7 +5034,8 @@ function startAccAct(run, now) {
     accAct.ty = Math.max(70, tgt.y - 48);
     accAct.until = now + 6000;
     flying = true; petVY = -60;
-    bangs.push({ x: petX, y: petY - blobSize().h - 14, life: 1, t: "♪" });
+    excitedUntil = now + 1400;
+    petStamp("WHEE!", "excited");
     sfx.boing();
   }
 }
@@ -4036,7 +5118,6 @@ listenQuiet("platforms", (e) => {
       if (!petHome) {
         startleFall = true;
         shockUntil = performance.now() + 1400;
-        bangs.push({ x: petX, y: petY - blobSize().h - 14, life: 1, t: "!" });
         sfx.shock();
       }
     }
@@ -4169,6 +5250,14 @@ function recall() {
   poutUntil = 0;
   cryUntil = 0;
   tickleUntil = 0;
+  tearjoyUntil = 0;
+  sneezeUntil = 0;
+  happyUntil = 0;
+  embarUntil = 0;
+  droolUntil = 0;
+  worryUntil = 0;
+  jealousUntil = 0;
+  curiousUntil = 0;
   wiggleBuf.length = 0;
   petUntil = 0;
   rubDir = 0;
@@ -4247,8 +5336,10 @@ cv.addEventListener("pointerdown", (e) => {
   // album overlay: nav arrows, folder link, X, or click-outside to close.
   // normally the #info overlay owns these clicks — this is the fallback
   if (albumOpen) { albumClick(mx, my); return; }
-  // away-report panel: click it to dismiss early
-  if (awayReport && Math.abs(mx - winW / 2) < 95 && my >= 54 && my <= 132) { awayReport = null; return; }
+  // away-report panel: click it to dismiss early — but it draws UNDER the
+  // settings/gem modals, so while either is up its band must not shadow
+  // their clicks (a tap on a visible row used to silently kill the report)
+  if (awayReport && !settingsOpen && !gemShop && Math.abs(mx - winW / 2) < 95 && my >= 54 && my <= 132) { awayReport = null; return; }
   // gem shop modal: BUY opens the itch page, REDEEM swaps to the code modal
   if (gemShop) {
     const [gx, gy, gw, gh] = gemShopRect();
@@ -4288,11 +5379,17 @@ cv.addEventListener("pointerdown", (e) => {
   }
   if (settingsOpen) {
     const [px, py, pw, ph] = settingsRect();
-    const rowIds = settingsRowIds();
-    const rows = settingsRows();
+    const cells = settingsCells();
+    // the close chip: small X in the title bar, same affordance as the
+    // other floating windows
+    if (mx >= px + pw - 28 && mx <= px + pw - 8 && my >= py + 6 && my <= py + 22) {
+      closeSettings();
+      sfx.pop();
+      return;
+    }
     // positions are dense over the visible ids — resolve logical ids back
     // to rects so hidden (store) rows simply have no hit area
-    const rowFor = (id) => { const j = rowIds.indexOf(id); return j < 0 ? null : rows[j]; };
+    const rowFor = (id) => { const c = cells.find((c2) => c2.id === id); return c ? c.r : null; };
     // rows scrolled out of the viewport can't be clicked — they're not
     // drawn there either, so an invisible row must never take a hit
     const inRow = (R) => R && mx >= R[0] && mx <= R[0] + R[2] && my >= R[1] && my <= R[1] + R[3] && my >= py + SET_VIEW_TOP && my <= py + ph - SET_VIEW_BOT;
@@ -4315,12 +5412,14 @@ cv.addEventListener("pointerdown", (e) => {
       dirty = true;
       sfx.pop();
     } else if (inRow(rowFor(2))) { reduceMotion = !reduceMotion; dirty = true; sfx.pop(); }
+    else if (inRow(rowFor(16))) { saverMode = (saverMode + 1) % 3; dirty = true; sfx.pop(); }
     else if (inRow(rowFor(3))) {
       // photo mode: hide every UI element, snapshot the canvas to PNG;
       // the slime smiles for the camera
-      settingsOpen = false;
+      closeSettings();
       contentUntil = performance.now() + 2500;
       winkUntil = performance.now() + 1100; // it winks for the camera
+      petStamp("POSED!", "wink");
       hearts.push({ x: petX + 20, y: petY - 80, life: 1 });
       photoHide = true;
       ranch.style.opacity = "0";
@@ -4358,7 +5457,7 @@ cv.addEventListener("pointerdown", (e) => {
     }
     else if (inRow(rowFor(4))) {
       // photo album: browse every PNG the photo mode has saved
-      settingsOpen = false;
+      closeSettings();
       openAlbum();
     }
     else if (inRow(rowFor(5))) {
@@ -4387,7 +5486,7 @@ cv.addEventListener("pointerdown", (e) => {
     else if (inRow(rowFor(8))) {
       // share card: render a pretty collection snapshot to the photos
       // folder — built for "look at my ranch" posts
-      settingsOpen = false;
+      closeSettings();
       shareCard();
       sfx.pop();
     }
@@ -4404,14 +5503,14 @@ cv.addEventListener("pointerdown", (e) => {
     else if (inRow(rowFor(11))) {
       // gem shop: direct = pack prices + store link + redeem door,
       // store = the same panel driven by App Store products
-      settingsOpen = false;
+      closeSettings();
       gemShop = true;
       if (STORE) iapLoad();
       sfx.pop();
     }
     else if (inRow(rowFor(12)) && !STORE) {
       // redeem a paid gem code — typed like the name editor
-      settingsOpen = false;
+      closeSettings();
       redeemMode = true;
       redeemBuf = "";
       sfx.pop();
@@ -4444,7 +5543,7 @@ cv.addEventListener("pointerdown", (e) => {
       Promise.race([persist().catch(() => {}), new Promise((r) => setTimeout(r, 1500))])
         .then(() => invokeQuiet("quit_app"));
     }
-    else if (mx < px || mx > px + pw || my < py || my > py + ph) settingsOpen = false;
+    else if (mx < px || mx > px + pw || my < py || my > py + ph) closeSettings();
     return;
   }
   // radial menu: the circle is grabbable — a press starts a potential drag,
@@ -4468,7 +5567,8 @@ cv.addEventListener("pointerdown", (e) => {
       else if (id === "snack") { fabOpen = false; treatAim = true; }
       else if (id === "toys") toyboxOpen = !toyboxOpen; // strip hangs off this item
       else if (id === "barn") { fabOpen = false; toggleRanch(); }
-      else if (id === "gear") { fabOpen = false; settingsOpen = !settingsOpen; if (settingsOpen) setScroll = 0; }
+      else if (id === "gear") { fabOpen = false; if (settingsOpen) closeSettings(); else { settingsOpen = true; setScroll = 0; } }
+      if (id !== "toys") toyboxOpen = false; // a dead strip used to linger — visible but unclickable
       sfx.pop();
       return;
     }
@@ -4494,19 +5594,39 @@ cv.addEventListener("pointerdown", (e) => {
               if (Math.abs(q.x - cur.x) < 60 && Math.abs(q.y - cur.y) < 40) {
                 if (nw < (q.restUntil || 0) || nw < (q.hideUntil || 0) || (q.propGoal && q.propGoal.kind === kind)) {
                   q.restUntil = 0; q.hideUntil = 0; q.propGoal = null;
-                  q.faceId = "shock"; q.faceT = nw + 700;
-                  bangs.push({ x: q.x, y: q.y - 58, life: 0.9, t: "!" });
+                  q.faceId = "shock"; q.faceT = nw + 700; q.faceWhy = "EVICTED"; q.faceWhyId = "shock";
                 }
               }
             }
             if (kind === "cushion" && nw < cushionNap) { cushionNap = 0; cushionNapW = 0; sitUntil = 0; }
             if (kind === "box" && nw < boxHide) boxHide = 0;
+            // "hey, that was OUR stuff": nearby free pals glance at the
+            // empty spot — a visible reaction to furniture leaving, and
+            // the pet tilts at the gap too when it's loitering close by
+            for (const q of pals) {
+              if (q !== palHeld && !q.fly && nw > (q.restUntil || 0) && !(nw < (q.hideUntil || 0)) &&
+                  !(nw < (q.chatUntil || 0)) && !q.scene && Math.abs(q.x - cur.x) > 60 &&
+                  Math.abs(q.x - cur.x) < 240 && Math.abs(q.y - cur.y) < 40 && nw > (q.faceT || 0) &&
+                  Math.random() < 0.5) {
+                q.faceId = "meh"; q.faceT = nw + 900;
+                q.lookDir = Math.sign(cur.x - q.x) || 1; q.lookUntil = nw + 800;
+              }
+            }
+            if (!held && Math.abs(petX - cur.x) < 260 && Math.abs(petY - cur.y) < 40) {
+              lookDir = Math.sign(cur.x - petX) || 1;
+              lookUntil = nw + 1000;
+              curiousUntil = Math.max(curiousUntil, nw + 900);
+            }
             if (kind === "bowl") bowl = null; else if (kind === "cushion") cushion = null;
             else if (kind === "box") box = null; else if (kind === "plant") plant = null;
             else if (kind === "music") music = null; else if (kind === "mirror") mirror = null;
             else if (kind === "mat") mat = null; else jar = null;
           } else {
             const p = spawnProp(kind);
+            propNewAt = nw; propNewX = p.x; // pals will squint a "?" at it
+            // poof-in: the furniture arrives with a soft dust pop, not
+            // a silent teleport
+            for (let i = 0; i < 10; i++) fx.push({ x: p.x + Math.random() * 30 - 15, y: p.y - Math.random() * 18, vx: Math.random() * 50 - 25, vy: -Math.random() * 45, life: 0.5, c: "#fff0c8" });
             if (kind === "bowl") { p.fill = 3; bowl = p; }
             else if (kind === "cushion") cushion = p;
             else if (kind === "box") box = p;
@@ -4515,6 +5635,13 @@ cv.addEventListener("pointerdown", (e) => {
             else if (kind === "mirror") mirror = p;
             else if (kind === "mat") mat = p;
             else { p.fill = 2; jar = p; }
+            // the pet comes to inspect the new furniture — stroll over,
+            // a sniff, a look. only when it's actually free to wander
+            if (!held && state === "idle" && walkTarget === null && hopTarget === null &&
+                Math.abs(petY - p.y) < 40 && Math.abs(p.x - petX) > 60) {
+              walkTarget = Math.max(30, Math.min(winW - 30, p.x + (petX < p.x ? -30 : 30)));
+              walkGoal = { kind: "inspect", tx: walkTarget, px: p.x };
+            }
           }
         }
         sfx.pop();
@@ -4570,6 +5697,7 @@ cv.addEventListener("pointerdown", (e) => {
     touch();
     ballDX = mx - ball.x; ballDY = my - ball.y;
     ballLX = mx; ballLY = my; ballLT = e.timeStamp;
+    ballDownX = mx; ballDownY = my; ballDownT = e.timeStamp;
     ballVX = 0; ballVY = 0;
     ball.vx = 0; ball.vy = 0;
     capturePointer(cv, e.pointerId);
@@ -4607,6 +5735,7 @@ cv.addEventListener("pointerdown", (e) => {
     palLX = mx; palLY = my; palLT = e.timeStamp;
     palVX = 0; palVY = 0;
     palRevX = mx;
+    palShakeDir = 0; palShakeN = 0; palRattled = false;
     capturePointer(cv, e.pointerId);
     cv.style.cursor = "grabbing";
     invokeQuiet("set_dragging", { on: true });
@@ -4655,7 +5784,8 @@ cv.addEventListener("pointerdown", (e) => {
     if (SPECIES[active].r >= 2 && !reduceMotion) spinT0 = performance.now();
     else squashV += 6;
     contentUntil = performance.now() + 1400;
-    bangs.push({ x: petX, y: petY - blobSize().h - 14, life: 0.9, t: "♪" });
+    happyUntil = performance.now() + 1400;
+    petStamp("WHEE!", "happy");
     sfx.boing();
     ignoreT = 0;
   }
@@ -4717,7 +5847,11 @@ cv.addEventListener("pointermove", (e) => {
       }
       if (rev >= 3) {
         touch();
-        tickleUntil = now + 1100;
+        // tickle streak: a third tickle inside six seconds tips it past
+        // laughter into tears-of-joy — the wiggle pays off bigger each time
+        tickleStreak = now - lastTickleAt < 6000 ? tickleStreak + 1 : 0;
+        lastTickleAt = now;
+        if (tickleStreak >= 2) tearjoyUntil = now + 1500; else tickleUntil = now + 1100;
         contentUntil = now + 2400;
         bondGain(SPECIES[active].id, 2);
         tickleCd = now + 1600;
@@ -4745,8 +5879,11 @@ cv.addEventListener("pointermove", (e) => {
       }
       if (rev >= 3) {
         touch();
-        ticklePal.faceId = "laugh";
+        ticklePal.tickleStreak = now - (ticklePal.lastTick || 0) < 6000 ? (ticklePal.tickleStreak || 0) + 1 : 0;
+        ticklePal.lastTick = now;
+        ticklePal.faceId = ticklePal.tickleStreak >= 2 ? "tearjoy" : "laugh";
         ticklePal.faceT = now + 1100;
+        ticklePal.faceWhy = "TICKLED"; ticklePal.faceWhyId = ticklePal.faceId;
         ticklePal.tickleCd = now + 1600;
         wiggleBuf.length = 0;
         ticklePal.squashV += 3;
@@ -4765,6 +5902,21 @@ cv.addEventListener("pointermove", (e) => {
     palHeld.y = my - palDY;
     palHeld.lookDir = palMoveX > 1 ? 1 : palMoveX < -1 ? -1 : palHeld.lookDir;
     palLX = mx; palLY = my; palLT = e.timeStamp;
+    // a fast side-to-side shake rattles it — direction reversals at speed,
+    // opposite intent from the slow petting strokes below
+    if (!palRattled && Math.abs(palMoveX) > 5 && Math.abs(palVX) > 380) {
+      const sd = Math.sign(palMoveX);
+      if (sd === -palShakeDir) {
+        if (++palShakeN >= 5) {
+          palRattled = true;
+          palHeld.faceId = "dizzy"; palHeld.faceT = now + 1400;
+          palHeld.faceWhy = "RATTLED"; palHeld.faceWhyId = "dizzy";
+          palHeld.squashV += 6;
+          for (let i = 0; i < 5; i++) fx.push({ x: palHeld.x + (Math.random() * 30 - 15), y: palHeld.y - 50 + Math.random() * 16, vx: (Math.random() - 0.5) * 30, vy: -20 - Math.random() * 20, life: 0.7, c: "#ffd75e", spr: "mote" });
+          sfx.shock();
+        }
+      } else palShakeDir = sd;
+    } else if (Math.abs(palMoveX) > 5) palShakeDir = Math.sign(palMoveX);
     // slow strokes while held = head pat, same as the main pet
     if (e.timeStamp - palDownT > 700 && Math.hypot(palVX, palVY) < 320) {
       if (palRevX !== null && Math.sign(mx - palRevX) !== 0 && Math.abs(mx - palRevX) > 18) {
@@ -4772,15 +5924,17 @@ cv.addEventListener("pointermove", (e) => {
         touch();
         palHeld.faceId = Math.random() < 0.4 ? "love" : "happy";
         palHeld.faceT = now + 1000;
+        palHeld.faceWhy = "PETTED"; palHeld.faceWhyId = palHeld.faceId;
         if (hearts.length < 8) {
           hearts.push({ x: palHeld.x + (Math.random() * 40 - 20), y: palHeld.y - 70, life: 1 });
         }
         // jealousy: another grounded pal sulks and trudges over for its turn
         for (const j of pals) {
           if (j !== palHeld && !j.fly && !j.stackOn && Math.random() < 0.3) {
-            j.walkT = palHeld.x + (j.x < palHeld.x ? -50 : 50);
+            if (!(now < (j.settleUntil || 0))) j.walkT = palHeld.x + (j.x < palHeld.x ? -50 : 50);
             j.faceId = Math.random() < 0.65 ? "pout" : "grumpy"; // sulks more than it rages
             j.faceT = now + 1100;
+            j.faceWhy = "MY TURN!"; j.faceWhyId = j.faceId;
           }
         }
       }
@@ -4912,6 +6066,14 @@ cv.addEventListener("pointerup", (e) => {
       return;
     }
     if (ball) {
+      // a tap (grab + release in place) isn't a weak toss — it's a serve:
+      // the ball arcs to the pet so a rally can start without aiming
+      if (Math.hypot(mx - ballDownX, my - ballDownY) < 10 && e.timeStamp - ballDownT < 350) {
+        ball.vx = Math.sign(petX - ball.x || 1) * (220 + Math.random() * 60);
+        ball.vy = -240;
+        sfx.boing();
+        return;
+      }
       const bs = Math.hypot(ballVX, ballVY);
       if (bs > 350) { ball.vx = ballVX * 0.75; ball.vy = Math.min(ballVY * 0.75, 0) - 80; }
       else { ball.vx = ballVX * 0.4; ball.vy = ballVY * 0.4; }
@@ -4929,17 +6091,55 @@ cv.addEventListener("pointerup", (e) => {
     // requires a gentle release — a fling passing through the strip doesn't count
     if (my <= 50 && Math.abs(mx - winW / 2) <= 66 && Math.hypot(palVX, palVY) < 250) { sendPalHome(p); return; }
     if (Math.hypot(mx - palDownX, my - palDownY) < 6 && e.timeStamp - palDownT < 300) {
-      // poke: squish + a face + a heart — sometimes they really love it
-      p.squashV += 7;
-      const pr = Math.random();
-      p.faceId = pr < 0.3 ? "love" : pr < 0.5 ? "wink" : "happy";
-      p.faceT = performance.now() + 1000;
-      hearts.push({ x: p.x + (Math.random() * 30 - 15), y: p.y - 60, life: 1 });
-      sfx.heart();
+      const tt = performance.now();
+      if (tt - (p.tapT || 0) < 420) {
+        // double-tap: "YOU'RE IT!" — it chases the nearest free pal
+        p.tapT = 0;
+        const fl = pals.filter((o) => o !== p && !o.fly && !(tt < (o.hideUntil || 0)) &&
+          !(tt < (o.restUntil || 0)) && !(tt < (o.settleUntil || 0)) && !o.tag && !o.scene &&
+          !o.chatMate && !o.carry && Math.abs(o.x - p.x) < 340 && Math.abs(o.y - p.y) < 40)
+          .sort((a, b) => Math.abs(a.x - p.x) - Math.abs(b.x - p.x))[0];
+        if (fl) {
+          p.tag = { on: fl, it: true, until: tt + 3400 };
+          fl.tag = { on: p, it: false, until: tt + 3400 };
+          p.faceId = "serious"; fl.faceId = "excited";
+          p.faceT = fl.faceT = tt + 1100;
+          p.faceWhy = fl.faceWhy = "TAG"; p.faceWhyId = "serious"; fl.faceWhyId = "excited";
+          p.squashV += 5; fl.squashV += 4;
+          sfx.boing();
+        } else { // nobody near enough to chase — it just flexes at the invite
+          p.faceId = "smug"; p.faceT = tt + 1000;
+          p.faceWhy = "TAG"; p.faceWhyId = "smug";
+          p.squashV += 5; sfx.pop();
+        }
+      } else {
+        p.tapT = tt;
+        // poke: squish + a face + a heart — sometimes they really love it
+        p.squashV += 7;
+        const pr = Math.random();
+        p.faceId = pr < 0.3 ? "love" : pr < 0.5 ? "wink" : "happy";
+        p.faceT = performance.now() + 1000;
+        p.faceWhy = "POKED"; p.faceWhyId = p.faceId;
+        hearts.push({ x: p.x + (Math.random() * 30 - 15), y: p.y - 60, life: 1 });
+        sfx.heart();
+      }
     } else {
       const spd = Math.hypot(palVX, palVY);
       p.fly = true;
-      if (spd > 400) { p.vx = palVX * 0.6; p.vy = Math.min(palVY * 0.6, 0) - 120; }
+      if (spd > 400) {
+        const nw = performance.now();
+        p.vx = palVX * 0.6; p.vy = Math.min(palVY * 0.6, 0) - 120;
+        p.faceId = "shock"; p.faceT = nw + 900; // a real fling gets a real yelp
+        p.faceWhy = "FLUNG!"; p.faceWhyId = "shock";
+        // onlookers wince — and so does the pet if it's standing nearby
+        for (const q of pals) {
+          if (q === p || q.fly || Math.abs(q.x - p.x) > 220 || Math.abs(q.y - p.y) > 80) continue;
+          q.faceId = "worry"; q.faceT = nw + 1000;
+          q.faceWhy = "PAL FLYING"; q.faceWhyId = "worry";
+          q.lookDir = Math.sign(p.x - q.x) || 1; q.lookUntil = nw + 900;
+        }
+        if (Math.abs(petX - p.x) < 260 && Math.abs(petY - p.y) < 90) worryUntil = nw + 1400;
+      }
       else { p.vx = 0; p.vy = 0; p.squashV += 4; }
     }
     return;
@@ -4985,6 +6185,19 @@ cv.addEventListener("pointerup", (e) => {
       contentUntil = pnowD + 1500;
       if (SPECIES[active].r >= 2) spinT0 = performance.now();
       hearts.push({ x: petX, y: petY - bh2 - 10, life: 1 });
+      // the happy hop calls the gang — free pals nearby hurry over to play.
+      // parked pals get the face but keep their seat; napping ones sleep on
+      for (const q of pals) {
+        if (q.fly || q === palHeld || pnowD < (q.hideUntil || 0) || q.tag ||
+            q.scene || q.group || q.chatMate || q.carry || Math.abs(q.x - petX) > 520 ||
+            Math.abs(q.y - petY) > 60) continue;
+        q.faceId = "excited"; q.faceT = pnowD + 1100;
+        q.faceWhy = "WHEE!"; q.faceWhyId = "excited";
+        q.lookDir = Math.sign(petX - q.x) || 1; q.lookUntil = pnowD + 700;
+        if (pnowD < (q.restUntil || 0) || pnowD < (q.settleUntil || 0)) continue; // face only
+        q.walkT = petX + (Math.random() * 110 - 55);
+        q.propGoal = null; q.follow = null;
+      }
       sfx.heart();
       return;
     }
@@ -4994,7 +6207,6 @@ cv.addEventListener("pointerup", (e) => {
       state = "idle";
       shockUntil = pnowD + 600;
       squashV += 8;
-      bangs.push({ x: petX + 26, y: petY - 90, life: 1, t: "!" });
       sfx.shock();
       return;
     }
@@ -5003,7 +6215,8 @@ cv.addEventListener("pointerup", (e) => {
       contentUntil = pnowD + 1400;
       squashV += 4;
       hearts.push({ x: petX + 8, y: petY - bh2 - 6, life: 1 });
-      bangs.push({ x: petX - 20, y: petY - bh2 - 18, life: 1.1, t: "BOOP" });
+      embarUntil = pnowD + 1300; // a boop right on the snoot melts it
+      petStamp("BOOP", "embar");
       if (Math.random() < 0.5) winkUntil = pnowD + 900; // sometimes it winks back
       sfx.heart();
       return;
@@ -5028,10 +6241,8 @@ cv.addEventListener("pointerup", (e) => {
         pokeStreak = 0;
         annoyedUntil = pnowD + 3400;
         squashV += 9;
-        bangs.push({ x: petX + 22, y: petY - 96, life: 1.4, t: "HEY!" });
       } else {
         poutUntil = pnowD + 1300; // sulks before it snaps
-        bangs.push({ x: petX + 26, y: petY - 90, life: 1, t: "!" });
       }
       sfx.angry();
     }
@@ -5134,6 +6345,9 @@ const FONT = {
 };
 
 function drawText(c, text, x, y, s, color, shadow, bold) {
+  // integer-snap glyph origins — centered strings otherwise land on
+  // half-pixels and rasterize with ragged stroke widths
+  x = Math.round(x); y = Math.round(y);
   if (shadow) drawText(c, text, x + s, y + s, s, shadow);
   // bold = second pass offset one pixel right, thickening every stroke
   if (bold) drawText(c, text, x + s, y, s, color);
@@ -5224,18 +6438,18 @@ const SPR = {
   },
   // prop sprites for the toybox: a kibble bowl and a nap cushion
   egg: {
+    // speckled egg — shell highlight up top, spots, warm band at the base
     rows: [
       "..####..",
-      ".######.",
-      "########",
-      "##o####o",
+      ".##h###.",
+      "##h####o",
       "########",
       "o######o",
       "########",
       ".##bb##.",
       "..####..",
     ],
-    pal: { "#": "#f4ead8", "o": "#d9a05b", "b": "#cbb090" },
+    pal: { "#": "#f4ead8", "h": "#ffffff", "o": "#d9a05b", "b": "#cbb090" },
   },
   bowl: {
     // wooden bowl, metal rim, a little heart emblem on the front
@@ -5253,10 +6467,11 @@ const SPR = {
     pal: { "o": "#8a6b4a", "k": "#d9a05e", "W": "#5c4632", "f": "#eec23f", "K": "#b97f45", "h": "#f0d0d8" },
   },
   cushion: {
-    // tufted puff: piping ring, center button, tassels at the corners
+    // tufted puff: piping ring, satin sheen up top, center button,
+    // tassels at the corners
     rows: [
       ".....ooooooooo.....",
-      "..oPPPPPPPPPPPPPo..",
+      "..oPsPPPPPPPPsPPo..",
       ".oPpPPPPPPPPPPpPo.",
       "oPPPPPPPPPPPPPPPPPo",
       "oPPPPPPPPbPPPPPPPPo",
@@ -5265,102 +6480,112 @@ const SPR = {
       "....oPPPPPPPPPo....",
       "t....ooooooooo....t",
     ],
-    pal: { "o": "#a8506e", "P": "#f0a0c0", "p": "#ffcee0", "b": "#d06088", "t": "#ffd75e" },
+    pal: { "o": "#a8506e", "P": "#f0a0c0", "p": "#ffcee0", "b": "#d06088", "t": "#ffd75e", "s": "#ffd0e4" },
   },
   box: {
-    // open-top cardboard box — the dark hole slimes vanish into
+    // open-top cardboard box — inner flap edges around the dark hole,
+    // packing-tape stripe down the front, shaded base
     rows: [
       ".bbbbbbbbbbbbbbbbbbbb.",
-      "bDDDDDDDDDDDDDDDDDDDDb",
-      "bDDDDDDDDDDDDDDDDDDDDb",
+      "bfDDDDDDDDDDDDDDDDDDfb",
+      "bfDDDDDDDDDDDDDDDDDDfb",
       "bbbbbbbbbbbbbbbbbbbbbb",
-      "bbbbbbttttttttbbbbbb",
-      "bbbbbbttttttttbbbbbb",
+      "bbbbbbbttttttbbbbbbbbb",
+      "bbbbbbbttttttbbbbbbbbb",
+      "bbbbbbbttttttbbbbbbbbb",
       "bbbbbbbbbbbbbbbbbbbbbb",
-      "bbbbbbbbbbbbbbbbbbbbbb",
+      "bbbbbbbbbBbbbbbbbbbbbb",
       ".bbbbbbbbbbbbbbbbbbbb.",
     ],
-    pal: { "b": "#b0895a", "D": "#4a3828", "t": "#d8c49a" },
+    pal: { "b": "#b0895a", "f": "#7a5638", "D": "#4a3828", "t": "#d8c49a", "B": "#96684a" },
   },
   plant: {
-    // little potted sprout — slimes stop to sniff it
+    // potted sprout — layered leaves, soil line, terracotta rim and a
+    // shaded pot belly so it reads as a little houseplant, not a blob
     rows: [
-      "....gg..gg....",
-      "...ggg..ggg...",
-      "....ggg.ggg...",
-      ".....ggggg....",
-      ".g....ggg....g",
-      "..g...ggg...g.",
-      ".......s......",
-      "....pppppp....",
-      "...pppppppp...",
-      "...pppppppp...",
-      "....pppppp....",
+      "....gg...gg....",
+      "...gGg...gGg...",
+      "...ggg..ggg....",
+      "....ggGggg.....",
+      ".g...ggggg...g.",
+      ".Gg...gsg...Gg.",
+      "..g...sss...g..",
+      "......sss......",
+      "...rrRRRRrr....",
+      "..pRSSSSSSRp...",
+      "..pPPPPPPPPp...",
+      "....pppppp.....",
     ],
-    pal: { "g": "#4f9e4f", "s": "#3a7a3f", "p": "#b06a4a" },
+    pal: { "g": "#3f8e4f", "G": "#6fce6f", "s": "#2f6e38", "r": "#c97a52", "R": "#a8603e", "S": "#6a4a34", "p": "#8a5238", "P": "#b06a4a" },
   },
   music: {
-    // wind-up music box — key slits on top, base trim
+    // wind-up music box — side crank, gold key slits, trim band and feet
     rows: [
-      "...wwwwwwwwww...",
-      "..wkkskkskkskw..",
-      "..wwwwwwwwwwww..",
-      ".wwwwwwwwwwwwww.",
-      ".wkkkkkkkkkkkkw.",
-      ".wwwwwwwwwwwwww.",
-      ".wwwwwwwwwwwwww.",
+      "..........kkkk..",
+      "..wwwwwwwwwkkkw.",
+      ".wWWWWWWWWWWWkw.",
+      ".wWkkkkkkkkkWWw.",
+      ".wWsWsWsWsWWWWw.",
+      ".wWWWWWWWWWWWWw.",
+      ".wGGwwwwwwwwGGw.",
       "..oooooooooooo..",
+      "..o..o....o..o..",
     ],
-    pal: { "w": "#c9a06c", "k": "#5c4632", "s": "#ffd75e", "o": "#8a6b4a" },
+    pal: { "w": "#c9a06c", "W": "#e0bb88", "k": "#4a3a2a", "s": "#ffd75e", "G": "#a8763e", "o": "#8a6b4a" },
   },
   mirror: {
-    // standing vanity mirror — pale glass with a diagonal shine, wooden
-    // frame and a little footed stand
+    // standing vanity mirror — crest knob on top, bevelled wooden frame,
+    // pale glass with a diagonal shine, footed stand
     rows: [
+      "......oo........",
+      ".....oKKo.......",
       "....oooooooo....",
-      "...oMMMMMMMMMo...",
-      "..oMwwswwwwwwMo..",
-      "..oMwwswwwwwMo..",
-      "..oMwwwswwwwMo..",
-      "..oMwwwwswwwMo..",
-      "..oMwwwwwswwMo..",
-      "..oMMMMMMMMMMMo..",
-      "...oMMMMMMMMMo...",
+      "...oMMMMMMMMMo..",
+      "..oMWwswwwwWMo..",
+      "..oMWwwswwwWMo..",
+      "..oMWwwwswWMo...",
+      "..oMWwwwswwWMo..",
+      "..oMWwwwwswWMo..",
+      "..oMWwwwwwsWMo..",
+      "..oMMMMMMMMMMMo.",
+      "...oMMMMMMMMMo..",
       "......oooo......",
-      "....oooooooo....",
       "...oooooooooo...",
     ],
-    pal: { "o": "#8a6b4a", "M": "#5c4632", "w": "#bfe8f4", "s": "#ffffff" },
+    pal: { "o": "#8a6b4a", "K": "#c9a06c", "M": "#5c4632", "W": "#9a7b5a", "w": "#bfe8f4", "s": "#ffffff" },
   },
   mat: {
-    // jelly bounce mat — a low green disc with stitch dots and rim piping
+    // jelly bounce mat — stitched dot ring, quilted center patches,
+    // piping edge; reads squishy even before anything lands on it
     rows: [
       ".....oooooooooo.....",
-      "..oPPPPPPPPPPPPPPo..",
-      ".oPpPpPpPpPpPpPpPo.",
+      "..oPdPdPdPdPdPdPo..",
+      ".oPPPPPPPPPPPPPPPo.",
+      "oPpPPbbPPPPbbPPpPo",
       "oPPPPPPPPPPPPPPPPPPo",
-      "oPpPPPPbbPPbbPPpPo",
-      "oPPPPPPPPPPPPPPPPPPo",
-      ".oPpPpPpPpPpPpPpPo.",
-      "..oPPPPPPPPPPPPPPo..",
+      "oPpPPbbPPPPbbPPpPo",
+      ".oPPPPPPPPPPPPPPPo.",
+      "..oPdPdPdPdPdPdPo..",
       ".....oooooooooo.....",
     ],
-    pal: { "o": "#4a7a5a", "P": "#7ac89a", "p": "#a8e8c0", "b": "#3a6a4a" },
+    pal: { "o": "#4a7a5a", "P": "#7ac89a", "p": "#a8e8c0", "b": "#3a6a4a", "d": "#e8f8ec" },
   },
   jar: {
-    // cookie jar — glass belly with cookie lumps inside, cork lid on top
+    // cookie jar — cork knob lid, glass body with a shine stripe and
+    // chunky cookie silhouettes stacked inside
     rows: [
-      ".....cccccc.....",
+      ".......cc.......",
+      ".....CCCCCC.....",
       "....kkkkkkkk....",
-      "...kGGGGGGGGk...",
-      "..kGbGGbbGGbGk..",
-      "..kGGbbGGbbGGk..",
-      "..kGbGGbbGGbGk..",
-      "..kGGbbGGbbGGk..",
-      "...kGGGGGGGGk...",
-      "....kkkkkkkk....",
+      "...kWWWWWWWk....",
+      "..kWbGGbGGbWk...",
+      "..kGGbGGbGGWk...",
+      "..kWbGGbGGbWk...",
+      "..kGGbGGbGGWk...",
+      "...kGGGGGGk.....",
+      "....kkkkkk......",
     ],
-    pal: { "c": "#b0895a", "k": "#d8ecf4", "G": "#aee0f0", "b": "#d9a05b" },
+    pal: { "c": "#e8c888", "C": "#b0895a", "k": "#d8ecf4", "W": "#ffffff", "G": "#aee0f0", "b": "#d9a05b" },
   },
   // crack overlays drawn over the egg as hatch time nears
   crack1: {
@@ -5457,6 +6682,15 @@ function drawSpr(c, id, x, y, s, tint) {
   if (!img) return;
   c.drawImage(img, Math.round(x - img.width * s / 2), Math.round(y - img.height * s / 2), img.width * s, img.height * s);
 }
+// smoothed draw: the pals' 3x supersampled sprite gets blitted at fractional
+// sizes (squash/scale pulses), and nearest-neighbor resampling drops uneven
+// source columns — visible as vertical banding through the body. Bilinear
+// keeps the jelly soft instead of striping it.
+function drawSm(c, img, x, y, w, h) {
+  c.imageSmoothingEnabled = true;
+  c.drawImage(img, x, y, w, h);
+  c.imageSmoothingEnabled = false;
+}
 // glyph -> doodad id for the bang channel (✦ ♪ ♥ ★ 💎 ride as sprites)
 const BANG_SPR = { "✦": "star", "♪": "note", "♫": "note", "♥": "heart", "★": "star5", "💎": "gem" };
 
@@ -5517,7 +6751,7 @@ let cardAccModal = false; // accessory picker overlay inside the pal card
 const KC_CLOSE = [KW - 26, 5, 20, 20];
 // both card kinds carry the accessory gear strip — the pet card is
 // taller still since it also has the level row on top of it
-const cardKH = () => (cardTarget === "pet" ? 274 : 254);
+const cardKH = () => (cardTarget === "pet" ? 286 : 282);
 const cardHomeR = () => [KW - 116, cardKH() - 32, 100, 22];
 // bestiary card overlay: sits above every window, owns its clicks
 const infoEl = document.getElementById("info");
@@ -5663,6 +6897,47 @@ function bubbleIcon(c, x, y) {
   c.fillRect(x - 4, y - 5, 3, 2);
 }
 
+// why-bubble: a fresh emotional face pops a little speech bubble with a
+// glyph naming the cause — heart for affection, note for music, bolt for
+// a poke. pixel-art icons like the rest of the UI
+const WHY_GLYPH = {
+  heart:   { c: "#ff5f7e", rows: ["01100110", "11111111", "11111111", "01111110", "00111100", "00011000"] },
+  note:    { c: "#a070f0", rows: ["00111100", "00100100", "00111100", "00100000", "00101110", "11111110", "11111100"] },
+  star:    { c: "#ffc93c", rows: ["00011000", "01011010", "00111100", "11111111", "00111100", "01011010"] },
+  egg:     { c: "#ffe9c9", rows: ["00111100", "01111110", "11111111", "11111111", "01111110", "00111100"] },
+  gift:    { c: "#ff8fb3", rows: ["01011010", "11111111", "01100110", "11111111", "01100110", "11111111"] },
+  drop:    { c: "#6fc6e8", rows: ["00011000", "00111100", "01111110", "11111111", "01111110", "00111100"] },
+  moon:    { c: "#b8a8ff", rows: ["00111100", "01100000", "11000000", "11000000", "01100000", "00111100"] },
+  sun:     { c: "#ffcf4a", rows: ["00100100", "01011010", "00111100", "01111110", "00111100", "01011010", "00100100"] },
+  cookie:  { c: "#d9a05e", rows: ["00111100", "01101110", "11111111", "11110111", "01111110", "00111100"] },
+  box:     { c: "#c9a06e", rows: ["11111111", "11111111", "01011010", "11111111", "11111111", "01111110"] },
+  bolt:    { c: "#ffd93c", rows: ["00110000", "01111000", "00111100", "01100000", "11000000", "10000000"] },
+  flag:    { c: "#7fd8a8", rows: ["10000000", "11110000", "11111100", "11110000", "10000000", "10000000"] },
+  dots:    { c: "#8ab8d8", rows: ["00000000", "10010010", "00000000", "00000000", "10010010"] },
+};
+function whyBubble(c, x, y, kind, a) {
+  const g = WHY_GLYPH[kind] || WHY_GLYPH.dots;
+  c.save();
+  c.globalAlpha = Math.min(1, a * 4) * 0.94;
+  const bw = 14, bh = 12;
+  // bubble: cream rounded box with a little tail pointing down at the pal
+  c.fillStyle = "rgba(40,30,20,0.35)";
+  c.fillRect(x - bw / 2 + 1, y - bh / 2 + 1, bw, bh);
+  c.fillRect(x - 1, y + bh / 2, 4, 3);
+  c.fillStyle = "#fdf6e8";
+  c.fillRect(x - bw / 2 + 1, y - bh / 2, bw - 2, bh);
+  c.fillRect(x - bw / 2, y - bh / 2 + 1, bw, bh - 2);
+  c.fillRect(x, y + bh / 2, 2, 2);
+  // glyph
+  c.fillStyle = g.c;
+  const gw = g.rows[0].length, gh = g.rows.length;
+  const gx = x - gw / 2, gy = y - gh / 2;
+  for (let ry = 0; ry < gh; ry++)
+    for (let rx = 0; rx < gw; rx++)
+      if (g.rows[ry][rx] === "1") c.fillRect(gx + rx, gy + ry, 1, 1);
+  c.restore();
+}
+
 // bestiary panel: full species card — personality, movement, trait, skill
 const MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 function seasonText(sp) {
@@ -5704,7 +6979,7 @@ function drawInfo(c, W, H, t) {
   c.fillStyle = "#8a6b4a";
   c.fillRect(bx + 2, by + bh - 20, bw - 4, 2);
   const bob = Math.sin(t * 2.2) * 2;
-  c.drawImage(sprite("idle", i, !has), bx + 18, by + bh - 20 - 44 + bob, 72, 50);
+  drawSm(c, sprite("idle", i, !has), bx + 18, by + bh - 20 - 44 + bob, 72, 50);
   if (isBaby(sp)) drawPaci(c, bx + 54, by + bh - 28, 1.2);
   // rarity pips on the box wall
   c.fillStyle = RARITY_COLOR[sp.r];
@@ -5789,7 +7064,7 @@ function drawRanch(ms) {
   const breedCd = Math.max(0, breedReadyAt - Date.now());
   const canBreed = jelly >= BREED_COST && owned.length >= 2 && !pullAnim && !shopMode
     && breedCd <= 0 && !DEMO && canMintHybrid();
-  rctx.fillStyle = breedMode ? "#e05a6e" : canBreed ? "#c48fd9" : "#cbb896";
+  rctx.fillStyle = breedMode ? "#e05a6e" : canBreed ? "#cfa8c8" : "#cbb896";
   rctx.fillRect(BREED_R[0], BREED_R[1], BREED_R[2], BREED_R[3]);
   rctx.strokeStyle = "#5c4632";
   rctx.lineWidth = 2;
@@ -5822,7 +7097,7 @@ function drawRanch(ms) {
   // PULL button — armed bulk mode charges tenfold and opens the sheet
   const pullCost = pull10 ? PULL_COST * 10 : PULL_COST;
   const canPull = jelly >= pullCost && !pullAnim && !pullResults && !breedMode && !shopMode;
-  rctx.fillStyle = canPull ? "#4fbd82" : "#cbb896";
+  rctx.fillStyle = canPull ? "#e08a5a" : "#cbb896";
   rctx.fillRect(PULL_R[0], PULL_R[1], PULL_R[2], PULL_R[3]);
   rctx.strokeStyle = "#5c4632";
   rctx.strokeRect(PULL_R[0] + 1, PULL_R[1] + 1, PULL_R[2] - 2, PULL_R[3] - 2);
@@ -5831,7 +7106,7 @@ function drawRanch(ms) {
   drawText(rctx, String(pullCost), PULL_R[0] + PULL_R[2] - 3 - textW(String(pullCost), 1), PULL_R[1] + 8, 1, "#10231a");
 
   // SHOP button: accessory store
-  rctx.fillStyle = shopMode ? "#e05a6e" : "#8fd4f0";
+  rctx.fillStyle = shopMode ? "#e05a6e" : "#a8c4d4";
   rctx.fillRect(SHOP_R[0], SHOP_R[1], SHOP_R[2], SHOP_R[3]);
   rctx.strokeStyle = "#5c4632";
   rctx.lineWidth = 2;
@@ -5866,7 +7141,7 @@ function drawRanch(ms) {
     // mini room: trait-tinted wall + floor + baseboard; border = rarity color
     rctx.fillStyle = ROOM_THEME[sp.trait] || "#f3e6cd";
     rctx.fillRect(x, y, 100, 92);
-    rctx.strokeStyle = picked ? "#e05a6e" : i === active ? "#2f9e63" : RARITY_COLOR[sp.r];
+    rctx.strokeStyle = picked ? "#e05a6e" : i === active ? "#e08a5a" : RARITY_COLOR[sp.r];
     rctx.lineWidth = picked || i === active || sp.r >= 2 ? 3 : 2;
     rctx.strokeRect(x + 1, y + 1, 98, 90);
     rctx.fillStyle = "#c9a06c";
@@ -5880,7 +7155,7 @@ function drawRanch(ms) {
       else if ((t + ph) % 4 < 0.16) face = "blink";
       else if (i === active && (t + ph) % 7 < 1.4) face = "happy";
       else if ((t + ph) % 9 < 1.0) face = Math.sin(ph * 10) > 0 ? "lookL" : "lookR";
-      rctx.drawImage(sprite(face, i, false), x + 25, y + 74 - 36, 50, 36);
+      drawSm(rctx, sprite(face, i, false), x + 25, y + 74 - 36, 50, 36);
       if (accEquip[sp.id]) drawAcc(rctx, accEquip[sp.id], x + 50, y + 39, 1.4);
       // rarity pips on the wall, top-left corner
       rctx.fillStyle = RARITY_COLOR[sp.r];
@@ -5900,14 +7175,14 @@ function drawRanch(ms) {
       // desktop. the parked-at-home main pet shows a green + instead
       const isPal = pals.some((p) => p.sp === i);
       const parked = petHome && i === active;
-      rctx.fillStyle = isPal ? "#7de8f0" : parked ? "#7dd87d" : "#e8d9b8";
+      rctx.fillStyle = isPal ? "#a8ccd4" : parked ? "#b8d4a8" : "#e8d9b8";
       rctx.fillRect(x + 4, y + 78, 16, 12);
       rctx.strokeStyle = "#8a6b4a";
       rctx.lineWidth = 1;
       rctx.strokeRect(x + 4.5, y + 78.5, 15, 11);
       drawText(rctx, isPal ? "-" : "+", x + 10, y + 81, 1, "#5c4632");
     } else {
-      rctx.drawImage(sprite("idle", i, true), x + 25, y + 74 - 36, 50, 36);
+      drawSm(rctx, sprite("idle", i, true), x + 25, y + 74 - 36, 50, 36);
       drawText(rctx, "?", x + 47, y + 44, 2, "#8a6b4a");
       if (sp.season && !seasonOpen(sp)) {
         const tw = textW("SOON", 1);
@@ -5987,9 +7262,9 @@ function drawRanch(ms) {
       const ix = px3 + 7 + (k % cols) * 34;
       const iy = py3 + 22 + Math.floor(k / cols) * 26;
       const eqd = items[k] === curEq;
-      rctx.fillStyle = eqd ? "#b8e8c8" : "#e8d9b8";
+      rctx.fillStyle = eqd ? "#f0dcae" : "#e8d9b8";
       rctx.fillRect(ix, iy, 30, 22);
-      rctx.strokeStyle = eqd ? "#2f9e63" : "#8a6b4a";
+      rctx.strokeStyle = eqd ? "#e08a5a" : "#8a6b4a";
       rctx.lineWidth = 1;
       rctx.strokeRect(ix + 0.5, iy + 0.5, 29, 21);
       if (items[k]) drawAcc(rctx, items[k], ix + 15, iy + 11, 1.2);
@@ -6241,7 +7516,7 @@ function drawNursery(ms) {
     const bsp = SPECIES[bi];
     nctx.fillStyle = ROOM_THEME[bsp.trait] || "#f3e6cd";
     nctx.fillRect(x, y, 100, 92);
-    nctx.strokeStyle = bi === active ? "#2f9e63" : "#7db8e8";
+    nctx.strokeStyle = bi === active ? "#e08a5a" : "#a8c4d4";
     nctx.lineWidth = bi === active ? 3 : 2;
     nctx.strokeRect(x + 1, y + 1, 98, 90);
     nctx.fillStyle = "#c9a06c";
@@ -6250,7 +7525,7 @@ function drawNursery(ms) {
     nctx.fillRect(x + 2, y + 74, 96, 2);
     // baby bounces with its pacifier
     const bob = Math.abs(Math.sin(t * 3 + k * 1.7)) * 4;
-    nctx.drawImage(sprite("idle", bi, false), x + 25, y + 74 - 36 - bob, 50, 36);
+    drawSm(nctx, sprite("idle", bi, false), x + 25, y + 74 - 36 - bob, 50, 36);
     drawPaci(nctx, x + 50, y + 48 - bob, 1.1);
     // grow countdown top-left, BABY pill left of the info button
     const left = Math.max(1, Math.ceil((BABY_MS - (Date.now() - bsp.bornAt)) / 60000));
@@ -6266,7 +7541,7 @@ function drawNursery(ms) {
     nctx.strokeRect(x + 84.5, y + 4.5, 11, 10);
     drawText(nctx, "I", x + 88, y + 6, 1, "#5c4632", null, true);
     const isPal = pals.some((p) => p.sp === bi);
-    nctx.fillStyle = isPal ? "#7de8f0" : "#e8d9b8";
+    nctx.fillStyle = isPal ? "#a8ccd4" : "#e8d9b8";
     nctx.fillRect(x + 4, y + 78, 16, 12);
     nctx.strokeStyle = "#8a6b4a";
     nctx.strokeRect(x + 4.5, y + 78.5, 15, 11);
@@ -6319,7 +7594,10 @@ nc.addEventListener("pointerdown", (e) => {
       if (mx >= x + 4 && mx <= x + 20 && my >= y + 78 && my <= y + 90) {
         const pi = pals.findIndex((p) => p.sp === bi);
         if (pi >= 0) { removePal(pals[pi]); sfx.pop(); }
-        else if (spawnPal(bi)) sfx.reveal();
+        else if (spawnPal(bi)) {
+          sfx.reveal();
+          palSummonReact(bi); // the desktop notices the newcomer
+        }
         else sfx.pop();
         return;
       }
@@ -6388,20 +7666,48 @@ function closeCard() {
 }
 function cardMood(t2, now) {
   if (t2 === "pet") {
-    if (now < annoyedUntil) return "ANNOYED";
-    if (now < dizzyUntil) return "DIZZY";
+    // pet faces get their reason named too — each timer mostly has one
+    // cause, and the happy hangover inherits whatever just expired
+    if (now < annoyedUntil) return "ANNOYED · POKED";
+    if (now < dizzyUntil) return "DIZZY · FLUNG";
+    if (now < cryUntil) return "CRYING · BYE BYE";
     if (state === "sleeping") return "SLEEPY";
-    if (now < munchUntil) return "EATING";
-    if (now < shockUntil) return "STARTLED";
-    if (now < petUntil) return "PAMPERED";
-    if (now < contentUntil) return "HAPPY";
-    if (now < begUntil) return "NEEDY";
+    if (now < munchUntil) return "EATING · SNACK";
+    if (now < stuffedUntil) return "STUFFED · SNACK";
+    if (now < shockUntil) return "STARTLED · SURPRISE";
+    if (now < petUntil) return "PAMPERED · PETTED";
+    if (now < poutUntil) return "SULKING";
+    if (now < curiousUntil) return "CURIOUS";
+    if (now < contentUntil) {
+      const pwhy = petUntil && now - petUntil < 2600 ? "PETTED"
+        : stuffedUntil && now - stuffedUntil < 3200 ? "STUFFED"
+        : munchUntil && now - munchUntil < 2600 ? "SNACK" : null;
+      return pwhy ? "HAPPY · " + pwhy : "HAPPY";
+    }
+    if (now < begUntil) return "NEEDY · TREAT?";
     if (energy > 0.72) return "PLAYFUL";
     if (energy < 0.3) return "LAZY";
     return "CONTENT";
   }
   if (now < t2.faceT) {
-    return { love: "IN LOVE", laugh: "LAUGHING", happy: "HAPPY", shock: "STARTLED", grumpy: "GRUMPY", dizzy: "DIZZY" }[t2.faceId] || "HAPPY";
+    const word = { love: "IN LOVE", laugh: "LAUGHING", happy: "HAPPY", shock: "STARTLED", grumpy: "GRUMPY", dizzy: "DIZZY",
+      curious: "CURIOUS", gasp: "SURPRISED", jealous: "JEALOUS", worry: "WORRIED", sad: "SAD", cry: "CRYING",
+      meh: "UNIMPRESSED", pout: "POUTING", hmph: "SULKING", embar: "FLUSTERED", smug: "SMUG", sideeye: "SUSPICIOUS",
+      mischief: "UP TO SOMETHING", wink: "PLAYFUL", drool: "HUNGRY", stuffed: "STUFFED", sneeze: "SNEEZY",
+      wince: "SORE", yawn: "SLEEPY", star: "AMAZED", excited: "EXCITED", doze: "DROWSY", serious: "FOCUSED",
+      content: "CONTENT", blink: "BLINKING" }[t2.faceId] || "HAPPY";
+    // every expression has a reason — stamped whys win; for the rest,
+    // the state it's in names the cause. a mood reads as
+    // "CURIOUS · NEW TOY", not just a face out of nowhere
+    const why = (t2.faceWhy && t2.faceWhyId === t2.faceId) ? t2.faceWhy
+      : t2.tag ? "TAG" : t2.chatMate ? "GOSSIP"
+      : t2.scene ? (SC_WHY[t2.scene.k] || "PLAY")
+      : t2.group ? (GR_WHY[t2.group.kind] || "GROUP FUN")
+      : t2.propGoal ? (PROP_WHY[t2.propGoal.kind] || "ERRAND")
+      : t2.accAct ? "DOODAD"
+      : t2.act ? (ACT_WHY[t2.act.k] || "PLAY")
+      : t2.follow ? "FOLLOWING" : t2.carry ? "DELIVERY" : null;
+    return why ? word + " · " + why : word;
   }
   return "CONTENT";
 }
@@ -6460,13 +7766,13 @@ function drawCard(now) {
   kctx.strokeRect(10, 38, 96, 74);
   const bob = Math.sin(t * 2.6) * 2;
   const spr = isPet ? currentSprite(now) : sprite(cardTarget.pf || "idle", cardTarget.sp, false, true);
-  kctx.drawImage(spr, 34, 66 + bob, 48, 34);
+  drawSm(kctx, spr, 34, 66 + bob, 48, 34);
   // mood + status (live)
   const mood = cardMood(cardTarget, now);
   const stat = cardStatus(cardTarget, now);
-  drawText(kctx, "MOOD", 116, 44, 1, "#8a6b4a", null, true);
-  drawText(kctx, mood, 116, 56, 1, mood === "CONTENT" || mood === "IDLE" ? "#5c4632" : "#c05a2a", null, true);
-  drawText(kctx, "STATUS", 116, 74, 1, "#8a6b4a", null, true);
+  drawText(kctx, "MOOD", 116, 44, 1, "#a8845c", null, true);
+  drawText(kctx, mood, 116, 56, 1, "#5c4632", null, true);
+  drawText(kctx, "STATUS", 116, 74, 1, "#a8845c", null, true);
   drawText(kctx, stat.slice(0, 18), 116, 86, 1, "#5c4632", null, true);
   drawText(kctx, RARITY_NAME[sp.r] || "?", 116, 104, 1, RARITY_COLOR[sp.r] || "#5c4632", null, true);
   // stat rows
@@ -6475,10 +7781,10 @@ function drawCard(now) {
     drawText(kctx, String(v).slice(0, 30), 76, y, 1, col || "#5c4632", null, true);
   };
   let ry = 124;
-  row(ry, "NATURE", (sp.ps || "?").toUpperCase()); ry += 14;
-  row(ry, "MOVE", MV_INFO[sp.mv] || "-"); ry += 14;
-  row(ry, "TRAIT", sp.trait ? TRAIT_INFO[sp.trait] || sp.trait.toUpperCase() : "-"); ry += 14;
-  row(ry, "SKILL", sp.sig ? SIG_INFO[sp.sig] || sp.sig.toUpperCase() : "-"); ry += 14;
+  row(ry, "NATURE", (sp.ps || "?").toUpperCase()); ry += 16;
+  row(ry, "MOVE", MV_INFO[sp.mv] || "-"); ry += 16;
+  row(ry, "TRAIT", sp.trait ? TRAIT_INFO[sp.trait] || sp.trait.toUpperCase() : "-"); ry += 16;
+  row(ry, "SKILL", sp.sig ? SIG_INFO[sp.sig] || sp.sig.toUpperCase() : "-"); ry += 16;
   // bond: heart pips + a name — affection per species, earned by playing
   const bl = bondLvl(sp.id);
   drawText(kctx, "BOND", 16, ry, 1, "#8a6b4a", null, true);
@@ -6489,13 +7795,29 @@ function drawCard(now) {
     kctx.fillRect(hx, hy + 2, 9, 3); kctx.fillRect(hx + 2, hy + 5, 5, 2); kctx.fillRect(hx + 3.5, hy + 7, 2, 2);
   }
   drawText(kctx, BOND_NAMES[Math.min(bl, BOND_NAMES.length - 1)], 158, ry, 1, "#5c4632", null, true);
-  ry += 14;
+  ry += 16;
+  // pal-pal friendship: the strongest pair bond this pal has earned —
+  // the relationship memory made visible on its card
+  if (!isPet) {
+    let bestieId = null, bestLvl = 0;
+    for (const pk in pairBonds) {
+      const [pa, pb] = pk.split("+");
+      if ((pa === sp.id || pb === sp.id) && pairBonds[pk] > bestLvl) {
+        bestLvl = pairBonds[pk]; bestieId = pa === sp.id ? pb : pa;
+      }
+    }
+    const bsp = bestieId && SPECIES.find((s) => s.id === bestieId);
+    const btag = bestLvl >= 6 ? "BESTIE" : bestLvl >= 4 ? "CLOSE" : bestLvl >= 2 ? "FRIEND" : null;
+    row(ry, "BESTIE", btag && bsp ? `${bsp.name.toUpperCase()} · ${btag}` : "-");
+    ry += 16;
+  }
   if (isPet) {
     row(ry, "LEVEL", `${level}  (${xp} XP)`);
-    // xp progress bar toward the next level
+    // xp progress bar toward the next level — same warm accent as the
+    // volume slider, so interactive fills share one color voice
     kctx.fillStyle = "#d8c4a0";
     kctx.fillRect(76, ry + 10, 160, 6);
-    kctx.fillStyle = "#7dc24a";
+    kctx.fillStyle = "#e08a5a";
     const prog = level >= 3 ? 1 : (xp % XP_PER_LEVEL) / XP_PER_LEVEL;
     kctx.fillRect(76, ry + 10, Math.round(160 * prog), 6);
     ry += 22;
@@ -6549,9 +7871,9 @@ function drawCard(now) {
     for (let k = 0; k < show.length; k++) {
       const ix = gx + (k % cols) * cw, iy = gy + 16 + Math.floor(k / cols) * chh;
       const eqd = show[k] === curEq;
-      kctx.fillStyle = eqd ? "#b8e8c8" : "#e8d9b8";
+      kctx.fillStyle = eqd ? "#f0dcae" : "#e8d9b8";
       kctx.fillRect(ix, iy, 34, 24);
-      kctx.strokeStyle = eqd ? "#2f9e63" : "#8a6b4a";
+      kctx.strokeStyle = eqd ? "#e08a5a" : "#8a6b4a";
       kctx.lineWidth = 1;
       kctx.strokeRect(ix + 0.5, iy + 0.5, 33, 23);
       if (show[k]) drawAcc(kctx, show[k], ix + 17, iy + 12, 1.2);
@@ -6657,7 +7979,7 @@ function drawShopCells(t) {
     rctx.fillStyle = "#f3e6cd";
     rctx.fillRect(x, y, 100, 92);
     // premium line gets a gold frame so the pricey shelf reads as deluxe
-    rctx.strokeStyle = has ? "#4fbd82" : a.prem ? "#e8b83f" : "#8fd4f0";
+    rctx.strokeStyle = has ? "#7aa888" : a.prem ? "#e8b83f" : "#a8c4d4";
     rctx.lineWidth = a.prem ? 3 : 2;
     rctx.strokeRect(x + 1, y + 1, 98, 90);
     rctx.fillStyle = "#c9a06c";
@@ -6672,7 +7994,7 @@ function drawShopCells(t) {
     if (a.prem) drawSpr(rctx, "star5", x + 6, y + 6, 1);
     drawText(rctx, a.name, x + 50 - textW(a.name, 1) / 2, y + 62, 1, "#6b5338");
     if (has) {
-      drawText(rctx, "OWNED", x + 50 - textW("OWNED", 1) / 2, y + 80, 1, "#2f9e63");
+      drawText(rctx, "OWNED", x + 50 - textW("OWNED", 1) / 2, y + 80, 1, "#7aa888");
     } else {
       const cost = a.cost || ACC_COST;
       const afford = jelly >= cost;
@@ -6773,11 +8095,11 @@ function drawPullTen(ms) {
     rctx.lineWidth = r.shiny ? 3 : 2;
     rctx.strokeRect(x + 1, y + 1, CW - 2, CH - 2);
     const iw = Math.round(62 * pop), ih = Math.round(45 * pop);
-    rctx.drawImage(sprite("happy", r.idx, false), x + (CW - iw) / 2, y + 6 + (45 - ih) / 2, iw, ih);
+    drawSm(rctx, sprite("happy", r.idx, false), x + (CW - iw) / 2, y + 6 + (45 - ih) / 2, iw, ih);
     const nm = spName(sp).toUpperCase();
     drawText(rctx, nm.slice(0, 12), x + CW / 2 - textW(nm.slice(0, 12), 1) / 2, y + 52, 1, "#5c4632");
     const tag = r.shiny ? "SHINY!" : r.isNew ? "NEW!" : `+${DUP_REFUND}`;
-    const tc = r.shiny ? "#eec23f" : r.isNew ? "#4fbd82" : "#a8845c";
+    const tc = r.shiny ? "#eec23f" : r.isNew ? "#7aa888" : "#a8845c";
     drawText(rctx, tag, x + CW / 2 - textW(tag, 1) / 2, y + 64, 1, tc, null, true);
   });
   const foot = (pullResults.refunded > 0
@@ -6961,7 +8283,10 @@ rc.addEventListener("pointerdown", (e) => {
         if (i === active && petHome) { bringPetHome(); return; }
         const pi = pals.findIndex((p) => p.sp === i);
         if (pi >= 0) { removePal(pals[pi]); sfx.pop(); }
-        else if (spawnPal(i)) sfx.reveal();
+        else if (spawnPal(i)) {
+          sfx.reveal();
+          palSummonReact(i); // the desktop notices the newcomer
+        }
         else sfx.pop();
         return;
       }
@@ -7195,6 +8520,7 @@ cv.addEventListener("wheel", (e) => {
   e.preventDefault();
 }, { passive: false });
 addEventListener("keydown", (e) => {
+  lastUiTap = Date.now(); // typing counts as interaction — wakes the saver
   // redeem mode: type or paste a purchased gem code, Enter redeems,
   // Esc cancels. codes are long (signed), so Ctrl+V drops focus onto a
   // trap input and lets the native paste land, then we lift the text
@@ -7244,7 +8570,12 @@ addEventListener("keydown", (e) => {
     if (/^[a-zA-Z0-9 ]$/.test(e.key) && nameEdit.buf.length < 10) nameEdit.buf += e.key.toUpperCase();
     return;
   }
-  if (e.key === "Escape") { treatAim = false; settingsOpen = false; gemShop = false; shopMode = false; breedMode = false; accPick = null; infoPick = null; albumOpenWanted = false; albumOpen = false; if (cardTarget) closeCard(); if (nurseryOpen) toggleNursery(false); }
+  if (e.key === "Escape") {
+    // an interrupted slider drag must die with the panel — otherwise the
+    // cursor stays "grabbing" and the volume still tracks invisible moves
+    if (volDrag) { volDrag = null; cv.style.cursor = "default"; invokeQuiet("set_dragging", { on: false }); }
+    treatAim = false; closeSettings(); gemShop = false; shopMode = false; breedMode = false; accPick = null; infoPick = null; albumOpenWanted = false; albumOpen = false; if (cardTarget) closeCard(); if (nurseryOpen) toggleNursery(false);
+  }
 });
 
 // ---------- clickable regions ----------
@@ -7347,17 +8678,33 @@ function faceName(now) {
   // cursor brushes). a real wake sets awakeAt/state, not just a face
   if (state === "sleeping" || now < cushionNap) return "sleeping";
   if (now < shockUntil) return "shock";
+  if (now < gaspUntil) return "gasp";
+  if (now < sneezeUntil) return "sneeze"; // a reflex burst outranks posed faces
+  if (now < tearjoyUntil) return "tearjoy"; // an escalated tickle outranks a plain laugh
   if (now < tickleUntil) return "laugh";
   if (now < annoyedUntil) return "grumpy";
   if (now < starUntil) return "star";
+  if (now < excitedUntil) return "excited";
+  if (now < mischiefUntil) return "mischief";
   if (now < winkUntil) return "wink";
   if (now < cryUntil) return "cry";
+  if (now < worryUntil) return "worry"; // a pal in trouble outranks the sulk
+  if (now < sadUntil) return "sad";
   if (now < poutUntil) return "pout";
   if (now < smugUntil) return "smug";
   if (now < blepUntil) return "blep";
+  if (now < sideeyeUntil) return "sideeye";
+  if (now < happyUntil) return "happy"; // the open grin outranks calm content
   if (now < contentUntil) return "content";
   if (state === "grumpy") return "grumpy";
   if (now < munchUntil) return now % 180 < 90 ? "munch" : "chew";
+  if (now < droolUntil) return "drool"; // the anticipation stare — the bite itself outranks it
+  if (now < stuffedUntil) return "stuffed";
+  if (now < embarUntil) return "embar";
+  if (now < jealousUntil) return "jealous";
+  if (now < curiousUntil) return "curious";
+  if (now < yawnUntil) return "yawn";
+  if (now < dozeUntil) return "doze";
   if (now < blinkUntil) return "blink";
   if (lookDir < 0 && now < lookUntil) return "lookL";
   if (lookDir > 0 && now < lookUntil) return "lookR";
@@ -7370,9 +8717,30 @@ function currentSprite(now) {
   // repeated alternations (held squirm, munch chew) read as wobble
   if (f !== lastFace) {
     if (lastFace) { faceSwapT = now; squashV += 0.45; }
+    // blink-transition: the eyes close for a beat as a new expression
+    // opens — except the deliberate alternations (held squirm, munch
+    // chew), which are already moving and a blink would just strobe
+    const PAIR = (a, b) => (a === "held1" && b === "held2") || (a === "held2" && b === "held1") ||
+      (a === "munch" && b === "chew") || (a === "chew" && b === "munch");
+    if (lastFace && f !== "blink" && !PAIR(f, lastFace)) petSwapBlink = now + 90;
     lastFace = f;
+    // resolve the reason for this new face: a stamp planted for THIS face
+    // wins, then the happy/content hangover the card already uses, then
+    // the timer-derived map, then a signature act in progress — else no icon
+    if (petWhy && now - petWhyAt > 2600) petWhy = null; // a queued face took too long — drop it
+    let pw = null;
+    if (petWhy && f === petWhyF) { pw = petWhy; petWhy = null; }
+    if (!pw && (f === "happy" || f === "content"))
+      pw = (petUntil && now - petUntil < 2600) ? "PETTED"
+        : (stuffedUntil && now - stuffedUntil < 3200) ? "STUFFED"
+        : (munchUntil && now - munchUntil < 2600) ? "SNACK" : null;
+    if (!pw) pw = PET_FACE_WHY[f] || null;
+    if (!pw && (sigT0 || spinT0) && now - Math.max(sigT0 || 0, spinT0 || 0) < 5000 &&
+        (f === "smug" || f === "star" || f === "sideeye" || f === "wink" || f === "mischief")) pw = "THE SHOW";
+    if (FACE_EMO[f] && pw && WHY_ICON[pw]) { petWhyIc = WHY_ICON[pw]; petWhyUntil = now + 1400; }
+    else petWhyUntil = 0;
   }
-  return sprite(f, active, false);
+  return sprite(faceFrame(now < petSwapBlink ? "blink" : f), active, false);
 }
 
 let prev = performance.now();
@@ -7384,6 +8752,11 @@ const crashSeen = {};
 let lastBeat = 0;
 function frame(now) {
   requestAnimationFrame(frame);
+  // battery cap: skip whole frames while the saver says we're idle —
+  // rAF stays queued (cheap), the world just ticks slower
+  const cap = saverCapMs();
+  if (cap && now - lastRun < cap) return;
+  lastRun = now;
   try {
     frameBody(now);
   } catch (e) {
@@ -7541,7 +8914,6 @@ function frameBody(now) {
       if (Math.abs(wdx) > 10 && (state === "sleeping" || now < cushionNap)) {
         awakeAt = Date.now(); state = "idle"; cushionNap = 0; cushionNapW = 0;
         shockUntil = now + 600;
-        bangs.push({ x: petX, y: petY - bh - 14, life: 0.9, t: "!" });
       }
       petX += wdx;
       rideWob = Math.min(1, rideWob + Math.abs(wdx) / 50);
@@ -7559,7 +8931,9 @@ function frameBody(now) {
     if (isBaby(sp)) sp._wasBaby = true;
     else if (sp._wasBaby) {
       sp._wasBaby = false;
-      bangs.push({ x: petX, y: petY - 96, life: 2, t: "GROWN UP" });
+      starUntil = now + 1400;
+      petStamp("GROWN UP!", "star");
+      happyUntil = now + 2200;
       squashV += 8;
       sfx.reveal();
     }
@@ -7578,6 +8952,29 @@ function frameBody(now) {
   else if (energy < 0.15) { energy = 0.15; energyDir = 1; }
   ignoreT += dt;
 
+  // wake transition: coming out of a real nap earns a yawn + a little
+  // stretch — a frame-level diff catches every wake path (cursor nudge,
+  // startle hop, grab, stir) without touching each one
+  if (petWasSleeping && state !== "sleeping" && now >= cushionNap) {
+    petWasSleeping = false;
+    yawnUntil = now + 1000;
+    squashV += 4;
+  } else if (state === "sleeping" || now < cushionNap) petWasSleeping = true;
+
+  // an ignored beg stings: the ask lapses and the pet droops a beat
+  // instead of just wandering off like nothing happened
+  if (begWasActive && now > begUntil) {
+    begWasActive = false;
+    if (state === "idle" && now > petUntil && now > contentUntil) sadUntil = now + 1600;
+  } else if (now < begUntil) begWasActive = true;
+
+  // drowsy tide: rock-bottom energy while idling shows on its face —
+  // heavy lids drift in before the pet actually nods off
+  if (energy < 0.28 && state === "idle" && !petBusy && walkTarget === null &&
+      hopTarget === null && !sigT0 && Math.random() < dt * 0.5) {
+    dozeUntil = now + 1600;
+  }
+
   const cdist = Math.hypot(curX - petX, curY - (petY - bh / 2));
 
   // sleeping pets stir when the cursor gets really close — half-open
@@ -7585,7 +8982,7 @@ function frameBody(now) {
   if (!petHome && state === "sleeping" && cdist < 150 && now > stirT) {
     stirT = now + 2400;
     // waking to a friendly face: a beat of surprise, then content
-    if (cdist < 85) { awakeAt = Date.now(); state = "idle"; contentUntil = now + 1700; bangs.push({ x: petX, y: petY - bh - 14, life: 0.9, t: "!?" }); }
+    if (cdist < 85) { awakeAt = Date.now(); state = "idle"; contentUntil = now + 1700; gaspUntil = now + 800; }
     else { squashV += 2; fx.push({ x: petX + (Math.random() * 20 - 10), y: petY - 10, vx: 0, vy: -14, life: 0.6, c: "#b8c4d4" }); }
   }
 
@@ -7609,7 +9006,7 @@ function frameBody(now) {
           const nr = Math.random() + (animProf(active).glee - 0.5) * 0.5;
           if (nr < 0.4) { squashV += 3.5; sfx.pop(); }                    // curious bounce
           else if (nr < 0.7) { hearts.push({ x: petX + 16, y: petY - 66, life: 1 }); sfx.heart(); }
-          else { bangs.push({ x: petX, y: petY - bh - 14, life: 0.9, t: "?" }); }
+          else { curiousUntil = now + 1200; }
         }
       } else noticeT = Math.max(0, noticeT - dt * 2);
     } else {
@@ -7661,6 +9058,7 @@ function frameBody(now) {
         squashV += Math.sin(hEl / 46) * 0.09;
         lookDir = Math.sign(curX - petX) || lookDir;
         lookUntil = now + 120;
+        mischiefUntil = now + 150; // the plotting face while the butt wiggles
       } else {
         huntT0 = 0;
         huntCd = now + 8000 + Math.random() * 6000;
@@ -7681,7 +9079,7 @@ function frameBody(now) {
             p.walkT = null;
             p.vx = Math.max(-220, Math.min(220, (curX - p.x) * 1.8));
             p.vy = -(150 + Math.random() * 90);
-            p.faceId = "happy";
+            p.faceId = "excited"; // joining a hunt is the best thing ever
             p.faceT = now + 1000;
           }
         }
@@ -7715,7 +9113,7 @@ function frameBody(now) {
         blanketCd = now + 10 * 60000;
         sitUntil = now + 1400;
         hearts.push({ x: curX + 8, y: curY - 18, life: 1.4 });
-        bangs.push({ x: curX, y: curY - 46, life: 1.6, t: "TUCKED IN" });
+        contentUntil = now + 2600;
         sfx.heart();
       }
     }
@@ -7727,7 +9125,7 @@ function frameBody(now) {
       lookDir = Math.sign(curX - petX) || lookDir;
       lookUntil = now + 300;
       if (Math.random() < dt * 2.4) squashV += 1.6; // paw-wiggle bounce
-      if (Math.random() < dt * 0.7) bangs.push({ x: petX + (Math.random() * 30 - 15), y: petY - bh - 8, life: 0.8, t: Math.random() < 0.5 ? "♥" : "!" });
+      if (Math.random() < dt * 0.7) hearts.push({ x: petX + (Math.random() * 30 - 15), y: petY - bh - 8, life: 0.8 });
     }
     // a cursor parked beside the pet earns its attention — it pauses what
     // it's doing and glances over (climbing ON the cursor was cut: janky)
@@ -7753,7 +9151,6 @@ function frameBody(now) {
         petVY = -170;
         petVX = Math.sign(petX - curX || 1) * 140;
         poutUntil = now + 1300;
-        bangs.push({ x: petX, y: petY - bh - 14, life: 0.9, t: "!" });
         sfx.pop();
       }
     } else boopT = Math.max(0, boopT - dt * 2);
@@ -7767,9 +9164,9 @@ function frameBody(now) {
         rubCd = now + 3500;
         contentUntil = now + 2400;
         petUntil = now + 900;
+        if (Math.random() < 0.5) embarUntil = now + 3100; // blush tail after the melt
         squashV += 4;
         hearts.push({ x: petX + (Math.random() * 20 - 10), y: petY - 62, life: 1.1 });
-        if (Math.random() < 0.4) bangs.push({ x: petX, y: petY - bh - 12, life: 0.9, t: "♪" });
         sfx.heart();
       }
     } else { rubCount = Math.max(0, rubCount - dt * 2); if (!rubCount) rubDir = 0; }
@@ -7787,8 +9184,8 @@ function frameBody(now) {
           circCd = now + 9000;
           spinT0 = now;
           dizzyUntil = now + 1600;
+          excitedUntil = now + 1500;
           squashV += 5;
-          bangs.push({ x: petX, y: petY - bh - 14, life: 1.3, t: "WHEE!" });
           sfx.boing();
         }
       }
@@ -7813,6 +9210,7 @@ function frameBody(now) {
       cuddleT = 0;
       cuddleUntil = now + 2200;
       contentUntil = now + 2000;
+      embarUntil = now + 3400; // flustered afterglow once content fades
       hearts.push({ x: petX + 10, y: petY - 60, life: 1.1 });
       squashV += 3;
       if (Math.random() < 0.5) sfx.heart();
@@ -7867,7 +9265,7 @@ function frameBody(now) {
         for (let i = 0; i < 8; i++) {
           fx.push({ x: petX + Math.random() * 40 - 20, y: sy2 - Math.random() * 30 - 6, vx: Math.random() * 90 - 45, vy: -Math.random() * 70, life: 0.8, c: "#e8e0c8" });
         }
-        bangs.push({ x: petX + 16, y: sy2 - 60, life: 1, t: "💎" });
+        starUntil = now + 1000;
       } else {
         petX += Math.sign(dx) * 160 * dt;
         lookDir = Math.sign(dx);
@@ -7887,12 +9285,11 @@ function frameBody(now) {
         if (now > stepDustT) { stepDustT = now + 260; fx.push({ x: petX - Math.sign(dx) * 12, y: sup.y - 3, vx: -Math.sign(dx) * 10, vy: -10, life: 0.4, c: "#c8b8a0" }); }
       }
       munchUntil = now + 120;
-      if (Math.random() < dt * 0.5) bangs.push({ x: petX + 14, y: petY - bh - 8, life: 0.8, t: "♥" });
+      excitedUntil = now + 220; // vibrating with want the whole stalk
+      if (Math.random() < dt * 0.5) hearts.push({ x: petX + 14, y: petY - bh - 8, life: 0.8 });
     } else if (danceT0 && now - danceT0 < 1700) {
       contentUntil = now + 300;
-      if (sp.r >= 2 && Math.random() < dt * 2.5) {
-        bangs.push({ x: petX + Math.random() * 50 - 25, y: petY - bh - 8, life: 1, t: "♪" });
-      }
+      happyUntil = now + 400;
       if (sp.r >= 3 && Math.random() < dt * 1.2) {
         fx.push({ x: petX + Math.random() * 40 - 20, y: petY - 10, vx: 0, vy: -40, life: 0.8, c: "#ffd75e" });
       }
@@ -7948,7 +9345,7 @@ function frameBody(now) {
           blinkStepT = now + 380;
           for (let i = 0; i < 5; i++) fx.push({ x: petX + (Math.random() - 0.5) * 24, y: petY - Math.random() * 34, vx: 0, vy: -18, life: 0.5, c: "#9aadff" });
           // stella's teleports pop a little star where she vanishes
-          if (LEG[sp.id] && LEG[sp.id].starburst) bangs.push({ x: petX, y: petY - 40, life: 0.5, t: "✦" });
+          if (LEG[sp.id] && LEG[sp.id].starburst) fx.push({ x: petX, y: petY - 40, vx: 0, vy: -26, life: 0.5, c: "#ffd75e", spr: "star5" });
           petX = Math.max(lo, Math.min(hi, petX + Math.sign(dx) * Math.min(36, Math.abs(dx))));
           for (let i = 0; i < 5; i++) fx.push({ x: petX + (Math.random() - 0.5) * 24, y: petY - Math.random() * 34, vx: 0, vy: -18, life: 0.5, c: "#9aadff" });
           squashV += 1.2;
@@ -8129,7 +9526,20 @@ function frameBody(now) {
         // rare prop whims — the box, the plant, the music box each get
         // their own little ritual when they're on this deck and rested
         const propPick = Math.random();
-        if (propPick < 0.28 && box && Math.abs(box.y - sup.y) < 16 && now > boxCd && Math.abs(box.x - petX) > 60) {
+        if (propPick < 0.09 && now > petPalCd) {
+          // rare social whim: stroll over to a free pal and nuzzle it —
+          // the desktop's star saying hi to a background buddy
+          const cand = pals.filter((q) => q !== palHeld && !q.fly && !q.scene && !q.tag && !q.group &&
+            !q.chatMate && Math.abs(q.y - petY) < 40 && Math.abs(q.x - petX) > 70 && Math.abs(q.x - petX) < 420 &&
+            now > (q.restUntil || 0) && !(now < (q.hideUntil || 0)));
+          if (cand.length) {
+            const q = cand[(Math.random() * cand.length) | 0];
+            walkTarget = Math.max(lo, Math.min(hi, q.x + (petX < q.x ? -24 : 24)));
+            walkSpd = baseSpd * 0.9;
+            walkGoal = { kind: "nuzzle", tx: walkTarget, pal: q };
+          } else sitUntil = now + 1500;
+        }
+        else if (propPick < 0.28 && box && Math.abs(box.y - sup.y) < 16 && now > boxCd && Math.abs(box.x - petX) > 60) {
           walkTarget = Math.max(lo, Math.min(hi, box.x + (petX < box.x ? -10 : 10)));
           walkSpd = baseSpd * 0.9;
           walkGoal = { kind: "box", tx: walkTarget };
@@ -8184,7 +9594,8 @@ function frameBody(now) {
     lookDir = Math.sign(curX - petX) || 1;
     lookUntil = now + 1400;
     hearts.push({ x: petX + 14, y: petY - 66, life: 1.2 });
-    bangs.push({ x: petX, y: petY - bh - 14, life: 1.6, t: "HELLO!" });
+    happyUntil = now + 1800;
+    petStamp("HELLO!", "happy");
     sfx.heart();
   }
   // bond greeting: a well-bonded slime notices you coming back — one
@@ -8196,7 +9607,8 @@ function frameBody(now) {
     lookUntil = now + 1200;
     hearts.push({ x: petX - 12, y: petY - 62, life: 1 });
     hearts.push({ x: petX + 14, y: petY - 66, life: 1.2 });
-    bangs.push({ x: petX, y: petY - bh - 14, life: 1.3, t: "HI!" });
+    happyUntil = now + 1600;
+    petStamp("HELLO!", "happy");
     sfx.heart();
   }
 
@@ -8265,11 +9677,175 @@ function frameBody(now) {
     if (trait === "spark") fx.push({ x: petX + Math.random() * 24 - 12, y: petY - 8, vx: 0, vy: -32, life: 1, c: "#f0a05c" });
     if (trait === "drip") fx.push({ x: petX + Math.random() * 20 - 10, y: petY - 4, vx: 0, vy: 55, life: 0.6, c: "#69b7ec" });
     if (trait === "wisp") fx.push({ x: petX + Math.random() * 40 - 20, y: petY - 30 - Math.random() * 16, vx: Math.random() * 10 - 5, vy: -12, life: 1.5, c: "#c4b2f0" });
-    if (trait === "glint") bangs.push({ x: petX + Math.random() * 40 - 20, y: petY - Math.random() * 50 - 10, life: 0.8, t: "✦" });
+    if (trait === "glint") fx.push({ x: petX + Math.random() * 40 - 20, y: petY - Math.random() * 50 - 10, vx: 0, vy: -22, life: 0.8, c: "#ffe9a8", spr: "star5" });
     if (trait === "bubble") fx.push({ x: petX + Math.random() * 24 - 12, y: petY - 20, vx: Math.random() * 8 - 4, vy: -35, life: 1.2, c: "#b8e8f5" });
   }
   // legendary ambient quirks — trails, embers, notes, drool
   if (!petHome && now >= boxHide) legTick(sp, petX, petY, dt, walkTarget !== null, flying, (v) => { squashV += v; });
+  // drizzle weather: every so often a soft rain drifts over the deck for
+  // half a minute — rare, gentle, and it makes the slimes look up
+  // the weather roll fires once a second, not every frame — same odds,
+  // sixty-fold fewer rng taps so it doesn't jitter the sim stream
+  const ds = (now / 1000) | 0;
+  if (ds !== drizSec) {
+    drizSec = ds;
+    if (now > drizzleNext && !reduceMotion && !petHome && now >= boxHide && Math.random() < 0.3) {
+      drizzleUntil = now + 24000 + Math.random() * 24000;
+      drizzleNext = now + 300000 + Math.random() * 300000; // roughly 5-10 min dry spells
+      const mo = new Date().getMonth();
+      drizzleKind = (mo === 11 || mo === 0 || mo === 1) ? "snow" : "rain"; // Dec-Feb flakes
+    }
+  }
+  // a parked/hidden pet gets no weather — ghost rain broke the hide tests
+  if (now < drizzleUntil && !petHome && now >= boxHide) {
+    const snow = drizzleKind === "snow";
+    if (!reduceMotion && Math.random() < dt * (snow ? 12 : 16) && drips.length < 40) {
+      drips.push(snow
+        ? { x: Math.random() * winW, y: -4, vx: (Math.random() - 0.5) * 26, vy: 40 + Math.random() * 30, life: 3, c: "#eef4ff", k: "snow" }
+        : { x: Math.random() * winW, y: -4, vx: (Math.random() - 0.5) * 8, vy: 90 + Math.random() * 50, life: 1.6, c: "#9ec8e8" });
+    }
+    contentUntil = Math.max(contentUntil, now + 700); // the pet loves the weather
+    if (snow) {
+      snowAcc = Math.min(1, snowAcc + dt * 0.05); // a dusting builds up
+      // flake-catching: a snowflake lands on the pet now and then —
+      // it notices, beams a little, and shakes it off
+      if (Math.random() < dt * 0.25 && !petBusy && !held && state === "idle") {
+        drips.push({ x: petX + (Math.random() * 16 - 8), y: petY - 44, vx: 0, vy: 14, life: 0.8, c: "#eef4ff", k: "snow" });
+        if (Math.random() < 0.5) happyUntil = now + 800;
+      }
+    } else {
+      snowAcc = Math.max(0, snowAcc - dt * 0.04);
+      // the rain waters the plant — the pot perks visibly while it drinks
+      if (plant && Math.random() < dt * 0.1) plant.steamUntil = Date.now() + 3000;
+    }
+    // thunder — a rare flash mid-spell, once a minute at most. snow is quiet.
+    if (!snow && now > thunderAt + 60000 && Math.random() < dt * 0.04) {
+      thunderAt = now;
+      thunderBoltX = 40 + Math.random() * Math.max(60, winW - 80);
+      if (Math.random() < 0.6) { gaspUntil = now + 900; petStamp("BOOM!", "gasp"); }
+      for (const q of pals) {
+        if (Math.abs(q.x - petX) < 480 && q !== palHeld && now > (q.faceT || 0)) {
+          q.faceId = Math.random() < 0.5 ? "shock" : "worry"; q.faceT = now + 1100;
+          q.faceWhy = "BOOM!"; q.faceWhyId = q.faceId;
+          q.squashV += 3;
+          // a jumpy pal bolts for the cardboard fort — the only roof it knows
+          if ((PSYCH[(SPECIES[q.sp] || {}).ps] || {}).flee && box && box.live !== false &&
+              Math.abs(q.y - box.y) < 60 && !q.fly && !q.tag && !q.scene && !q.group &&
+              !q.chatMate && !q.propGoal && q.walkT === null && now > (q.restUntil || 0) &&
+              !(now < (q.hideUntil || 0)) && !(now < (q.settleUntil || 0)) && now > (q.boxCd || 0) &&
+              Math.abs(q.x - box.x) < 560 && Math.abs(q.x - box.x) > 60) {
+            q.walkT = box.x; q.propGoal = { kind: "box" }; q.duckedWx = true;
+          }
+        }
+      }
+      sfx.drop();
+    }
+  }
+  // the rainbow beat: when a rain spell ends there's a one-in-five chance
+  // of a little arc in the sky — snow gets no rainbow, just the quiet
+  if (wasDrizzle && now > drizzleUntil && drizzleKind === "rain") wetUntil = now + 12000;
+  if (wasDrizzle && now > drizzleUntil && drizzleKind === "snow") snowUntil = now + 12000;
+  if (wasDrizzle && now > drizzleUntil && drizzleKind === "rain" && !reduceMotion && Math.random() < 0.2) {
+    rainbowUntil = now + 14000;
+    // the pet catches the arc too — star eyes up at the sky it just rained on
+    if (!petBusy && !held && state === "idle" && !petHome && now >= boxHide && now > starUntil) {
+      starUntil = now + 1200; petStamp("RAINBOW", "star"); squashV += 0.8;
+    }
+    for (const q of pals) {
+      if (q !== palHeld && !(now < (q.restUntil || 0)) && now > (q.faceT || 0) && Math.random() < 0.6) {
+        q.faceId = "star"; q.faceT = now + 1600;
+        q.faceWhy = "RAINBOW"; q.faceWhyId = "star";
+      }
+    }
+  }
+  // rain on the head: the moment a rain spell opens, a free pal near the
+  // box makes a dash for the only roof it knows — the cardboard fort
+  if (!wasDrizzle && now < drizzleUntil && drizzleKind === "rain" && box && box.live !== false) {
+    const duck = pals.find((q) => q !== palHeld && !q.fly && !q.tag && !q.scene && !q.group &&
+      !q.chatMate && !q.propGoal && q.walkT === null &&
+      now > (q.restUntil || 0) && !(now < (q.hideUntil || 0)) && !(now < (q.settleUntil || 0)) &&
+      now > (q.boxCd || 0) && Math.abs(q.y - box.y) < 60 && Math.abs(q.x - box.x) < 560 &&
+      Math.abs(q.x - box.x) > 60 && Math.random() < 0.5);
+    if (duck) {
+      duck.walkT = box.x;
+      duck.propGoal = { kind: "box" };
+      duck.duckedWx = true; // it came in for the sky — check again on the way out
+      if (now > duck.faceT) { duck.faceId = "gasp"; duck.faceT = now + 900; duck.faceWhy = "RAIN"; duck.faceWhyId = "gasp"; } // "rain!!"
+    }
+  }
+  wasDrizzle = now < drizzleUntil;
+  // seasonal drift: spring petals and autumn leaves ride the air even
+  // on clear days — the desktop always has a little sky of its own
+  if (!reduceMotion && !petHome && now >= boxHide && drips.length < 46) {
+    const sec = now / 1000 | 0;
+    if (sec !== seasSec) {
+      seasSec = sec;
+      const d8 = new Date(), mo = d8.getMonth(), hr = d8.getHours();
+      const pk = mo >= 2 && mo <= 4 ? "petal" : mo >= 8 && mo <= 10 ? "leaf"
+        : (mo >= 5 && mo <= 7 && (hr >= 22 || hr < 6)) ? "firefly" : null;
+      // ~1 drift every couple of seconds, rolled once a second so the
+      // sim's RNG stream doesn't pay a per-frame tax for ambience
+      if (pk === "firefly" && Math.random() < 0.4) {
+        drips.push({ x: Math.random() * winW, y: winH * 0.45 + Math.random() * winH * 0.5,
+          vx: 0, vy: 0, life: 8, c: "#d8f48a", k: "firefly" });
+      } else if (pk && pk !== "firefly" && Math.random() < 0.5) {
+        drips.push({ x: Math.random() * winW, y: -4, vx: (Math.random() - 0.5) * 34, vy: 24 + Math.random() * 20, life: 4.5, c: pk === "petal" ? "#f6c2d8" : "#e8a05c", k: pk });
+      }
+      // a shooting star: night-only, rare — one quick streak slants
+      // across the sky and it's gone before you nudge your friend
+      if ((hr >= 22 || hr < 6) && Math.random() < 0.045 && !drips.some((d) => d.k === "star")) {
+        const dir = Math.random() < 0.5 ? 1 : -1;
+        drips.push({ x: Math.random() * winW * 0.7 + winW * 0.15, y: -6, vx: dir * (330 + Math.random() * 120), vy: 110 + Math.random() * 60, life: 1.1, c: "#fdf3c9", k: "star" });
+        // the pet catches it too — star eyes and a held breath, when it's
+        // actually around and idle enough to be watching the night sky
+        if (!petBusy && !held && state === "idle" && !petHome && now >= boxHide &&
+            now > starUntil && Math.random() < 0.5) {
+          starUntil = now + 1100; petStamp("SHOOTING STAR", "star"); squashV += 0.8;
+        }
+      }
+    }
+  }
+  // audience of one: the pet glances at pal antics happening near it —
+  // scenes and group events finally register on the star of the show
+  if (!petBusy && !held && !climbing && state === "idle" && !petHome && now >= boxHide && now > petWatchCd) {
+    for (const q of pals) {
+      const show = q.scene || q.group;
+      if (!show || Math.abs(q.y - petY) > 60 || Math.abs(q.x - petX) > 380) continue;
+      petWatchCd = now + 7000 + Math.random() * 5000;
+      lookDir = Math.sign(q.x - petX) || 1;
+      lookUntil = now + 1500;
+      const k = q.scene ? q.scene.k : q.group.kind;
+      if (k === "leapfrog" || k === "mirror") { if (Math.random() < 0.5) tickleUntil = now + 900; }
+      else if (k === "staredown") worryUntil = now + 1200;
+      else if (k === "gift") { starUntil = now + 1100; petStamp("PRESENT", "star"); }
+      else if (k === "race" || k === "wave") { excitedUntil = now + 1100; petStamp(k === "race" ? "RACE" : "THE WAVE", "excited"); }
+      else if (k === "piggyback") { if (Math.random() < 0.5) { gaspUntil = now + 900; petStamp("PIGGYBACK", "gasp"); } }
+      else if (Math.random() < 0.5) { happyUntil = now + 1100; petStamp("THE SHOW", "happy"); } // gather/chorus applause
+      break;
+    }
+  }
+  // knock-knock: the pet notices a wiggling box and taps the side —
+  // the hider startles and pops out sooner, wearing a little gasp
+  if (!petBusy && !held && state === "idle" && !petHome && now >= boxHide && box &&
+      now > petBoxTapCd &&
+      pals.some((q) => now < (q.hideUntil || 0) && Math.abs(q.x - box.x) < 34) &&
+      Math.abs(petX - box.x) < 160 && Math.abs(petY - box.y) < 60 && Math.random() < dt * 0.15) {
+    petBoxTapCd = now + 9000;
+    lookDir = Math.sign(box.x - petX) || 1; lookUntil = now + 900;
+    curiousUntil = Math.max(curiousUntil, now + 1000);
+    squashV += 1.6;
+    sfx.pop();
+    for (const hq of pals) {
+      if (now < (hq.hideUntil || 0) && Math.abs(hq.x - box.x) < 34) {
+        hq.hideUntil = Math.max(now + 350, hq.hideUntil - 900);
+        hq.faceId = "gasp"; hq.faceT = now + 900;
+        hq.faceWhy = "RATTLED"; hq.faceWhyId = "gasp";
+      }
+    }
+    // the rattle is a tell — a seeker camped nearby perks right up
+    const wsk = pals.find((o) => o.seekFor && Math.abs(o.x - box.x) < 170);
+    if (wsk && now > wsk.faceT) { wsk.faceId = "excited"; wsk.faceT = now + 800; wsk.faceWhy = "FOUND YOU"; wsk.faceWhyId = "excited"; }
+  }
   // idle fidgets: a menu of micro-animations so standing still never
   // looks static — weighted by mood: lazy pets yawn and sigh, lively
   // ones shuffle and peek around
@@ -8285,16 +9861,45 @@ function frameBody(now) {
       stretchUntil = Math.max(stretchUntil, now + 500);
       lookUntil = 0;
       sfx.pop();
-    } else if (fr < 0.45) {
+    } else if (fr < 0.42) {
       // weight-shift shuffle: a tiny side-step, like real feet
       petX = Math.max(lo, Math.min(hi, petX + (Math.random() < 0.5 ? -1 : 1) * (5 + Math.random() * 7)));
       squashV += 1.2;
       lookDir = -lookDir || (Math.random() < 0.5 ? -1 : 1);
       lookUntil = now + 500;
-    } else if (fr < 0.7 && ignoreT > 30) {
+    } else if (fr < 0.56 && !lazy) {
+      // happy hop: a little bounce of pure mood — animProf.bop sets how
+      // hard each species leaves the ground, so springy pals really pop
+      flying = true;
+      petVY = -(95 + Math.random() * 65) * animProf(active).bop;
+      petVX = (Math.random() - 0.5) * 40;
+      squashV += 2;
+      munchUntil = now + 140;
+    } else if (fr < 0.7) {
+      // jelly jiggle: a full-body shimmy that decays over half a second —
+      // nowhere to be, just vibing. firmer jellies shimmy less
+      jiggleUntil = now + 500;
+      squashV += 2.4 * animProf(active).squash;
+    } else if (fr < 0.82 && ignoreT > 30) {
       // a bored little sigh — small puff and a droop
       fx.push({ x: petX + lookDir * 12, y: petY - 20, vx: lookDir * 18, vy: -10, life: 0.7, c: "#c8ccd4" });
       squashV += 0.8;
+    } else if (fr < 0.88) {
+      // solo act: self-play flavored by personality — feisty pets twirl,
+      // timid ones sniff about, lazy ones just melt and daydream
+      const ak = psy.flee ? (Math.random() < 0.6 ? "sniff" : "dream")
+        : lazy ? (Math.random() < 0.5 ? "dream" : "stretch")
+        : (psy.startle || 1) > 1.2 ? ["spin", "stretch", "sniff"][(Math.random() * 3) | 0]
+        : ["stretch", "sniff", "groom"][(Math.random() * 3) | 0];
+      if (ak === "stretch") { stretchUntil = now + 800; squashV -= 3; sfx.pop(); }
+      else if (ak === "spin") { spinT0 = now; }
+      else if (ak === "sniff") {
+        lookUntil = now + 900;
+        for (let k2 = 0; k2 < 3; k2++) fx.push({ x: petX + lookDir * (10 + k2 * 5), y: petY - 4, vx: lookDir * 10, vy: -8 - k2 * 4, life: 0.45, c: "#cfc4ae" });
+        if (Math.random() < 0.5) { curiousUntil = now + 1100; petStamp("FORAGING", "curious"); }
+      } else if (ak === "dream") {
+        dozeUntil = now + 1900;
+      } else { contentUntil = now + 1000; squashV += 1.5; } // groom: a settle + rub-wobble
     } else {
       // peek: look left then right, curious
       lookDir = -lookDir || 1;
@@ -8338,7 +9943,7 @@ function frameBody(now) {
   if (pomo && pomoPhase === "focus" && !petHome && now >= boxHide && now > pomoHeartNext) {
     pomoHeartNext = now + 40000 + Math.random() * 30000;
     hearts.push({ x: petX + (Math.random() * 40 - 20), y: petY - 80, life: 1 });
-    if (Math.random() < 0.3) bangs.push({ x: petX + 24, y: petY - 90, life: 1.4, t: "GO!" });
+    if (Math.random() < 0.3) excitedUntil = now + 1200; // a little cheer squad of one
   }
 
   let stretch = 0;
@@ -8389,7 +9994,7 @@ function frameBody(now) {
         webAngV * 5500 * Math.cos(webAng) + (snip ? curVX * 0.15 : 0)));
       webAng = 0; webAngV = 0;
       if (snip) {
-        bangs.push({ x: petX, y: petY - bh - 22, life: 1.2, t: "SNIP" });
+        shockUntil = now + 700;
         sfx.shock();
       }
     } else {
@@ -8490,7 +10095,7 @@ function frameBody(now) {
           dizzyUntil = now + 1100;
           annoyedUntil = now + 2600;
           for (let i = 0; i < 3; i++) {
-            bangs.push({ x: petX - 20 + i * 20, y: petY - bh - 14, life: 1, t: "✦" });
+            fx.push({ x: petX - 20 + i * 20, y: petY - bh - 14, vx: (i - 1) * 24, vy: -30 - i * 10, life: 0.7, c: "#ffd75e", spr: "star5" });
           }
           sfx.drop();
           petVY = -petVY * 0.3;
@@ -8517,7 +10122,6 @@ function frameBody(now) {
             startleFall = false;
             dizzyUntil = now + 1300;
             poutUntil = now + 1800;
-            bangs.push({ x: petX, y: petY - bh - 14, life: 1.1, t: "!?" });
           }
           dirty = true;
           sfx.pop();
@@ -8527,7 +10131,6 @@ function frameBody(now) {
             huntPounce = false;
             if (Math.hypot(curX - petX, curY - (petY - bh / 2)) < 120) {
               hearts.push({ x: petX + 14, y: petY - 64, life: 1.2 });
-              bangs.push({ x: petX, y: petY - bh - 14, life: 1.1, t: "GOTCHA" });
               smugUntil = now + 1800; // caught the cursor and knows it
               contentUntil = now + 1500;
               sfx.heart();
@@ -8561,7 +10164,14 @@ function frameBody(now) {
       if (p === palHeld || now < (p.restUntil || 0)) continue;
       p.lookDir = Math.sign(treatFly.x - p.x) || 1;
       p.lookUntil = now + 900;
-      if (Math.random() < 0.6) { p.faceId = "happy"; p.faceT = now + 900; }
+      if (Math.random() < 0.6) {
+        // retiring personalities don't lunge for the snack — they beg:
+        // watery-eyed "please drop it near ME" instead of drool/glee
+        const troll = Math.random();
+        p.faceId = (PSYCH[(SPECIES[p.sp] || {}).ps] || {}).follow <= 0.8 && troll < 0.4 ? "plead"
+          : troll < 0.35 ? "drool" : "happy";
+        p.faceT = now + 900;
+      }
       p.nextT = 0; // re-decide next frame so the race starts NOW
     }
   } else if (!treatFly) treatFlySeen = false;
@@ -8673,6 +10283,7 @@ function frameBody(now) {
     if (treatFly && Math.hypot(treatFly.x - petX, treatFly.y - petY) < 240) {
       treatFly.vx += (petX - treatFly.x) * 3.2 * dt;
       treatFly.vy += (petY - 30 - treatFly.y) * 1.8 * dt;
+      droolUntil = now + 500; // lip-smack stare while the snack homes in
     }
   }
 
@@ -8706,12 +10317,16 @@ function frameBody(now) {
         fx.push({ x: petX - Math.sign(dx) * 20, y: petY - 14, vx: -Math.sign(dx) * 30, vy: -8, life: 0.35, c: "#e05a6e" });
       }
       munchUntil = now + 90;
+      droolUntil = now + 300; // charging at a snack reads as lip-smacking
     } else {
-      const tk = TREATS[treat.kind || 0];
+      const tkIdx = treat.kind || 0;
+      const tk = TREATS[tkIdx];
       treat = null;
       stats.treats = addSavedInt(stats.treats, 1);
       gainXp(tk.xp, petX + 20, petY - 96);
       munchUntil = now + 500;
+      // a favorite snack — the pet's eyes turn to hearts for it
+      if (TREAT_PREF[sp.trait] === tkIdx) { loveUntil = now + 1300; bondGain(sp.id, 1); }
       // snack morsels tumble off — everyone leaves crumbs now
       if (crumbs.length < 12 && Math.random() < 0.6) {
         crumbs.push({ x: petX + (Math.random() * 60 - 30), y: petY - 80, vy: 0, life: 1, floor: petY });
@@ -8719,8 +10334,8 @@ function frameBody(now) {
       contentUntil = now + 2500;
       bondGain(SPECIES[active].id, 3);
       // treat side-effects: chili rush, coffee buzz, cake delight
-      if (tk.id === "chili") { hyperUntil = now + 60000; bangs.push({ x: petX + 34, y: petY - 96, life: 1.6, t: "HOT!" }); }
-      else if (tk.id === "coffee") { noSleepUntil = Date.now() + 300000; bangs.push({ x: petX + 34, y: petY - 96, life: 1.6, t: "WIRED" }); }
+      if (tk.id === "chili") { hyperUntil = now + 60000; gaspUntil = now + 900; }
+      else if (tk.id === "coffee") { noSleepUntil = Date.now() + 300000; excitedUntil = now + 1600; }
       else if (tk.id === "cake") squashV += 8;
       dirty = true;
       sfx.munch();
@@ -8733,7 +10348,6 @@ function frameBody(now) {
         p.squashV += 4;
         if (Math.random() < 0.5) hearts.push({ x: p.x + 8, y: p.y - 58, life: 0.9 });
       }
-      bangs.push({ x: petX, y: petY - 84, life: 1.4, t: "YUM" });
       for (let i = 0; i < 6; i++) {
         fx.push({ x: petX + Math.random() * 20 - 10, y: petY - 20, vx: Math.random() * 80 - 40, vy: -Math.random() * 80, life: 0.6, c: "#c4905a" });
       }
@@ -8759,7 +10373,7 @@ function frameBody(now) {
       case "zap": // bolt: antenna crackle, then a discharge
         if (e < 700) {
           if (Math.random() < dt * 40) fx.push({ x: petX + Math.random() * 16 - 8, y: petY - bh - 6, vx: Math.random() * 30 - 15, vy: -50, life: 0.25, c: "#8fd4f0" });
-        } else { bangs.push({ x: petX, y: petY - bh - 18, life: 0.8, t: "!" }); squashV += 5; sfx.shock(); alive = false; }
+        } else { shockUntil = now + 600; squashV += 5; sfx.shock(); alive = false; }
         break;
       case "voidpull": // void: inhales particles, then pops a star
         if (e < 900) {
@@ -8767,7 +10381,7 @@ function frameBody(now) {
             const a = Math.random() * 6.28;
             fx.push({ x: petX + Math.cos(a) * 52, y: petY - 22 + Math.sin(a) * 30, vx: -Math.cos(a) * 65, vy: -Math.sin(a) * 45, life: 0.7, c: "#6b5a9e" });
           }
-        } else { bangs.push({ x: petX, y: petY - bh - 12, life: 1, t: "✦" }); sfx.reveal(); alive = false; }
+        } else { starUntil = now + 1000; sfx.reveal(); alive = false; }
         break;
       case "veil": // aurora: shimmering ribbon of light
         if (e < 1500) {
@@ -8849,7 +10463,9 @@ function frameBody(now) {
         angle = Math.sin(t * 5) * 0.1;
         stretch = Math.sin(e / 210) * 0.08; // diaphragm swells on each phrase
         munchUntil = now + 90;
-        if (Math.random() < dt * 5) bangs.push({ x: petX + Math.random() * 30 - 15, y: petY - bh - 10, life: 1.2, t: Math.random() < 0.3 ? "♥" : "♪" });
+        happyUntil = now + 300; // singing keeps a beam on her face
+        petStamp("SING-ALONG", "happy");
+        if (Math.random() < dt * 5) hearts.push({ x: petX + Math.random() * 30 - 15, y: petY - bh - 10, life: 1.2 });
         if (e > 1600) { stretch = 0; alive = false; }
         break;
       case "webshot": // webby: aims a silk line at the cursor, then dangles
@@ -8920,12 +10536,12 @@ function frameBody(now) {
           petVX = 0;
           sfx.boing();
           for (const p of pals) {
-            if (now < (p.restUntil || 0)) continue; // a napping pal ignores the summons
+            if (now < (p.restUntil || 0) || now < (p.settleUntil || 0)) continue; // napping and settled pals ignore the summons
             const pl = p.plat || { x: 0, w: winW };
             const pe = palEdge(p);
             p.walkT = clampPlatformX(petX + (Math.random() * 140 - 70), pl, pe);
           }
-          bangs.push({ x: petX, y: petY - bh - 24, life: 1.4, t: "★" });
+          starUntil = now + 1300;
         }
         if (flying) {
           // holds a regal pose at the apex, crown-sparkles trailing
@@ -8953,7 +10569,7 @@ function frameBody(now) {
             fx.push({ x: petX, y: petY - 22, vx: Math.cos(a) * s2, vy: Math.sin(a) * s2 - 90,
               life: 0.8 + Math.random() * 0.5, c: cols[i % 5] });
           }
-          bangs.push({ x: petX, y: petY - bh - 16, life: 1.2, t: "POP!" });
+          excitedUntil = now + 1200;
         } else if (e > 700) alive = false;
         break;
       case "flare": // lanty: warm lantern pulse rings outward
@@ -8995,7 +10611,8 @@ function frameBody(now) {
           sigInit = 1;
           sfx.pop();
           squashV += 7;
-          bangs.push({ x: petX, y: petY - bh - 18, life: 1.4, t: "RIBBIT" });
+          happyUntil = now + 1300; // a croak IS its smile
+          petStamp("SING-ALONG", "happy");
           for (let i = 0; i < 12; i++) {
             const a = (i / 12) * 6.28;
             fx.push({ x: petX + Math.cos(a) * 14, y: petY - 24 + Math.sin(a) * 8,
@@ -9016,7 +10633,6 @@ function frameBody(now) {
           sfx.drop();
           ripples.push({ x: petX, y: petY + 2, r: 14, life: 1.5 });
           ripples.push({ x: petX, y: petY + 2, r: 6, life: 1.2 });
-          bangs.push({ x: petX, y: petY - bh - 18, life: 1.3, t: "SLAM" });
           // rocks cascade down around the impact
           for (let i = 0; i < 16; i++) {
             fx.push({ x: petX + Math.random() * 180 - 90, y: petY - 110 - Math.random() * 50,
@@ -9045,7 +10661,6 @@ function frameBody(now) {
             sigTx = -dir;
             petX = cx - dir * 3;
             squashV += 4;
-            bangs.push({ x: petX, y: petY - bh - 12, life: 0.5, t: "!" });
             fx.push({ x: cx + dir * 8, y: petY - 10, vx: -dir * 70, vy: -50, life: 0.4, c: "#d8c8ae" });
             sfx.pop();
           } else petX = cx;
@@ -9056,7 +10671,6 @@ function frameBody(now) {
               c: ["#e8d8bc", "#f5e6c8", "#ffb0a0"][(Math.random() * 3) | 0] });
           }
         } else {
-          bangs.push({ x: petX, y: petY - bh - 16, life: 1.3, t: "BURP" });
           blepUntil = now + 1400; // tongue lolls out after the rampage
           hearts.push({ x: petX + 14, y: petY - 62, life: 1 });
           squashV += 5;
@@ -9095,10 +10709,10 @@ function frameBody(now) {
               vx: Math.cos(a) * (90 + Math.random() * 60), vy: Math.sin(a) * 60 - 30,
               life: 0.6, c: cols[(Math.random() * cols.length) | 0] });
           }
-          if (Math.random() < dt * 8) bangs.push({ x: petX + Math.random() * 60 - 30, y: petY - Math.random() * 60 - 20, life: 0.7, t: "✦" });
+          if (Math.random() < dt * 8) fx.push({ x: petX + Math.random() * 60 - 30, y: petY - Math.random() * 60 - 20, vx: 0, vy: -20, life: 0.7, c: "#ffffff", spr: "star5" });
           if (Math.random() < dt * 3) squashV += 1.2;
         } else {
-          bangs.push({ x: petX, y: petY - bh - 16, life: 1.2, t: "SHINE" });
+          starUntil = now + 1100;
           sfx.reveal();
           alive = false;
         }
@@ -9121,7 +10735,8 @@ function frameBody(now) {
               c: ["#ffffff", "#d8ecfa", "#e0455a", "#4fbd63"][(Math.random() * 4) | 0], spr: fl ? "flake" : null });
           }
           if (Math.random() < dt * 6) squashV += 1.5;
-          if (Math.random() < dt * 4) bangs.push({ x: petX + Math.random() * 40 - 20, y: petY - 60, life: 0.8, t: "♪" });
+          happyUntil = now + 400; // bell-ringing keeps her beaming
+          petStamp("SING-ALONG", "happy");
         } else if (petY >= sup.y - 26) {
           // only burst once she's actually touched down — a gold ring
           // floating in midair read as a bug
@@ -9139,7 +10754,6 @@ function frameBody(now) {
       // Goldie's shower sometimes leaves a real gem behind — lucky!
       if (sigId === "shower" && Math.random() < 0.25) {
         jelly = addSavedInt(jelly, 1);
-        bangs.push({ x: petX, y: petY - bh - 30, life: 1.6, t: "LUCKY!" });
         starUntil = now + 1200;
         sfx.heart();
         dirty = true;
@@ -9152,10 +10766,15 @@ function frameBody(now) {
   }
 
   const walking = walkTarget !== null;
+  const ap = animProf(active);
   const mv = SPECIES[active].mv || "walk";
   if (walking && mv === "walk") angle = Math.sin(t * 9) * 0.11;
   else if (walking && mv === "scurry") { angle = Math.sin(t * 15) * 0.17; munchUntil = now + 90; }
   else if (walking && mv === "hover") angle = Math.sin(t * 3) * 0.05;
+  else if (!walking && !held && !sigT0 && !petBusy && onGround && state === "idle")
+    // idle sway: a gentle rock at a per-species tempo — standing still
+    // never looks frozen, and no two pals drift on the same rhythm
+    angle = Math.sin(t * (0.8 + ap.sway)) * 0.03 * ap.sway * (reduceMotion ? 0.4 : 1);
   // the twirl: eased full turn around the body's middle (not the feet —
   // a feet-pivot orbit reads as a satellite, not a spin), rising in an
   // arc, stretching tall at speed, and settling with a squash pop
@@ -9172,12 +10791,15 @@ function frameBody(now) {
   if (dancing) angle = Math.sin(now / 85) * 0.24;
   const danceSq = dancing ? Math.sin(now / 170) * 0.07 : 0;
   const climbSq = climbing ? Math.sin(now / 60) * 0.09 : 0;
-  const ap = animProf(active);
   const bob = !walking ? 0
     : mv === "scurry" ? Math.abs(Math.sin(t * 15 * ap.waddle)) * 1.6
     : mv === "walk" ? Math.abs(Math.sin(gaitPhase * ap.waddle)) * 2.6
     : mv === "blink" && Math.sin(t * 12) > 0 ? 2 : 0;
   const hoverBob = mv === "hover" ? 3 + Math.sin(t * 2.4) * 2.2 : 0;
+  // jelly-shimmy fidget: a decaying oscillation that pumps the squash and
+  // rocks the body a little — the "vibe" idle move from the fidget roll
+  const jigOsc = Math.sin(now / 30) * Math.max(0, jiggleUntil - now) / 500 * (reduceMotion ? 0.3 : 1);
+  angle += jigOsc * 0.05;
   const shockStretch = now < shockUntil ? 0.12 : 0;
   const stretchUp = now < stretchUntil ? 0.16 : 0;
   // lean into the walk — the whole blob tilts a few degrees the way it's
@@ -9195,7 +10817,7 @@ function frameBody(now) {
   // reduce-motion (accessibility): damp squash + rotation, spins become dances
   // squash saturates like real jelly — the harder the hit, the less extra
   // it compresses (small pokes still read fully)
-  const msq = squash / (1 + Math.abs(squash) * 0.5) * (reduceMotion ? 0.4 : 1);
+  const msq = squash / (1 + Math.abs(squash) * 0.5) * (reduceMotion ? 0.4 : 1) * ap.squash + jigOsc * 0.35;
   const sx = scale * (1 + msq * 0.25 + breathe + stretch - shockStretch * 0.7 - stretchUp * 0.6 + danceSq + climbSq - spinStr * 0.6);
   const sy = scale * (1 - msq * 0.18 - breathe * 0.7 - stretch * 0.5 + shockStretch + stretchUp - danceSq - climbSq + spinStr);
 
@@ -9234,7 +10856,12 @@ function frameBody(now) {
   }
   ctx.globalAlpha = 1;
 
-  // placed props: bowl sits flat, cushion gets a soft squish pulse
+  // placed props: bowl sits flat, cushion gets a soft squish pulse —
+  // a soft contact shadow under each one first, so they sit ON the deck
+  ctx.fillStyle = "rgba(46,32,20,0.15)";
+  for (const [pr, pw] of [[bowl, 40], [cushion, 54], [box, 58], [plant, 36], [music, 42], [mirror, 38], [mat, 56], [jar, 34], [egg, 20]]) {
+    if (pr) ctx.fillRect(Math.round(pr.x - pw / 2), Math.round(pr.y - 1), pw, 2);
+  }
   if (bowl) {
     // lift floor-sitting props fully on-screen — center-anchored sprites
     // would otherwise spill a few px past the bottom edge
@@ -9304,11 +10931,12 @@ function frameBody(now) {
   if (music) {
     // the key turns while the tune plays — a small wobble sells it
     const spinning = Date.now() < (music.spinUntil || 0);
+    if (spinning && Math.random() < 0.09) fx.push({ x: music.x + (Math.random() - 0.5) * 14, y: music.y - 20, vx: (Math.random() - 0.5) * 16, vy: -22 - Math.random() * 16, life: 0.9, c: Math.random() < 0.5 ? "#ffd75e" : "#9fd8f0", spr: "mote" });
     ctx.save();
     ctx.translate(music.x + (spinning ? Math.sin(t * 31) * 0.8 : 0), music.y - 4 + propFloorLift(music, 8));
     drawSpr(ctx, "music", 0, 0, 3);
     ctx.restore();
-    if (spinning && Math.random() < dt * 7) bangs.push({ x: music.x + (Math.random() - 0.5) * 30, y: music.y - 30 - Math.random() * 12, life: 0.9, t: "♪" });
+    // the tune itself is silent ink now — the dancers' faces carry it
   }
   if (mirror) {
     // the glass gleams once in a while — a slow shine sweep across the pane
@@ -9342,6 +10970,14 @@ function frameBody(now) {
     ctx.save();
     ctx.translate(jar.x + (raid ? Math.sin(t * 27) * 1.2 : 0), jar.y - 5 + propFloorLift(jar, 10));
     drawSpr(ctx, "jar", 0, 0, 3);
+    // glass glint — a shine pulse sweeps the jar's shoulder now and then
+    const jgl = (Math.sin(t * 0.7 + 2.1) + 1) / 2;
+    if (jgl > 0.9) {
+      ctx.globalAlpha = (jgl - 0.9) / 0.1 * 0.5;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(Math.round(-11 + (jgl - 0.9) / 0.1 * 7), -25, 2, 15);
+      ctx.globalAlpha = 1;
+    }
     if ((jar.fill ?? 2) <= 0) { // empty — dim the cookie lumps
       ctx.fillStyle = "rgba(92,70,50,0.55)";
       ctx.fillRect(Math.round(-13), Math.round(-26), 26, 16);
@@ -9368,6 +11004,23 @@ function frameBody(now) {
   // idle hands = full silliness. cute, never in the way
   const palQuiet = focusKind() === "editor" ||
     (now - lastCurMove >= 0 && now - lastCurMove < 15000);
+  // the flock's occasional all-together moment — rolls rarely, collapses
+  // the moment it loses its trio
+  tickGroup(now, dt, palQuiet);
+  // after 10pm the desktop gets sleepy: cushion trips get more tempting,
+  // re-nap cooldowns shrink, and idle faces droop a little more often.
+  // morning pals lean into the stretch act — wake-up yoga hour
+  const nightMode = (() => { const h = new Date().getHours(); return h >= 22 || h < 6; })();
+  const morningMode = (() => { const h = new Date().getHours(); return h >= 6 && h < 9; })();
+  const dawnMode = (() => { const h = new Date().getHours(); return h >= 5 && h < 7; })();
+  // the pet waking is a small occasion — pals on the same deck turn and
+  // greet it, a beat of "oh! you're up!" before business as usual
+  const petAsleep = !petHome && (state === "sleeping" || now < cushionNap);
+  const petWokeNow = petAsleepPrev && !petAsleep && !held && !flying;
+  petAsleepPrev = petAsleep;
+  // a pet standing still with no company reads as alone — pals that
+  // love it can drift over just to be there
+  petStillT = ((petSpd || 0) > 30 || held || flying || petHome) ? 0 : petStillT + dt;
   // --- companion slimes: update physics/AI, then draw (behind the main pet) ---
   for (let i = pals.length - 1; i >= 0; i--) {
     const p = pals[i];
@@ -9378,11 +11031,162 @@ function frameBody(now) {
     // declared at loop scope — every branch below (web/fly/grounded)
     // needs to see it; nested-block scope threw ReferenceErrors
     const nappingP = now < (p.restUntil || 0) || now < (p.hideUntil || 0);
+    // face-change bookkeeping: stamps the moment a NEW expression lands,
+    // so the reaction beat below only slows the first half-second —
+    // holding the slow for the whole face read as a weird trudge.
+    // (facePrevU is update-side — the renderer keeps p.facePrev for its
+    // own 90ms blink transition; sharing it killed the blink entirely)
+    if (now > (p.faceT || 0)) p.facePrevU = null; // episode ends — a same-face restamp later counts fresh
+    if (p.faceId !== p.facePrevU) {
+      p.facePrevU = p.faceId; p.faceSetAt = now;
+      // pop a little reason icon: the bubble over its head says WHY this
+      // face changed — expressions read as reactions, not mood-ring flicker.
+      // no explicit stamp? the state it's in still names the cause, same
+      // chain the card uses — gossip, an errand, a scene, a game of tag
+      const iw = (p.faceWhyId === p.faceId && p.faceWhy) ||
+        (p.tag ? "TAG" : p.chatMate ? "GOSSIP" :
+         p.scene ? (SC_WHY[p.scene.k] || "PLAY") :
+         p.group ? (GR_WHY[p.group.kind] || "GROUP FUN") :
+         p.propGoal ? (PROP_WHY[p.propGoal.kind] || "ERRAND") :
+         p.accAct ? "DOODAD" :
+         p.act ? (ACT_WHY[p.act.k] || "PLAY") :
+         p.follow ? "FOLLOWING" : p.carry ? "DELIVERY" : null);
+      if (FACE_EMO[p.faceId] && iw && WHY_ICON[iw]) {
+        p.whyIc = WHY_ICON[iw]; p.whyUntil = now + 1400;
+      } else p.whyUntil = 0; // an icon-less face clears a stale bubble
+      // pet-side echo: a pal's fresh outburst nearby pulls the pet's
+      // attention — one glance, sometimes a squinted "what's THAT", not
+      // a stare. the big faces only; a content blink earns no look
+      if (!petHome && !held && state === "idle" && !accAct && !sigT0 && !climbing && !webbing &&
+          now > petEchoCd && Math.abs(p.x - petX) < 220 && Math.abs(p.y - petY) < 60 &&
+          (p.faceId === "shock" || p.faceId === "cry" || p.faceId === "laugh" ||
+           p.faceId === "excited" || p.faceId === "star" || p.faceId === "worry") &&
+          Math.random() < 0.45) {
+        petEchoCd = now + 9000;
+        lookDir = Math.sign(p.x - petX) || 1;
+        lookUntil = now + 1000;
+        if (Math.random() < 0.4) { curiousUntil = now + 900; petStamp("WATCHING", "curious"); }
+      }
+    }
+    // wake-up beat: coming out of a nap or the box lands a yawn + a
+    // little stretch before the slime gets on with its day
+    if (nappingP) {
+      // night-night: the moment a pal settles to sleep, an awake buddy
+      // nearby gives it a soft look — the desktop's quiet goodnight
+      if (!p.wasNapping && now < (p.restUntil || 0)) {
+        const bid = pals.find((q2) => q2 !== p && q2 !== palHeld && !q2.fly &&
+          now > (q2.restUntil || 0) && now > (q2.hideUntil || 0) && now > (q2.faceT || 0) &&
+          Math.abs(q2.y - p.y) < 24 && Math.abs(q2.x - p.x) < 130);
+        if (bid && Math.random() < 0.6) {
+          bid.lookDir = Math.sign(p.x - bid.x) || 1; bid.lookUntil = now + 1000;
+          bid.faceId = "content"; bid.faceT = now + 900;
+          bid.faceWhy = "NIGHT NIGHT"; bid.faceWhyId = "content";
+        }
+      }
+      p.wasNapping = true;
+      // don't step on the sleeper: a pal bounding past mid-nap cracks
+      // the sleeper's eyes open — a flat annoyed glance, then back out
+      if (now < (p.restUntil || 0) && now > (p.stepCd || 0) &&
+          pals.some((q2) => q2 !== p && q2 !== palHeld && (q2.fly || q2.walkT !== null) &&
+            Math.abs(q2.y - p.y) < 24 && Math.abs(q2.x - p.x) < 20)) {
+        p.stepCd = now + 2600;
+        // a jolt mid-dream sours it — the smile curdles into a worried
+        // face instead of the usual flat annoyed glance
+        const midDream = now < (p.dreamT || 0);
+        p.faceId = midDream ? "worry" : "meh"; p.faceT = now + 600;
+        p.faceWhy = "STEPPED ON"; p.faceWhyId = p.faceId;
+        if (midDream) p.dreamT = 0;
+        p.napGrace = Math.max(p.napGrace || 0, now + 600);
+        p.squashV += 1.5;
+      }
+    }
+    else if (p.wasNapping) {
+      p.wasNapping = false;
+      if (now > p.faceT) { p.faceId = "yawn"; p.faceT = now + 900; }
+      p.squashV += 3;
+      // "oh, you're up" — an awake neighbor notices the stir and gives
+      // the little one a warm once-over
+      const wit = pals.find((q2) => q2 !== p && q2 !== palHeld && !q2.fly &&
+        now > (q2.restUntil || 0) && now > (q2.hideUntil || 0) &&
+        Math.abs(q2.y - p.y) < 24 && Math.abs(q2.x - p.x) < 140);
+      if (wit && now > wit.faceT) {
+        wit.lookDir = Math.sign(p.x - wit.x) || 1; wit.lookUntil = now + 900;
+        wit.faceId = "content"; wit.faceT = now + 1000;
+        wit.faceWhy = "WAKE UP"; wit.faceWhyId = "content";
+      }
+    }
+    // dream murmur: mid-nap a smile or a twitch leaks through — the little
+    // blob is clearly dreaming about something good (or a very big snack)
+    if (now < (p.restUntil || 0) && Math.random() < dt * 0.05) {
+      p.dreamT = now + 1100;
+      p.dreamWake = p.dreamT + 800; // eye-rub beat before the lids shut again
+      if (Math.random() < 0.4) p.squashV += 0.7;
+    }
+    // running dream: while the dream plays out the feet keep paddling —
+    // little kicks chasing whatever it is they're dreaming about
+    if (now < (p.dreamT || 0) && Math.random() < dt * 3) p.squashV += 0.5;
+    // morning greeting: the pet just woke — nearby free pals light up,
+    // look over, and give a little welcome hop
+    if (petWokeNow && !nappingP && !p.fly && p !== palHeld && !p.tag && !p.scene && !p.group &&
+        Math.abs(p.y - petY) < 30 && Math.abs(p.x - petX) < 360) {
+      p.lookDir = Math.sign(petX - p.x) || 1;
+      p.lookUntil = now + 1500;
+      if (now > p.faceT) { p.faceId = Math.random() < 0.4 ? "excited" : "happy"; p.faceT = now + 1400; p.faceWhy = "MORNING!"; p.faceWhyId = p.faceId; }
+      p.squashV += 2.5;
+      if (!palQuiet && Math.random() < 0.3) { p.fly = true; p.vy = -150 * animProf(p.sp).hop; p.vx = 0; p.hopT = now; }
+    }
     const hiddenInBox = now < (p.hideUntil || 0) && !!box;
     if (hiddenInBox) {
-      p.x = box.x; p.y = box.y; p.plat = box.plat || p.plat;
+      // box buddies weather-watch: roommates sheltering from the same
+      // drizzle peek out side by side — a stable per-index spread keeps
+      // them off each other's pixel, and a content face slips out now
+      // and then like they're sharing the patter
+      p.x = box.x + ((i % 3) - 1) * 13; p.y = box.y; p.plat = box.plat || p.plat;
       p.fly = false; p.vx = 0; p.vy = 0; p.web = 0;
       p.stackOn = null; p.follow = null; p.tag = null;
+      p.act = null; p.scene = null; p.group = null;
+      p.wasHidden = true;
+      if (now < drizzleUntil && now > (p.faceT || 0) && Math.random() < dt * 0.35) {
+        p.faceId = Math.random() < 0.5 ? "content" : "curious"; p.faceT = now + 1000;
+      }
+      // roommates trade a glance now and then — sharing a box is a
+      // social situation, even when it's just sheltering from weather
+      const rm = pals.find((q2) => q2 !== p && now < (q2.hideUntil || 0) && Math.abs(q2.x - p.x) < 34);
+      if (rm && Math.random() < dt * 0.4) {
+        p.lookDir = Math.sign(rm.x - p.x) || p.lookDir;
+        p.lookUntil = now + 800;
+      }
+    }
+    // twin exit: two roommates surfacing within a beat of each other
+    // get the double-take ceremony — twin grins and a shared heart
+    if (p.wasHidden && !(now < (p.hideUntil || 0))) {
+      p.wasHidden = false; p.emergedAt = now;
+      // shelter exit: a weather refugee checks the sky — rain over earns a
+      // relieved hop + a shake-off; still drizzling earns a disappointed
+      // squint up at the clouds
+      if (p.duckedWx) {
+        p.duckedWx = false;
+        if (now > drizzleUntil) {
+          p.faceId = "happy"; p.faceT = now + 1100;
+          p.faceWhy = "ALL CLEAR"; p.faceWhyId = "happy";
+          p.squashV += 2.5;
+          p.fly = true; p.vy = -140 * animProf(p.sp).hop; p.vx = 0; p.hopT = now;
+          for (let k = 0; k < 4; k++) fx.push({ x: p.x + (Math.random() - 0.5) * 18, y: p.y - 26, vx: (Math.random() - 0.5) * 40, vy: -14 - Math.random() * 14, life: 0.5, c: "#9ec8e8" });
+        } else {
+          p.faceId = "sideeye"; p.faceT = now + 1200;
+          p.faceWhy = "STILL RAINING"; p.faceWhyId = "sideeye";
+          p.lookDir = -p.lookDir || 1; p.lookUntil = now + 900;
+        }
+      }
+      const rm2 = p !== palHeld && pals.find((o) => o !== p && o !== palHeld &&
+        (o.emergedAt || 0) > now - 700 && now > (o.hideUntil || 0));
+      if (rm2) {
+        p.faceId = "happy"; p.faceT = now + 1100;
+        rm2.faceId = "happy"; rm2.faceT = now + 1100;
+        p.squashV += 2; rm2.squashV += 2;
+        hearts.push({ x: (p.x + rm2.x) / 2, y: p.y - 56, life: 1 });
+        pairBondGain(p, rm2, 1);
+      }
     }
     // A sleeping main pet is a quiet social anchor too: idle companions on
     // the same deck may curl up beside it. If the pet wakes while one is on
@@ -9484,7 +11288,6 @@ function frameBody(now) {
           if (Math.random() < dt * 0.7) p.squashV += 1.0;
           // riders are visibly delighted to be up there — a wave/song
           if (p.stackRise >= 1 && Math.random() < dt * 0.22) {
-            bangs.push({ x: p.x + 16, y: p.y - 66, life: 1, t: Math.random() < 0.5 ? "♪" : "HI!" });
             if (now > p.faceT) { p.faceId = "happy"; p.faceT = now + 700; }
           }
         }
@@ -9519,7 +11322,15 @@ function frameBody(now) {
       // pal actually stays put. before this, restUntil only gated the
       // wander roll and a napping pal could be launched, dragged into tag,
       // or wander off mid-doze
-      if (nappingP) { p.walkT = null; p.follow = null; p.tag = null; p.accAct = null; p.propGoal = null; p.hopWind = 0; p.chatMate = null; p.chatUntil = 0; p.settleUntil = 0; p.sitMate = null; }
+      if (nappingP) { p.walkT = null; p.follow = null; p.tag = null; p.accAct = null; p.propGoal = null; p.hopWind = 0; p.chatMate = null; p.chatUntil = 0; p.settleUntil = 0; p.sitMate = null; p.act = null; p.scene = null; p.group = null; }
+      // pair-scene conductor: the shared scene object lives on BOTH pals;
+      // only the initiator (sc.a) drives the step script — one tick a
+      // frame. a follower whose leader dropped the scene (grabbed, napped,
+      // despawned) releases its orphaned reference here
+      if (p.scene) {
+        if (p.scene.a === p) tickScene(p.scene, now, dt);
+        else if (p.scene.a.scene !== p.scene) p.scene = null;
+      }
       if (hiddenInBox) {
         p.x = box.x; p.y = box.y; p.plat = box.plat || pl;
       }
@@ -9551,10 +11362,16 @@ function frameBody(now) {
             p.rubCount = 0;
             p.rubCd = now + 3500;
             bondGain(SPECIES[p.sp].id, 2);
-            p.faceId = Math.random() < 0.4 ? "love" : "happy";
+            const pr3 = Math.random();
+            p.faceId = pr3 < 0.3 ? "love" : pr3 < 0.55 ? "embar" : "happy";
             p.faceT = now + 1800;
             p.squashV += 4;
             hearts.push({ x: p.x + 8, y: p.y - 56, life: 1 });
+            // the pet clocked who got the rub — a flat sideways stare
+            if (!petHome && Math.abs(petY - p.y) < 60 && Math.random() < 0.35) {
+              jealousUntil = now + 1600;
+              lookDir = Math.sign(p.x - petX) || 1; lookUntil = now + 1500;
+            }
             if (Math.random() < 0.5) sfx.heart();
           }
         } else { p.rubCount = Math.max(0, (p.rubCount || 0) - dt * 2); if (!p.rubCount) p.rubDir = 0; }
@@ -9565,7 +11382,7 @@ function frameBody(now) {
       // pet — a restless pal never gets an idle frame, so the bit now
       // interrupts its stroll instead of never starting
       if (!p.accAct && !p.fly && !p.stackOn && !p.tag && !nappingP &&
-          !p.propGoal && !reduceMotion && now > (p.accCd || 0)) {
+          !p.propGoal && !reduceMotion && now > (p.accCd || 0) && !(now < (p.settleUntil || 0))) {
         const eq = accEquip[psp.id];
         if (eq && PAL_ACC_BITS[eq]) { p.accAct = { id: eq, t0: now, step: 0 }; p.walkT = null; }
         p.accCd = now + (100000 + Math.random() * 100000) * (ppsy.pace || 1);
@@ -9582,7 +11399,7 @@ function frameBody(now) {
       }
 
       // --- social life: slimes notice, greet, follow, and bump each other ---
-      if (!p.tag && !p.stackOn && !nappingP) {
+      if (!p.tag && !p.stackOn && !nappingP && !p.scene && !p.group) {
         // greeting: an idle neighbor on the same deck → both stop, face
         // each other, trade a chirp. rare roll + mutual cooldown keeps
         // it a chance encounter, not a loop
@@ -9599,16 +11416,15 @@ function frameBody(now) {
             p.squashV += 3; q.squashV += 3;
             p.faceId = "happy"; p.faceT = now + 900;
             q.faceId = "happy"; q.faceT = now + 900;
-            bangs.push({ x: p.x + 12, y: p.y - 62, life: 0.9, t: Math.random() < 0.5 ? "♪" : "HI!" });
-            const qx = q.x, qy = q.y;
-            setTimeout(() => bangs.push({ x: qx - 12, y: qy - 62, life: 0.9, t: "♪" }), 430);
+            const q2 = q;
+            setTimeout(() => { if (pals.includes(q2)) q2.squashV += 2; }, 430); // a beat later, it bounces back hello
             sfx.pop();
           }
         }
         // sympathetic hop: the main pet springs past — a nearby pal can't
         // help a little bounce of its own
         if (!p.fly && flying && petVY < -140 && Math.abs(p.y - petY) < 18 && Math.abs(p.x - petX) < 240 &&
-            now > (p.sympCd || 0)) {
+            !(now < (p.settleUntil || 0)) && now > (p.sympCd || 0)) {
           p.sympCd = now + 2600;
           p.fly = true; p.vy = -130 - Math.random() * 60; p.vx = (Math.random() - 0.5) * 60;
           p.hopT = now;
@@ -9626,25 +11442,77 @@ function frameBody(now) {
           sfx.pop();
         }
         // follow-the-leader: occasionally picks a buddy to trail
-        if (!p.follow && !p.fly && !p.chatMate && p.walkT === null && pals.length > 1 && Math.random() < dt * 0.05 * (ppsy.follow || 1)) {
-          const cand = pals.filter(q2 => q2 !== p && !q2.fly && !q2.stackOn && !q2.tag && !q2.chatMate &&
-            !q2.follow && now > (q2.restUntil || 0) && !(now < (q2.hideUntil || 0)));
+        // (a settled pal is parked on purpose — it doesn't hop trains)
+        if (!p.follow && !p.fly && !p.chatMate && p.walkT === null && pals.length > 1 &&
+            !(now < (p.settleUntil || 0)) && Math.random() < dt * 0.05 * (ppsy.follow || 1)) {
+          // conga math: a pal CAN join a moving train — the leader may
+          // itself be following someone, capped at 3 cars, never a loop,
+          // and only one caboose per leader so trains don't blob up
+          const chainLen = (q2) => { let d = 0; while (q2 && q2.follow && d < 6) { q2 = q2.follow; d++; } return d; };
+          const chainHas = (q2, who) => { let s = 0; while (q2) { if (q2 === who) return true; if (++s > 8) return true; q2 = q2.follow; } return false; };
+          const cand = pals.filter(q2 => q2 !== p && !q2.fly && !q2.stackOn && !q2.tag && !q2.chatMate && !q2.scene &&
+            now > (q2.restUntil || 0) && !(now < (q2.hideUntil || 0)) &&
+            chainLen(q2) < 3 && !chainHas(q2, p) && !pals.some((r) => r !== p && r.follow === q2));
           if (cand.length) {
-            p.follow = cand[(Math.random() * cand.length) | 0];
-            p.followT = now + 4000 + Math.random() * 5000;
+            // babies imprint: the little one trails a grown-up, not a peer
+            let pool;
+            if (isBaby(psp)) {
+              const adults = cand.filter(q2 => !isBaby(SPECIES[q2.sp]));
+              pool = adults.length ? adults : cand;
+            } else {
+              // pals prefer the buddy they keep playing with — the bond
+              // table turns frequent partners into favorite shadows
+              const best = Math.max(...cand.map(q2 => pairBondLvl(p, q2)));
+              pool = best > 0 && Math.random() < 0.65 ? cand.filter(q2 => pairBondLvl(p, q2) === best) : cand;
+            }
+            p.follow = pool[(Math.random() * pool.length) | 0];
+            p.followT = now + (isBaby(psp) ? 7000 : 4000) + Math.random() * 5000;
             // the leader notices its duckling — glances back once
             p.follow.lookDir = Math.sign(p.x - p.follow.x) || 1;
             p.follow.lookUntil = now + 700;
           }
         }
       }
+      // train nap: the leader curls up — the caboose doesn't just break
+      // formation, it lies down beside it and the conga becomes a pile
+      if (p.follow && now < (p.follow.restUntil || 0) && !p.fly && !nappingP &&
+          now > (p.restCd || 0) && Math.abs(p.follow.x - p.x) < 70 && Math.abs(p.follow.y - p.y) < 24) {
+        const lf = p.follow;
+        p.restUntil = Math.min(lf.restUntil, now + 4000 + Math.random() * 3000);
+        p.restCd = p.restUntil + 25000 * (ppsy.sleep || 1) * (isBaby(psp) ? 0.45 : 1) * (nightMode ? 0.55 : 1);
+        p.walkT = null;
+        p.follow = null;
+        p.squashV += 2;
+        p.faceId = "yawn"; p.faceT = now + 1000;
+        p.napGrace = now + 1200;
+        if (pairBondLvl(p, lf) >= 1) hearts.push({ x: (p.x + lf.x) / 2, y: p.y - 56, life: 1 });
+      }
       // trailing a picked buddy — expires fast, drops if the leader flies
       // off, dozes off, gets grabbed, or stops existing (despawned)
       if (p.follow && (now > p.followT || !pals.includes(p.follow) || p.follow.fly || p.follow === p ||
-          p.follow.stackOn || p.follow.chatMate || p.follow === palHeld ||
+          p.follow.stackOn || p.follow.chatMate || p.follow === palHeld || p.follow.scene ||
           Math.abs(p.follow.y - p.y) > 40 ||
-          now < (p.follow.restUntil || 0) || now < (p.follow.hideUntil || 0))) p.follow = null;
-      if (p.follow && !p.fly && !nappingP && !p.chatMate) p.walkT = p.follow.x - (p.follow.lookDir || 1) * 46;
+          now < (p.follow.restUntil || 0) || now < (p.follow.hideUntil || 0))) {
+        // conga hop echo: the leader leapt — the caboose pops a surprised
+        // little hop after it instead of just standing there
+        if (p.follow.fly && p.follow.vy < -80 && !p.fly && !palQuiet && !nappingP && Math.random() < 0.5) {
+          p.fly = true; p.vy = -150 * animProf(p.sp).hop;
+          p.vx = p.follow.vx * 0.5;
+          p.hopT = now;
+          if (now > p.faceT) { p.faceId = "excited"; p.faceT = now + 900; }
+        }
+        // end of the line: the conga just ran out of track — instead of
+        // wandering off, the caboose pulls into the station beside its
+        // leader with a satisfied little stop
+        else if (now > p.followT && pals.includes(p.follow) && !p.follow.fly &&
+            Math.abs(p.follow.y - p.y) < 24 && Math.abs(p.follow.x - p.x) < 90 && now > p.faceT) {
+          p.lookDir = Math.sign(p.follow.x - p.x) || 1; p.lookUntil = now + 1000;
+          p.faceId = "content"; p.faceT = now + 1100;
+          p.squashV += 1.5;
+        }
+        p.follow = null;
+      }
+      if (p.follow && !p.fly && !nappingP && !p.chatMate && !p.scene && !p.group) p.walkT = p.follow.x - (p.follow.lookDir || 1) * 46;
       // TAG: a bump can start a chase — "it" hunts the fleer across the
       // platform while the fleer keeps darting away. ends on a catch
       // (both burst laughing + the caught one pops a hop) or on timeout
@@ -9664,13 +11532,51 @@ function frameBody(now) {
             p.lookDir = Math.sign(o.x - p.x) || 1; p.lookUntil = now + 700;
             o.lookDir = -p.lookDir; o.lookUntil = now + 700;
             p.faceId = o.faceId = "laugh"; p.faceT = o.faceT = now + 800;
-            bangs.push({ x: (p.x + o.x) / 2, y: p.y - 70, life: 0.9, t: "♪" });
-            o.tag = null;
+            p.faceWhy = o.faceWhy = "TAG"; p.faceWhyId = o.faceWhyId = "laugh";
+            // "you're it!" — a timed-out chase sometimes swaps roles and
+            // runs it straight back. capped at two relays so a game of
+            // tag can't become a permanent fixture
+            const relay = (p.tag.relay || 0) + 1;
+            const swap = relay <= 2 && !palQuiet && Math.random() < 0.4 &&
+              Math.abs(o.x - p.x) < 220;
+            const wasIt = p.tag.it;
+            const fin = (p.tag.relay || 0) >= 2; // the decider just ended
+            o.tag = null; p.tag = null;
+            if (fin) { // the last game earns a longer shared laugh
+              p.faceT = o.faceT = now + 1300;
+              hearts.push({ x: (p.x + o.x) / 2, y: p.y - 60, life: 0.9 });
+            }
+            if (swap) {
+              const nIt = wasIt ? o : p, nFl = wasIt ? p : o;
+              // the rematch rematch is THE decider — longer clock, and
+              // the runner stops grinning: it's serious now
+              nIt.tag = { on: nFl, it: true, until: now + (relay >= 2 ? 4400 : 3200), relay };
+              nFl.tag = { on: nIt, it: false, until: now + (relay >= 2 ? 4400 : 3200), relay };
+              nIt.faceId = "serious"; nIt.faceT = now + 1000; nIt.faceWhy = "REMATCH"; nIt.faceWhyId = "serious";
+              nFl.faceId = relay >= 2 ? "serious" : "excited"; nFl.faceT = now + 1000;
+              nFl.faceWhy = relay >= 2 ? "FINAL ROUND" : "REMATCH"; nFl.faceWhyId = nFl.faceId;
+              nIt.squashV += 2; nFl.squashV += 2;
+              if (relay >= 2) {
+                sfx.pop(); // showdown whistle
+                // the whole deck heard it — free pals drift in to watch
+                // the decider from a respectful distance
+                const mx = (nIt.x + nFl.x) / 2;
+                for (const g of pals) {
+                  if (g === nIt || g === nFl || g === palHeld || g.fly || g.tag || g.scene || g.group ||
+                      g.chatMate || now < (g.restUntil || 0) || now < (g.hideUntil || 0) || now < (g.settleUntil || 0) ||
+                      Math.abs(g.y - nIt.y) > 30 || Math.abs(g.x - mx) > 300 || Math.random() > 0.45) continue;
+                  g.walkT = Math.max(plo, Math.min(phi, mx + (g.x < mx ? -1 : 1) * (64 + Math.random() * 34)));
+                  if (now > g.faceT) { g.faceId = "excited"; g.faceT = now + 900; }
+                }
+              }
+            }
           }
           p.tag = null;
         }
         else if (p.tag.it) {
           p.walkT = Math.max(plo, Math.min(phi, o.x));
+          // the hunter keeps its game face through the whole chase
+          if (now > p.faceT) { p.faceId = "serious"; p.faceT = now + 500; }
           // pounce-hop when the gap's wide — both slimes walk at the same
           // speed, so a pure footrace could literally never catch up
           if (Math.abs(o.x - p.x) > 70 && Math.random() < dt * 0.45) {
@@ -9680,14 +11586,20 @@ function frameBody(now) {
           }
           if (Math.abs(o.x - p.x) < 28 && Math.abs(o.y - p.y) < 20) {
             hearts.push({ x: (p.x + o.x) / 2, y: p.y - 64, life: 1 });
-            bangs.push({ x: p.x, y: p.y - 78, life: 0.9, t: "TAG!" });
+            pairBondGain(p, o, 1); // a chase that lands is a game remembered
             p.faceId = "wink"; // the winner smugly winks
-            o.faceId = "laugh";
+            // the caught one laughs it off — unless it's a competitive
+            // slime, which turns away with puffed cheeks instead
+            o.faceId = (PSYCH[(SPECIES[o.sp] || {}).ps] || {}).startle >= 1.3 && Math.random() < 0.5 ? "hmph" : "laugh";
             p.faceT = o.faceT = now + 900;
             o.fly = true; o.vy = -190 * animProf(o.sp).hop; o.vx = (Math.random() - 0.5) * 120; o.hopT = now;
+            // the tagger pops too — a mirrored double-jump that reads as
+            // a high-five over the catch
+            p.fly = true; p.vy = -150 * animProf(p.sp).hop; p.vx = -o.vx * 0.4; p.hopT = now;
+            p.squashV += 3;
             o.tag = null; p.tag = null;
             p.nextT = now + 3000;
-            sfx.pop();
+            sfx.pop(); sfx.heart();
           }
         } else {
           // flee: keep hopping targets away from the tagger — and stumble
@@ -9698,6 +11610,24 @@ function frameBody(now) {
           if (Math.random() < dt * 0.55) { p.walkT = null; p.squashV += 2; }
         }
       }
+      // jealousy: watching you hold or cuddle the main pet earns a long
+      // side-eye — not loud enough to interrupt, impossible to unsee
+      if ((held || now < petUntil) && !petHome && !p.fly && p !== palHeld && !nappingP &&
+          !p.tag && !p.stackOn && !p.chatMate && now > p.faceT && now > (p.jelCd || 0) &&
+          Math.abs(p.x - petX) < 230 && Math.abs(p.y - petY) < 24 && Math.random() < dt * 0.8) {
+        p.jelCd = now + 7000;
+        p.lookDir = Math.sign(petX - p.x) || 1;
+        p.lookUntil = now + 1000;
+        p.faceId = Math.random() < 0.35 ? "jealous" : "sideeye"; p.faceT = now + 1600;
+        p.faceWhy = "PET'S FAVORITE"; p.faceWhyId = p.faceId;
+      }
+      // sleepy errands: a pal waddling toward a nap spot already has its
+      // eyes half shut — the droop sells the destination before it sits
+      if (p.propGoal && p.walkT !== null && !p.fly && now > p.faceT &&
+          (p.propGoal.kind === "cuddle" || p.propGoal.kind === "petCuddle" || p.propGoal.kind === "cushion") &&
+          Math.random() < dt * 1.6) {
+        p.faceId = "doze"; p.faceT = now + 1100;
+      }
       // gossip session in progress: both pals hold still facing each
       // other and take turns popping little chirps — whoever's chatUntil
       // lapses first wraps it up; flying/napping/tagging breaks it early
@@ -9707,8 +11637,60 @@ function frameBody(now) {
             q.fly || q === palHeld || now < (q.restUntil || 0) || now < (q.hideUntil || 0) ||
             p.fly || p === palHeld || nappingP || p.tag || p.stackOn ||
             Math.abs(q.y - p.y) > 24 || Math.abs(q.x - p.x) > 130) {
-          if (now > p.chatUntil && q && q.chatMate === p) { p.faceId = "happy"; p.faceT = now + 800; }
-          p.chatMate = null; p.chatUntil = 0;
+          if (now > p.chatUntil && q && q.chatMate === p) {
+            p.faceId = "happy"; p.faceT = now + 800;
+            // the parting beat: the mate gets its own farewell face and
+            // they trade one last look — "catch you later" reads on both
+            // sides instead of the session just dropping mid-glance
+            if (now > q.faceT) { q.faceId = Math.random() < 0.5 ? "wink" : "content"; q.faceT = now + 900; }
+            q.lookDir = Math.sign(p.x - q.x) || 1; q.lookUntil = now + 900;
+            p.lookDir = Math.sign(q.x - p.x) || 1; p.lookUntil = now + 900;
+            if (Math.random() < 0.35) hearts.push({ x: (p.x + q.x) / 2, y: p.y - 56, life: 0.9 });
+            pairBondGain(p, q, 1); // a chat that ran its course is a friendship tick
+            // the circle widens: an eavesdropper hovering nearby jumps
+            // in — "ok MY turn, tell me everything" — chaining the gossip
+            // instead of letting the huddle just disperse
+            if (Math.random() < 0.3 && (p.chatChain || 0) < 2) {
+              const w = pals.find((q2) => q2 !== p && q2 !== q && !q2.chatMate && q2 !== palHeld &&
+                !q2.fly && !q2.tag && !q2.scene && !q2.stackOn && !q2.group && !q2.propGoal &&
+                now > (q2.chatCd || 0) && now > (q2.restUntil || 0) && !(now < (q2.hideUntil || 0)) &&
+                Math.abs(q2.y - p.y) < 24 && Math.abs(q2.x - p.x) < 110);
+              if (w) {
+                // gossip mutation: usually the newcomer takes over the
+                // session with p — but sometimes it pulls the OTHER pal
+                // instead, and the rumor moves on leaving p out entirely
+                const steal = Math.random() < 0.35;
+                const host = steal ? q : p;
+                w.chatMate = host; host.chatMate = w;
+                w.chatUntil = host.chatUntil = now + 1900 + Math.random() * 1300;
+                w.chatNext = now + 300; host.chatNext = now + 750;
+                w.chatChain = host.chatChain = (host.chatChain || 0) + 1; // the tea can only travel so far
+                w.chatCd = now + 20000;
+                w.lookDir = Math.sign(host.x - w.x) || 1; host.lookDir = -w.lookDir;
+                w.lookUntil = host.lookUntil = now + 500;
+                w.faceId = "excited"; w.faceT = now + 700; // bursting to get a word in
+                if (steal) {
+                  // "...and they just walked off together??" — the
+                  // abandoned gossip drifts off with a bashful face
+                  p.faceId = "embar"; p.faceT = now + 1000;
+                  if (!(now < (p.settleUntil || 0))) p.walkT = Math.max(plo, Math.min(phi, p.x + (Math.random() < 0.5 ? -90 : 90)));
+                  // a nearby pal saw the whole thing — the sympathy
+                  // glance that says "yeah, that was cold"
+                  const cmf = pals.find((q3) => q3 !== p && q3 !== q && q3 !== w && q3 !== palHeld &&
+                    !q3.chatMate && !q3.fly && !q3.tag && !q3.scene && !q3.group &&
+                    now > (q3.restUntil || 0) && !(now < (q3.hideUntil || 0)) &&
+                    Math.abs(q3.y - p.y) < 24 && Math.abs(q3.x - p.x) < 170);
+                  if (cmf && Math.random() < 0.5) {
+                    cmf.faceId = "worry"; cmf.faceT = now + 1000;
+                    cmf.lookDir = Math.sign(p.x - cmf.x) || 1; cmf.lookUntil = now + 1000;
+                  }
+                }
+              }
+            }
+          }
+          // a chained session keeps p.chatMate pointing at the newcomer —
+          // only clear the link if it's still the farewell partner
+          if (p.chatMate === q) { p.chatMate = null; p.chatUntil = 0; p.chatChain = 0; }
           p.chatCd = now + 16000 + Math.random() * 12000;
         } else {
           p.walkT = null; p.propGoal = null; p.follow = null;
@@ -9717,7 +11699,135 @@ function frameBody(now) {
           if (now > (p.chatNext || 0)) {
             p.chatNext = now + 430 + Math.random() * 320;
             p.squashV += 1.4;
-            bangs.push({ x: p.x, y: p.y - 62, life: 0.9, t: ["♪", "♥", "...", "!", "HEH"][(Math.random() * 5) | 0] });
+            // the listener nods along — a little counter-pulse half the
+            // time makes it read as a back-and-forth, not a monologue
+            if (Math.random() < 0.5) q.squashV += 0.7;
+            // the chatter IS the face — chirpy beats cycle the gossip faces
+            if (now > p.faceT) { p.faceId = ["happy", "content", "laugh", "wink", "mischief"][(Math.random() * 5) | 0]; p.faceT = now + 560; }
+          }
+          // the pet eavesdrops: two pals huddled close whispering is
+          // irresistible — it stops what it's doing and leans in curious
+          if (!petHome && !petDozing && !(now < boxHide) && !held && !flying && state === "idle" &&
+              now > petEavesCd && Math.abs(petY - p.y) < 40 && Math.abs(petX - p.x) < 280 &&
+              Math.random() < dt * 0.5) {
+            petEavesCd = now + 9000;
+            curiousUntil = Math.max(curiousUntil, now + 1300);
+            lookDir = Math.sign(p.x - petX) || 1; lookUntil = now + 1400;
+          }
+        }
+      }
+      // eavesdropper: a bystander near a gossip session leans in to
+      // listen — a bonded one gets a little jealous of the circle it's
+      // not in, and a free one sometimes sidles closer to catch the tea
+      if (!p.chatMate && !p.fly && p !== palHeld && !nappingP && !p.tag && !p.scene && !p.group &&
+          Math.random() < dt * 0.5) {
+        const pair = pals.find((q2) => q2 !== p && q2.chatMate &&
+          Math.abs(q2.y - p.y) < 24 && Math.abs(q2.x - p.x) < 160);
+        if (pair) {
+          p.lookDir = Math.sign(pair.x - p.x) || 1;
+          p.lookUntil = now + 700;
+          if (now > (p.faceT || 0) && Math.random() < 0.4) {
+            p.faceId = pairBondLvl(p, pair) >= 2 && Math.random() < 0.4 ? "jealous"
+              : Math.random() < 0.5 ? "curious" : "happy";
+            p.faceT = now + 900;
+          }
+          if (p.walkT === null && !p.propGoal && !(now < (p.settleUntil || 0)) && Math.abs(pair.x - p.x) > 110 && Math.random() < 0.3) {
+            p.walkT = Math.max(plo, Math.min(phi, pair.x + (p.x < pair.x ? 110 : -110)));
+          }
+        }
+      }
+      // sidelines: a free pal near a set-piece or a tag chase turns to
+      // watch — races get cheers, staredowns get held breath, tag gets
+      // giggles. bonded spectators pick a favorite to root for
+      if (!p.scene && !p.tag && !p.chatMate && !p.fly && p !== palHeld && !nappingP && !p.group &&
+          Math.random() < dt * 0.45) {
+        const show = pals.find((q2) => q2 !== p && (q2.scene || q2.tag ||
+          (q2.group && q2.group.kind === "chorus")) &&
+          Math.abs(q2.y - p.y) < 24 && Math.abs(q2.x - p.x) < 190);
+        if (show) {
+          p.lookDir = Math.sign(show.x - p.x) || 1;
+          p.lookUntil = now + 600;
+          if (now > (p.faceT || 0) && Math.random() < 0.3) {
+            const k = show.scene ? show.scene.k : show.tag ? "tag" : "chorus";
+            const rooting = show.scene && (pairBondLvl(p, show.scene.a) >= 2 || pairBondLvl(p, show.scene.b) >= 2);
+            p.faceId = k === "staredown" ? "worry" : k === "gift" ? "star"
+              : k === "chorus" ? (Math.random() < 0.5 ? "content" : "happy") // humming along
+              : rooting || Math.random() < 0.5 ? "excited" : "happy";
+            p.faceT = now + 800;
+            if (Math.random() < 0.3) p.squashV += 1;
+          }
+          // a tag runner zipping by is infectious — the spectator breaks
+          // into a little sympathy scamper before it remembers it isn't it
+          if (!show.scene && show.tag && !palQuiet && !(now < (p.settleUntil || 0)) && Math.abs(show.x - p.x) < 90 && Math.random() < 0.35) {
+            p.fly = true; p.vy = -110 * animProf(p.sp).hop; p.vx = Math.sign(show.x - p.x) * 60; p.hopT = now;
+          }
+        }
+      }
+      // keep company: the pet's been standing alone a while — a pal that
+      // loves it pads over just to be there. quiet, not an errand
+      if (petStillT > 18 && !petHome && !petDozing && !p.fly && p !== palHeld && !nappingP &&
+          !(now < (p.settleUntil || 0)) &&
+          !p.tag && !p.scene && !p.group && !p.chatMate && p.walkT === null && !p.propGoal &&
+          now > (p.comfortCd || 0) && bondLvl(psp.id) >= 2 &&
+          Math.abs(p.y - petY) < 30 && Math.abs(p.x - petX) < 480 && Math.abs(p.x - petX) > 130 &&
+          !pals.some((q2) => q2 !== p && Math.abs(q2.x - petX) < 120 && Math.abs(q2.y - petY) < 30) &&
+          Math.random() < dt * 0.08) {
+        p.comfortCd = now + 50000;
+        p.walkT = Math.max(plo, Math.min(phi, petX + (p.x < petX ? -1 : 1) * (70 + Math.random() * 30)));
+        p.propGoal = { kind: "settle", at: now };
+      }
+      // rainbow tour: the arc won't last — a free pal on the ground deck
+      // hustles over to the good seats at the right end to watch it fade
+      if (now < rainbowUntil && !p.fly && p !== palHeld && !nappingP && !p.tag && !p.scene && !p.group &&
+          !(now < (p.settleUntil || 0)) &&
+          p.walkT === null && !p.propGoal && Math.abs(p.y - winH) < 26 &&
+          p.x < winW - 220 && Math.random() < dt * 0.35) {
+        p.walkT = Math.max(plo, Math.min(phi, winW - 70 - Math.random() * 60));
+      }
+      // firefly chase: a summer-night speck drifting by is worth
+      // following — the pal pads after it, curious
+      if (!p.fly && p !== palHeld && !nappingP && !p.tag && !p.scene && !p.group &&
+          !(now < (p.settleUntil || 0)) &&
+          p.walkT === null && !p.propGoal && Math.random() < dt * 0.18) {
+        const ff = drips.find((d) => d.k === "firefly" && Math.abs(d.y - p.y) < 160 && Math.abs(d.x - p.x) < 220);
+        if (ff) {
+          p.walkT = Math.max(plo, Math.min(phi, ff.x));
+          if (now > p.faceT) { p.faceId = "curious"; p.faceT = now + 1000; }
+          p.lookDir = Math.sign(ff.x - p.x) || 1; p.lookUntil = now + 900;
+        }
+      }
+      // wish upon it: a pal that catches the streak looks up star-eyed —
+      // and every so often the wish actually lands, a little gold dust
+      if (!p.fly && p !== palHeld && !nappingP && now > (p.starCd || 0) && now > p.faceT) {
+        const st = drips.find((d) => d.k === "star" && d.life > 0.25);
+        if (st) {
+          p.starCd = now + 25000;
+          p.faceId = "star"; p.faceT = now + 1300;
+          p.faceWhy = "SHOOTING STAR"; p.faceWhyId = "star";
+          p.squashV += 1.5;
+          if (Math.random() < 0.35) {
+            jelly = addSavedInt(jelly, 1); dirty = true;
+            for (let k = 0; k < 4; k++) fx.push({ x: p.x + (Math.random() - 0.5) * 16, y: p.y - 30, vx: (Math.random() - 0.5) * 20, vy: -20 - Math.random() * 14, life: 0.6, c: "#ffd75e", spr: "mote" });
+          }
+        }
+      }
+      // caught one! reaching the speck earns a star-eyed gasp, and the
+      // little light flits off somewhere else entirely
+      if (!p.fly && p !== palHeld && now > (p.ffCd || 0)) {
+        const cf = drips.find((d) => d.k === "firefly" && Math.abs(d.x - p.x) < 20 && Math.abs(d.y - p.y) < 44);
+        if (cf) {
+          p.ffCd = now + 20000;
+          p.faceId = "star"; p.faceT = now + 1100;
+          p.squashV += 2;
+          cf.x = Math.random() * winW; cf.y = winH * 0.4 + Math.random() * winH * 0.4;
+          cf.life = Math.max(cf.life, 4);
+          // double chase: the pet watched the pal nab the speck and
+          // trots over — "wait, what did you just catch?"
+          if (!held && !flying && state === "idle" && !petBusy && !(now < boxHide) && !petHome && !petDozing &&
+              walkTarget === null && Math.abs(petY - p.y) < 40 && Math.abs(petX - p.x) < 460) {
+            curiousUntil = Math.max(curiousUntil, now + 1500);
+            walkTarget = Math.max(lo, Math.min(hi, p.x + (petX < p.x ? -46 : 46)));
+            lookDir = Math.sign(p.x - petX) || 1; lookUntil = now + 1200;
           }
         }
       }
@@ -9751,21 +11861,34 @@ function frameBody(now) {
             if (pg.kind === "treat") {
               // the race ends: first pal there snatches the snack, losers sulk
               if (treat && Math.abs(treat.x - p.x) < 60 && Math.abs(treat.y - p.y) < 40) {
-                const tk = TREATS[treat.kind || 0];
+                const tkIdx = treat.kind || 0;
+                const tk = TREATS[tkIdx];
                 treat = null;
                 stats.treats = addSavedInt(stats.treats, 1);
                 gainXp(tk.xp, p.x + 14, p.y - 92);
-                bondGain(SPECIES[p.sp].id, 3);
+                bondGain(SPECIES[p.sp].id, TREAT_PREF[psp.trait] === tkIdx ? 4 : 3); // a favorite earns extra love
                 // the snack's magic applies no matter who snatched it
-                if (tk.id === "chili") { hyperUntil = now + 60000; bangs.push({ x: p.x + 34, y: p.y - 96, life: 1.6, t: "HOT!" }); }
-                else if (tk.id === "coffee") { noSleepUntil = Date.now() + 300000; bangs.push({ x: p.x + 34, y: p.y - 96, life: 1.6, t: "WIRED" }); }
+                if (tk.id === "chili") { hyperUntil = now + 60000; p.faceId = "gasp"; p.faceT = now + 1000; }
+                else if (tk.id === "coffee") { noSleepUntil = Date.now() + 300000; p.faceId = "excited"; p.faceT = now + 1400; }
                 else if (tk.id === "cake") p.squashV += 8;
-                p.faceId = "munch";
-                p.faceT = now + 1500;
+                // plain snacks get the munch face — spicy/wired reactions
+                // already claimed it (this overwrote them until now)
+                if (p.faceT <= now) { p.faceId = "munch"; p.faceT = now + 1500; }
+                p.stuffUntil = now + 2900; // puffed-cheek afterglow once the munch settles
                 p.squashV += 5;
-                bangs.push({ x: p.x, y: p.y - 72, life: 1.4, t: "YUM" });
+                if (TREAT_PREF[psp.trait] === tkIdx) hearts.push({ x: p.x - 6, y: p.y - 62, life: 1.2 });
                 if (Math.random() < 0.6) hearts.push({ x: p.x + 8, y: p.y - 58, life: 0.9 });
                 sfx.munch();
+                // sharing the bite: a close bonded buddy leaning in gets a
+                // taste too — cheeks puff in sympathy
+                const sharer = pals.find((o) => o !== p && o !== palHeld && !o.fly &&
+                  !(now < (o.restUntil || 0)) && !(now < (o.hideUntil || 0)) &&
+                  Math.abs(o.x - p.x) < 90 && Math.abs(o.y - p.y) < 30 && pairBondLvl(p, o) >= 2);
+                if (sharer && Math.random() < 0.7) {
+                  sharer.faceId = Math.random() < 0.5 ? "stuffed" : "content"; sharer.faceT = now + 1400;
+                  sharer.squashV += 3;
+                  hearts.push({ x: (p.x + sharer.x) / 2, y: p.y - 56, life: 1 });
+                }
                 dirty = true;
               } else if (now - (pg.at || 0) < 8000) {
                 // someone beat them to it — only react to a race they
@@ -9774,12 +11897,12 @@ function frameBody(now) {
                 if (Math.random() < 0.4) {
                   p.faceId = "happy"; p.faceT = now + 1000;
                   p.fly = true; p.vy = -150; p.vx = (Math.random() - 0.5) * 70; p.hopT = now;
-                  bangs.push({ x: p.x, y: p.y - 64, life: 0.9, t: "♪" });
                 } else {
-                  p.faceId = "pout";
+                  // sulky, genuinely crestfallen — or a competitive
+                  // side-eye at whoever just beat them to it
+                  p.faceId = Math.random() < 0.5 ? "pout" : ((ppsy.startle || 1) >= 1.3 ? "jealous" : "sad");
                   p.faceT = now + 1100;
                   p.squashV += 1.5;
-                  bangs.push({ x: p.x, y: p.y - 64, life: 0.9, t: "?" });
                 }
               }
             } else if (pg.kind === "bowl" && bowl && Math.abs(bowl.x - p.x) < 50) {
@@ -9788,12 +11911,13 @@ function frameBody(now) {
               if ((bowl.fill ?? 2) <= 0) {
                 // empty bowl — the pal just tilts its head and moves on
                 p.lookUntil = now + 1200;
-                bangs.push({ x: p.x, y: p.y - 64, life: 0.9, t: "?" });
+                p.faceId = "meh"; p.faceT = now + 1100;
               } else {
                 bowl.fill = Math.max(0, (bowl.fill ?? 2) - 1);
                 dirty = true;
                 p.lookUntil = now + 2400;
                 p.faceId = "munch"; p.faceT = now + 2200;
+                p.stuffUntil = now + 3400;
                 for (let k = 0; k < 4; k++) fx.push({ x: bowl.x + (Math.random() - 0.5) * 14, y: bowl.y - 10, vx: (Math.random() - 0.5) * 40, vy: -30 - Math.random() * 40, life: 0.5, c: "#d9a05b" });
                 if (Math.random() < 0.4) hearts.push({ x: p.x, y: p.y - 60, life: 1 });
               }
@@ -9804,9 +11928,13 @@ function frameBody(now) {
               const q = pg.mate;
               if (q && pals.includes(q) && now < (q.restUntil || 0) && Math.abs(q.x - p.x) < 70 && Math.abs(q.y - p.y) < 24) {
                 p.restUntil = Math.min(q.restUntil, now + 5000 + Math.random() * 4000);
-                p.restCd = p.restUntil + 25000 * (ppsy.sleep || 1);
+                p.restCd = p.restUntil + 25000 * (ppsy.sleep || 1) * (isBaby(psp) ? 0.45 : 1) * (nightMode ? 0.55 : 1);
                 p.walkT = null;
                 p.squashV += 3;
+                p.faceId = "yawn"; p.faceT = now + 1000;
+                p.napGrace = now + 1200;
+                // shoulder-lean: bonded nappers share the smile mid-dream
+                if (pairBondLvl(p, q) >= 2) { p.dreamT = q.dreamT = now + 2500; }
                 if (Math.random() < 0.5) hearts.push({ x: (p.x + q.x) / 2, y: p.y - 58, life: 1 });
               }
             } else if (pg.kind === "petCuddle") {
@@ -9815,9 +11943,11 @@ function frameBody(now) {
               // errand if the player already woke or picked the pet up.
               if (petDozing && Math.abs(petY - p.y) < 24 && Math.abs(petX - p.x) < 96) {
                 p.restUntil = now + 7000 + Math.random() * 5000;
-                p.restCd = p.restUntil + 25000 * (ppsy.sleep || 1);
+                p.restCd = p.restUntil + 25000 * (ppsy.sleep || 1) * (isBaby(psp) ? 0.45 : 1) * (nightMode ? 0.55 : 1);
                 p.walkT = null;
                 p.squashV += 3;
+                p.faceId = "yawn"; p.faceT = now + 1000;
+                p.napGrace = now + 1200;
                 if (Math.random() < 0.4) hearts.push({ x: (p.x + petX) / 2, y: p.y - 58, life: 1 });
               }
             } else if (pg.kind === "cushion" && cushion && Math.abs(cushion.x - p.x) < 50) {
@@ -9826,12 +11956,16 @@ function frameBody(now) {
                 p.restCd = now + 18000;
                 p.lookUntil = now + 900;
                 p.squashV += 2;
-                bangs.push({ x: p.x, y: p.y - 62, life: 0.9, t: "?" });
+                p.faceId = "hmph"; p.faceT = now + 1200; p.faceWhy = "SPOT TAKEN"; p.faceWhyId = "hmph";
               } else {
               p.x += (cushion.x - p.x) * 0.6;
               p.restUntil = now + 8000 + Math.random() * 6000;
-              p.restCd = p.restUntil + 25000 * (ppsy.sleep || 1); // lazy pals re-nap sooner, hyper ones hold off
+              p.restCd = p.restUntil + 25000 * (ppsy.sleep || 1) * (isBaby(psp) ? 0.45 : 1) * (nightMode ? 0.55 : 1); // lazy pals re-nap sooner, babies sooner still, everyone at night
               p.squashV += 3;
+              // the tuck-in yawn: a beat of yawn face before the eyes
+              // actually shut — sells falling asleep, not snapping off
+              p.faceId = "yawn"; p.faceT = now + 1000;
+              p.napGrace = now + 1200;
               for (let k = 0; k < 4; k++) fx.push({ x: cushion.x + (k - 1.5) * 8, y: cushion.y - 4, vx: (k - 1.5) * 16, vy: -12, life: 0.4, c: "#f0d0e0" });
               }
             } else if (pg.kind === "box" && box && Math.abs(box.x - p.x) < 50) {
@@ -9840,18 +11974,33 @@ function frameBody(now) {
               p.boxCd = now + 40000 + Math.random() * 25000;
               p.hideUntil = now + 3200 + Math.random() * 3200;
               p.squashV += 3;
+              // joining a roommate's box is a shared secret — slip in
+              // wearing a little smirk
+              if (pals.some((o) => o !== p && now < (o.hideUntil || 0) && Math.abs(o.x - box.x) < 34)) {
+                p.faceId = "mischief"; p.faceT = now + 1800;
+              }
               for (let k = 0; k < 5; k++) fx.push({ x: box.x + (k - 2) * 6, y: box.y - 12, vx: (k - 2) * 13, vy: -26 - Math.random() * 18, life: 0.5, c: "#d8c49a" });
-              bangs.push({ x: box.x, y: box.y - 38, life: 0.9, t: "?" });
+              // hide-and-seek: a free pal nearby sees the vanishing act
+              // and plays seeker — it camps the box until the hider
+              // pops back out, then it's "found you!"
+              const sk = Math.random() < 0.45 && pals.find((o) => o !== p && o !== palHeld && !o.fly && !o.stackOn &&
+                !o.tag && !o.scene && !o.group && !o.chatMate && !o.seekFor &&
+                now > (o.restUntil || 0) && !(now < (o.hideUntil || 0)) && !(now < (o.settleUntil || 0)) &&
+                Math.abs(o.y - p.y) < 40 && Math.abs(o.x - p.x) < 460);
+              if (sk) {
+                sk.seekFor = p; sk.seekUntil = now + 12000;
+                sk.walkT = Math.max(plo, Math.min(phi, box.x + (sk.x < box.x ? -34 : 34)));
+                if (now > (sk.faceT || 0)) { sk.faceId = "curious"; sk.faceT = now + 900; }
+              }
             } else if (pg.kind === "plant" && plant && Math.abs(plant.x - p.x) < 50) {
               // sniff sniff — a happy nuzzle or a pollen sneeze
               p.plantCd = now + 38000 + Math.random() * 20000;
               p.lookDir = Math.sign(plant.x - p.x) || 1;
               p.lookUntil = now + 1600;
               if (Math.random() < 0.25) {
-                p.faceId = "shock"; p.faceT = now + 800;
+                p.faceId = "sneeze"; p.faceT = now + 900; // pollen got in — ACHOO
                 p.squashV += 5;
                 for (let k = 0; k < 5; k++) fx.push({ x: plant.x + (Math.random() - 0.5) * 14, y: plant.y - 26, vx: (Math.random() - 0.5) * 80, vy: -40 - Math.random() * 40, life: 0.6, c: "#9adf8a" });
-                bangs.push({ x: p.x, y: p.y - 62, life: 0.9, t: "!" });
               } else {
                 p.faceId = "content"; p.faceT = now + 1800;
                 hearts.push({ x: p.x, y: p.y - 58, life: 1 });
@@ -9862,7 +12011,6 @@ function frameBody(now) {
                   plant.steamUntil = Date.now() + 9000;
                   for (let k = 0; k < 6; k++) fx.push({ x: plant.x + (Math.random() - 0.5) * 14, y: plant.y - 34 - k * 5, vx: (Math.random() - 0.5) * 12, vy: 26 + Math.random() * 22, life: 0.5, c: "#8fd4f0" });
                   for (let k = 0; k < 4; k++) fx.push({ x: plant.x + (Math.random() - 0.5) * 16, y: plant.y - 8, vx: (Math.random() - 0.5) * 20, vy: -18 - Math.random() * 14, life: 0.5, c: "#9adf8a" });
-                  bangs.push({ x: plant.x, y: plant.y - 46, life: 1, t: "♪" });
                   bondGain(psp.id, 2);
                 }
               }
@@ -9879,11 +12027,10 @@ function frameBody(now) {
                 for (let k = 0; k < 5; k++) fx.push({ x: music.x + (Math.random() - 0.5) * 16, y: music.y - 22, vx: (Math.random() - 0.5) * 40, vy: -30 - Math.random() * 20, life: 0.3, c: "#8fd4f0" });
                 bondGain(psp.id, 2);
               }
-              for (let k = 0; k < 4; k++) bangs.push({ x: music.x - 12 + k * 10, y: music.y - 28 - k * 7, life: 1 + k * 0.15, t: "♪" });
               // quiet hours still get the tune, just not the group bounce
               if (!palQuiet) for (const q of pals) {
                 if (Math.abs(q.x - music.x) < 300 && Math.abs(q.y - music.y) < 40 && !q.fly && q !== palHeld && now > (q.restUntil || 0) && !(now < (q.hideUntil || 0))) {
-                  q.fly = true; q.vy = -160 - Math.random() * 60; q.vx = (Math.random() - 0.5) * 70; q.hopT = now;
+                  if (!(now < (q.settleUntil || 0))) { q.fly = true; q.vy = -160 - Math.random() * 60; q.vx = (Math.random() - 0.5) * 70; q.hopT = now; }
                   q.faceId = "happy"; q.faceT = now + 900;
                 }
               }
@@ -9895,18 +12042,15 @@ function frameBody(now) {
               if (ppsy.flee) {
                 p.faceId = "shock"; p.faceT = now + 900;
                 p.fly = true; p.vy = -160; p.vx = -p.lookDir * 150; p.hopT = now;
-                bangs.push({ x: p.x, y: p.y - 62, life: 1, t: "!" });
               } else {
                 p.lookUntil = now + 1900;
                 p.faceId = "smug"; p.faceT = now + 1700;
                 for (let k = 0; k < 6; k++) fx.push({ x: mirror.x + (Math.random() - 0.5) * 16, y: mirror.y - 32 + Math.random() * 22, vx: (Math.random() - 0.5) * 26, vy: -16 - Math.random() * 20, life: 0.5, c: "#ffffff" });
-                bangs.push({ x: p.x, y: p.y - 62, life: 1.1, t: "✦" });
                 if (Math.random() < 0.3) hearts.push({ x: p.x, y: p.y - 58, life: 1 });
                 // a glint pal can't resist polishing what it sees — the
                 // mirror ends up shinier than it found it
                 if (psp.trait === "glint") {
                   for (let k = 0; k < 6; k++) fx.push({ x: mirror.x + (Math.random() - 0.5) * 18, y: mirror.y - 36 + Math.random() * 26, vx: (Math.random() - 0.5) * 34, vy: -14 - Math.random() * 24, life: 0.6, c: "#e8f0ff", spr: "star5" });
-                  bangs.push({ x: mirror.x, y: mirror.y - 46, life: 1, t: "✦" });
                   bondGain(psp.id, 2);
                 }
               }
@@ -9918,7 +12062,6 @@ function frameBody(now) {
               p.faceId = "happy"; p.faceT = now + 1100;
               p.squashV += 4;
               matPoof = now + 700;
-              bangs.push({ x: mat.x, y: mat.y - 32, life: 0.9, t: "♪" });
               sfx.boing();
             } else if (pg.kind === "jar" && jar && Math.abs(jar.x - p.x) < 50) {
               // cookie raid — a nibble if stocked, else a confused stare
@@ -9926,7 +12069,7 @@ function frameBody(now) {
               p.lookDir = Math.sign(jar.x - p.x) || 1;
               if ((jar.fill ?? 2) <= 0) {
                 p.lookUntil = now + 1100;
-                bangs.push({ x: p.x, y: p.y - 62, life: 0.9, t: "?" });
+                p.faceId = "meh"; p.faceT = now + 1100;
               } else {
                 jar.fill--;
                 jar.raidUntil = Date.now() + 1500;
@@ -9944,7 +12087,6 @@ function frameBody(now) {
               p.carry = { n: 2, since: now };
               p.squashV += 3;
               p.faceId = "happy"; p.faceT = now + 900;
-              bangs.push({ x: p.x, y: p.y - 66, life: 0.9, t: "✦" });
               sfx.pop();
               if (!petHome && Math.abs(petY - p.y) < 40) {
                 p.propGoal = { kind: "deliver", at: now };
@@ -9968,7 +12110,7 @@ function frameBody(now) {
                 p.squashV += 4;
                 lookDir = Math.sign(p.x - petX) || 1;
                 lookUntil = now + 1300;
-                bangs.push({ x: p.x, y: p.y - 70, life: 1.3, t: "+2!" });
+                embarUntil = now + 2200; // a gift it never asked for — the blush says thanks
                 hearts.push({ x: (p.x + petX) / 2, y: p.y - 62, life: 1.1 });
                 hearts.push({ x: petX, y: petY - 84, life: 1.1 });
                 sfx.heart();
@@ -9984,6 +12126,28 @@ function frameBody(now) {
               p.squashV += 2;
               p.lookDir = Math.sign(petX - p.x) || 1;
               p.lookUntil = now + 900;
+            } else if (pg.kind === "boop") {
+              // nose bonk: face each other, squash in unison, twin hearts —
+              // the greeting only old friends get. if the mate wandered
+              // off the boop just fizzles into a look around
+              const q = pg.mate;
+              if (q && pals.includes(q) && q !== palHeld && !q.fly && !q.tag && !q.scene &&
+                  now > (q.restUntil || 0) && Math.abs(q.y - p.y) < 24 && Math.abs(q.x - p.x) < 60) {
+                p.lookDir = Math.sign(q.x - p.x) || 1; q.lookDir = -p.lookDir;
+                p.lookUntil = q.lookUntil = now + 1400;
+                p.faceId = q.faceId = Math.random() < 0.4 ? "love" : "laugh";
+                p.faceT = q.faceT = now + 1400;
+                p.squashV += 4; q.squashV += 4;
+                hearts.push({ x: (p.x + q.x) / 2, y: p.y - 60, life: 1.2 });
+                hearts.push({ x: p.x, y: p.y - 56, life: 0.9 });
+                pairBondGain(p, q, 1);
+                q.nextT = Math.max(q.nextT || 0, now + 1400);
+                sfx.heart();
+              } else {
+                p.lookDir = Math.random() < 0.5 ? -1 : 1;
+                p.lookUntil = now + 700;
+                p.faceId = "meh"; p.faceT = now + 900;
+              }
             }
           }
         }
@@ -9991,7 +12155,8 @@ function frameBody(now) {
           p.lookDir = Math.sign(dx);
           p.lookUntil = now + 250;
           const pmv = psp.mv;
-          if (pmv === "hop") {           // frogs crouch, then take the trip in one leap
+          if (pmv === "hop" && palQuiet) p.hopWind = 0; // stale windup dies
+          if (pmv === "hop" && !palQuiet) {           // frogs crouch, then take the trip in one leap
             if (!p.hopWind) { p.hopWind = now + 110; p.squashV += 4; }
             else if (now >= p.hopWind) {
               p.hopWind = 0;
@@ -10010,12 +12175,35 @@ function frameBody(now) {
             if ((now + i * 211) % 700 < 260) p.x += Math.sign(dx) * 150 * (ppsy.spd || 1) * dt;
           } else {
             // ramp into the stroll — instant full speed reads as a slide
-            p.walkV = Math.min((p.walkV || 0) + dt * 300, 52 * (ppsy.spd || 1));
+            p.walkV = Math.min((p.walkV || 0) + dt * 300, 52 * (ppsy.spd || 1) * (isBaby(psp) ? 0.75 : 1));
+            // fall in step: a close friend walking the same way nearby
+            // sets the tempo — bonded pairs stroll side by side
+            const pmate = pals.find((q) => q !== p && q !== palHeld && !q.fly &&
+              q.walkT !== null && (q.walkV || 0) > 8 &&
+              Math.abs(q.y - p.y) < 20 && Math.abs(q.x - p.x) < 90 &&
+              pairBondLvl(p, q) >= 2 && Math.sign(q.walkT - q.x) === Math.sign(dx));
+            if (pmate) p.walkV = pmate.walkV;
+            // tiptoes: nobody stomps past a sleeper — a walker in earshot
+            // of a napper softens its gait to a creep
+            if (pals.some((q2) => q2 !== p && now < (q2.restUntil || 0) &&
+                Math.abs(q2.y - p.y) < 24 && Math.abs(q2.x - p.x) < 70)) p.walkV *= 0.5;
+            // feeling it: a FRESH emotional face earns one short beat —
+            // the pal visibly hesitates to react, then walks on; holding
+            // the slow for the whole face read as a trudge, not a pause
+            if (now < p.faceT && FACE_EMO[p.faceId] && now - (p.faceSetAt || 0) < 500) p.walkV *= 0.3;
             p.x += Math.sign(dx) * p.walkV * dt;
-            // distance-driven gait: each footfall dips the blob a touch
+            // distance-driven gait: each footfall dips the blob a touch —
+            // babies toddle, so each step wobbles harder and one in a blue
+            // moon the little one actually trips over its own nothing
             p.gait = (p.gait || 0) + p.walkV * dt * 0.14;
             const pgs = Math.floor(p.gait / Math.PI);
-            if (pgs !== (p.gaitStep || 0)) { p.gaitStep = pgs; p.squashV += 0.32; }
+            if (pgs !== (p.gaitStep || 0)) {
+              p.gaitStep = pgs;
+              p.squashV += isBaby(psp) ? 0.55 : 0.32;
+              if (isBaby(psp) && Math.random() < 0.03 && now > p.faceT) {
+                p.faceId = "gasp"; p.faceT = now + 550; p.squashV += 2; // the wobble
+              }
+            }
           }
         }
       } else if (now > p.nextT && now > (p.restUntil || 0) && !(now < (p.hideUntil || 0)) && !(now < (p.chatUntil || 0)) && !(now < (p.settleUntil || 0))) {
@@ -10023,7 +12211,8 @@ function frameBody(now) {
         if (treatFly && !p.fly && Math.abs(treatFly.x - p.x) < 460) {
           p.lookDir = Math.sign(treatFly.x - p.x) || 1;
           p.lookUntil = now + 700;
-          if (Math.random() < 0.4) { p.faceId = "happy"; p.faceT = now + 800; p.squashV += 1; }
+          const fav = TREAT_PREF[psp.trait] === (treatFly.kind || 0);
+          if (fav || Math.random() < 0.4) { p.faceId = fav || Math.random() < 0.35 ? "drool" : "happy"; p.faceT = now + 800; p.squashV += 1; }
         }
         // treat FOMO: a landed snack draws a crowd — every mobile pal races
         // for it (propGoal "treat") and whoever arrives first gets the munch,
@@ -10039,6 +12228,7 @@ function frameBody(now) {
             p.walkT = Math.max(plo, Math.min(phi, treat.x + (p.x < treat.x ? -12 : 12)));
             p.propGoal = { kind: "treat", at: now };
           }
+          if (now > p.faceT) { p.faceId = (TREAT_PREF[psp.trait] === (treat.kind || 0) || Math.random() < 0.3) ? "drool" : "excited"; p.faceT = now + 1000; }
           p.nextT = now + 700;
         }
         // can't join the race (too far, too high, busy) — still react:
@@ -10046,7 +12236,15 @@ function frameBody(now) {
         else if (treat && !p.fly && !p.stackOn) {
           p.lookDir = Math.sign(treat.x - p.x) || 1;
           p.lookUntil = now + 1200;
-          if (Math.random() < 0.5) { p.faceId = "happy"; p.faceT = now + 900; }
+          if (Math.random() < 0.5) {
+            // locked out of the race — the retiring ones beg from afar,
+            // and missing a FAVORITE snack begs the hardest
+            const troll = Math.random();
+            p.faceId = ((PSYCH[(SPECIES[p.sp] || {}).ps] || {}).follow <= 0.8 && troll < 0.45) ||
+              TREAT_PREF[psp.trait] === (treat.kind || 0) ? "plead"
+              : troll < 0.3 ? "drool" : "happy";
+            p.faceT = now + 900;
+          }
         }
         // dance-along: the main pet's groove is contagious — pals on the
         // same platform bounce in time instead of their own routine
@@ -10055,9 +12253,8 @@ function frameBody(now) {
           p.vy = -180 - Math.random() * 70;
           p.vx = (Math.random() - 0.5) * 80;
           p.hopT = now;
-          p.faceId = "happy";
+          p.faceId = Math.random() < 0.5 ? "excited" : "happy";
           p.faceT = now + 800;
-          if (Math.random() < 0.4) bangs.push({ x: p.x, y: p.y - 66, life: 0.8, t: "♪" });
           p.nextT = now + 1100;
         }
         else {
@@ -10080,7 +12277,10 @@ function frameBody(now) {
           p.comfortCd = now + 60000;
           p.lookDir = Math.sign(petX - p.x) || 1;
           p.lookUntil = now + 1400;
-          p.faceId = "love"; p.faceT = now + 1600;
+          // timid slimes comfort with a creased, worried lean-in instead
+          // of full heart-eyes — same hug, different face
+          p.faceId = ppsy.flee ? "worry" : "love"; p.faceT = now + 1600;
+          p.faceWhy = "COMFORT"; p.faceWhyId = p.faceId;
           p.fly = true; p.vy = -140; p.vx = Math.sign(petX - p.x) * 90; p.hopT = now;
           hearts.push({ x: p.x, y: p.y - 60, life: 1 });
           hearts.push({ x: petX, y: petY - 56, life: 1.1 });
@@ -10099,7 +12299,7 @@ function frameBody(now) {
             jelly = addSavedInt(jelly, 1);
             dirty = true;
             p.carry = null;
-            bangs.push({ x: p.x, y: p.y - 64, life: 0.9, t: "✦" });
+            p.faceId = "smug"; p.faceT = now + 900; // pockets half — zero shame
           }
         }
         // fetch errand: a bonded pal (BUDDY+) occasionally spots a lost
@@ -10136,6 +12336,12 @@ function frameBody(now) {
           p.walkT = Math.max(plo, Math.min(phi, petX + side * gap));
           p.propGoal = { kind: "petCuddle", at: now };
         }
+        // night watch: while the pet dozes, a pal it loves sometimes
+        // parks beside it and just keeps company — not a nap, a vigil
+        else if (petNapper && r < 0.26 && now > (p.settleCd || 0) && bondLvl(psp.id) >= 2) {
+          p.walkT = Math.max(plo, Math.min(phi, petX + (p.x < petX ? -1 : 1) * (86 + Math.random() * 40)));
+          p.propGoal = { kind: "settle", at: now };
+        }
         // settle: walk to a spot beside the pet, then just be there — a
         // parked, content pal is the whole point, not another errand
         else if (r < 0.27 && !petHome && Math.abs(petY - p.y) < 24 &&
@@ -10148,8 +12354,8 @@ function frameBody(now) {
         // the stillness is the cute part. they share a micro-bounce every
         // few beats while it lasts
         else if (r < 0.33 && pals.length > 1 && now > (p.settleCd || 0)) {
-          const buddy = pals.find((q) => q !== p && q !== palHeld && !q.fly && !q.stackOn &&
-            q.walkT === null && !q.propGoal && !q.tag && !q.chatMate &&
+          const buddy = pals.find((q) => q !== p && q !== palHeld && !q.fly && !q.stackOn && !q.scene &&
+            q.walkT === null && !q.propGoal && !q.tag && !q.chatMate && !q.seekFor && !q.rehideUntil &&
             !(now < (q.restUntil || 0)) && !(now < (q.hideUntil || 0)) && !(now < (q.settleUntil || 0)) &&
             Math.abs(q.y - p.y) < 20 && Math.abs(q.x - p.x) > 30 && Math.abs(q.x - p.x) < 110);
           if (buddy) {
@@ -10157,6 +12363,9 @@ function frameBody(now) {
             p.settleUntil = buddy.settleUntil = sitEnd;
             p.sitMate = buddy; buddy.sitMate = p;
             p.settleCd = buddy.settleCd = sitEnd + 30000;
+            p.follow = buddy.follow = null; // parked pals drop their trains too
+            p.vx = buddy.vx = 0; // land the sit — no leftover shove momentum
+            p.accAct = buddy.accAct = null; // a mid-trick pal doesn't finish the routine seated
             const dir = Math.random() < 0.5 ? -1 : 1;
             p.lookDir = buddy.lookDir = dir;
             p.lookUntil = buddy.lookUntil = now + 1200;
@@ -10164,16 +12373,57 @@ function frameBody(now) {
             p.faceT = buddy.faceT = now + 1600;
           }
         }
-        else if (r < 0.5) p.walkT = Math.max(plo, Math.min(phi, p.x + (Math.random() - 0.5) * 220));
-        // idle hop: pure noise-fun — skipped while the user is hands-on
-        else if (r < 0.6 && !palQuiet) { p.fly = true; p.vy = -230 * animProf(p.sp).hop; p.vx = (Math.random() - 0.5) * 140; p.hopT = now; }
+        // bestie boop: inseparable pals (bond 6+) occasionally waddle up
+        // and bonk noses — the hello only old friends get
+        else if (r < 0.36 && pals.length > 1 && now > (p.boopCd || 0)) {
+          const bff = pals.find((q) => q !== p && q !== palHeld && !q.fly && !q.stackOn && !q.scene &&
+            !q.tag && !q.chatMate && !q.group && q.walkT === null && !q.propGoal &&
+            now > (q.restUntil || 0) && now > (q.hideUntil || 0) && now > (q.settleUntil || 0) &&
+            Math.abs(q.y - p.y) < 20 && Math.abs(q.x - p.x) > 30 && Math.abs(q.x - p.x) < 200 &&
+            pairBondLvl(p, q) >= 6);
+          if (bff) {
+            p.boopCd = now + 40000 + Math.random() * 30000;
+            p.walkT = Math.max(plo, Math.min(phi, bff.x + (p.x < bff.x ? -34 : 34)));
+            p.propGoal = { kind: "boop", mate: bff };
+          }
+          // no bestie around — the band still owes a decision, so it
+          // folds back into the plain stroll it replaced
+          else p.walkT = Math.max(plo, Math.min(phi, p.x + (Math.random() - 0.5) * 220));
+        }
+        else if (r < 0.44) p.walkT = Math.max(plo, Math.min(phi, p.x + (Math.random() - 0.5) * 220));
+        // solo act: a little self-play routine — stretch, roll over, sniff
+        // the floor, daydream, groom, melt into a puddle, dart about. the
+        // pick follows personality so each pal idles in its own voice
+        else if (r < 0.5 && !p.act && now > (p.actCd || 0)) {
+          const loud = !palQuiet;
+          const solo = ppsy.flee ? ["sniff", "peek", "groom"]
+            : (ppsy.pace || 1) <= 0.7 ? (loud ? ["dart", "roll", "stretch"] : ["stretch", "groom"])
+            : (ppsy.pace || 1) >= 1.6 ? ["puddle", "dream", "stretch"]
+            : (ppsy.follow || 1) >= 1.4 ? (loud ? ["stretch", "dart", "groom"] : ["stretch", "groom"])
+            : ["stretch", "sniff", "groom", "dream"];
+          const ak = (morningMode && Math.random() < 0.5) ? "stretch" : solo[(Math.random() * solo.length) | 0];
+          p.actCd = now + 16000 + Math.random() * 14000;
+          if (ak === "roll") {
+            p.fly = true; p.vy = -170 * animProf(p.sp).hop;
+            p.vx = (Math.random() < 0.5 ? -1 : 1) * 70;
+            p.act = { k: ak, t0: now, until: now + 1500, dir: Math.sign(p.vx) || 1 };
+          } else if (ak === "dart") p.act = { k: ak, t0: now, until: now + 2600, dir: Math.random() < 0.5 ? -1 : 1 };
+          else if (ak === "dream") p.act = { k: ak, t0: now, until: now + 2600 };
+          else if (ak === "peek") p.act = { k: ak, t0: now, until: now + 1800 };
+          else p.act = { k: ak, t0: now, until: now + 1300 };
+          p.nextT = now + (p.act.until - now) + 800;
+        }
+        // idle hop: pure noise-fun — skipped while the user is hands-on,
+        // and hushed while the pet is dozing (shh — it's sleeping)
+        else if (r < 0.6 && !palQuiet && !petDozing) { p.fly = true; p.vy = -230 * animProf(p.sp).hop; p.vx = (Math.random() - 0.5) * 140; p.hopT = now; }
         else if (r < 0.68 && bowl && p.plat && Math.abs(bowl.y - p.plat.y) < 16 &&
                  now > (p.bowlCd || 0) && Math.abs(bowl.x - p.x) > 60) {
           // snack run: same-platform bowl draws the occasional visit
           p.walkT = Math.max(plo, Math.min(phi, bowl.x + (p.x < bowl.x ? -16 : 16)));
           p.propGoal = { kind: "bowl" };
+          if (Math.random() < 0.4) { p.faceId = "drool"; p.faceT = now + 1300; }
         }
-        else if (r < 0.72 && cushion && p.plat && Math.abs(cushion.y - p.plat.y) < 16 &&
+        else if (r < 0.72 + (nightMode ? 0.05 : 0) && cushion && p.plat && Math.abs(cushion.y - p.plat.y) < 16 &&
                  now > (p.restCd || 0) && Math.abs(cushion.x - p.x) > 46 && !cushionBusy(p, now)) {
           // nap spot: pals claim the cushion for a doze now and then
           p.walkT = Math.max(plo, Math.min(phi, cushion.x));
@@ -10183,7 +12433,8 @@ function frameBody(now) {
           // whimsy run: duck into the box, sniff the sprout, wind the tune,
           // preen at the mirror, bounce the pad, raid the cookie jar
           const w = Math.random();
-          if (w < 0.2 && box && Math.abs(box.y - p.plat.y) < 16 && now > (p.boxCd || 0) && Math.abs(box.x - p.x) > 50) {
+          if ((w < 0.2 || (now < drizzleUntil && w < 0.4)) && box && Math.abs(box.y - p.plat.y) < 16 && now > (p.boxCd || 0) && Math.abs(box.x - p.x) > 50) {
+            // pals duck inside when it rains — the box is shelter first
             p.walkT = Math.max(plo, Math.min(phi, box.x + (p.x < box.x ? -12 : 12)));
             p.propGoal = { kind: "box" };
           } else if (w < 0.4 && plant && Math.abs(plant.y - p.plat.y) < 16 && now > (p.plantCd || 0) && Math.abs(plant.x - p.x) > 44) {
@@ -10201,6 +12452,21 @@ function frameBody(now) {
           } else if (jar && Math.abs(jar.y - p.plat.y) < 16 && now > (p.jarCd || 0) && Math.abs(jar.x - p.x) > 44) {
             p.walkT = Math.max(plo, Math.min(phi, jar.x + (p.x < jar.x ? -16 : 16)));
             p.propGoal = { kind: "jar" };
+          }
+          // prop date: a close friend within earshot tags along to the
+          // same whimsy — they arrive a beat apart and do it side by side
+          if (p.propGoal && Math.random() < 0.5) {
+            const tgt = p.walkT !== null && { box, plant, music, mirror, mat, jar }[p.propGoal.kind];
+            const datee = tgt && Math.abs(p.walkT - tgt.x) < 44 && pals.find((q) => q !== p && q !== palHeld && !q.fly && !q.stackOn &&
+              !q.propGoal && !q.tag && !q.chatMate && !q.scene && !q.group && q.walkT === null &&
+              now > (q.restUntil || 0) && now > (q.hideUntil || 0) && now > (q.settleUntil || 0) &&
+              pairBondLvl(p, q) >= 2 && Math.abs(q.y - p.y) < 20 && Math.abs(q.x - p.x) < 160);
+            if (datee) {
+              datee.walkT = Math.max(plo, Math.min(phi, tgt.x + (datee.x < tgt.x ? -30 : 30)));
+              datee.propGoal = { kind: p.propGoal.kind };
+              if (now > datee.faceT) { datee.faceId = "happy"; datee.faceT = now + 900; }
+              pairBondGain(p, datee, 1);
+            }
           }
         }
         else if (r < 0.8 && psp.trait === "web" && !palQuiet && curX > -9000 &&
@@ -10265,11 +12531,62 @@ function frameBody(now) {
             }
             if (!p.sigDid && e > 650) {
               p.sigDid = 1;
-              bangs.push({ x: p.x, y: p.y - 68, life: 0.9, t: fl.t });
-              p.faceId = "happy";
+              p.faceId = fl.f || "happy";
               p.faceT = now + 900;
               p.squashV += 3;
               sfx.pop();
+            }
+          }
+        }
+      }
+      // solo act playback: self-play picked at the last whim roll — every
+      // kind is a small loop of forces, faces and particles that resolves
+      // on its own; anything disruptive cancels it instantly
+      if (p.act) {
+        const ae = now - p.act.t0, pk = p.act.k;
+        if (p === palHeld || nappingP || p.tag || p.stackOn || p.chatMate || p.scene || p.group || now > p.act.until ||
+            (pk === "roll" && !p.fly && ae > 300) || (pk !== "roll" && p.fly)) {
+          p.act = null;
+        } else {
+          p.nextT = Math.max(p.nextT, now + 400); // no fresh whims mid-act
+          if (pk !== "dart") p.walkT = null;
+          if (pk === "stretch") {
+            if (ae < 420) p.squashV -= dt * 26; // slow tall pull, spring snaps back
+            else if (!p.act.did) { p.act.did = 1; p.faceId = "content"; p.faceT = now + 700; }
+          } else if (pk === "sniff") {
+            p.lookUntil = now + 220;
+            if (Math.random() < dt * 9) fx.push({ x: p.x + p.lookDir * 14, y: p.y - 4, vx: p.lookDir * 8, vy: -6, life: 0.4, c: "#cfc4ae" });
+            if (!p.act.did && ae > 800) {
+              p.act.did = 1;
+              if (Math.random() < 0.18) { p.faceId = "sneeze"; p.faceT = now + 850; p.squashV += 4; } // sniffed up something tickly
+              else if (Math.random() < 0.5) { p.faceId = "curious"; p.faceT = now + 900; }
+            }
+          } else if (pk === "dream") {
+            if (now > p.faceT) { p.faceId = Math.random() < 0.6 ? "doze" : "content"; p.faceT = now + 900; }
+            if (ae > (p.act.n || 0)) {
+              p.act.n = ae + 800;
+              p.squashV += 0.8; // a dreaming twitch — ears would flick if it had any
+            }
+          } else if (pk === "groom") {
+            p.squashV += Math.sin(ae * 0.02) * 0.4;
+            if (now > p.faceT) { p.faceId = "blink"; p.faceT = now + 420; }
+          } else if (pk === "puddle") {
+            if (ae < 520 && p.squash < 4.5) p.squashV += dt * 30; // melt flat, spring re-forms it
+            else if (!p.act.did) { p.act.did = 1; if (now > p.faceT) { p.faceId = "content"; p.faceT = now + 700; } }
+          } else if (pk === "dart") {
+            p.act.ph = (p.act.ph || 0);
+            if (p.walkT === null || Math.abs(p.walkT - p.x) < 9) {
+              p.act.ph++;
+              if (p.act.ph > 3) p.act = null;
+              else { p.act.dir = -p.act.dir; p.walkT = Math.max(plo, Math.min(phi, p.x + p.act.dir * 46)); }
+            }
+            if (p.act && Math.random() < dt * 14) fx.push({ x: p.x - p.act.dir * 10, y: p.y - 4, vx: -p.act.dir * 20, vy: -8, life: 0.35, c: "#cfc4ae" });
+          } else if (pk === "peek") {
+            if (!p.act.n || now > p.act.n) {
+              p.act.n = now + 560;
+              p.lookDir = -(p.lookDir || 1);
+              p.lookUntil = now + 500;
+              p.squashV += 1.2;
             }
           }
         }
@@ -10293,7 +12610,7 @@ function frameBody(now) {
         p.watched = true;
       } else if (p.watched) {
         p.watched = false;
-        if (Math.random() < 0.3) bangs.push({ x: p.x, y: p.y - 64, life: 1, t: "♪" });
+        if (Math.random() < 0.3 && now > p.faceT) { p.faceId = "content"; p.faceT = now + 900; p.faceWhy = "THE SHOW"; p.faceWhyId = "content"; }
       }
       // copycat: quietly mirrors the pet's bright face a beat later —
       // zero particles, zero movement; you only notice if you look
@@ -10303,6 +12620,7 @@ function frameBody(now) {
           Math.abs(petX - p.x) < 300 && Math.abs(petY - p.y) < 40 &&
           Math.random() < dt * 0.7) {
         p.faceId = pfNow; p.faceT = now + 1400;
+        p.faceWhy = "GOOD VIBES"; p.faceWhyId = pfNow; // mirroring the pet's mood
         p.copyCd = now + 6000;
         p.lookDir = Math.sign(petX - p.x) || 1;
         p.lookUntil = now + 600;
@@ -10317,7 +12635,7 @@ function frameBody(now) {
           p.lookDir = Math.sign(curX - p.x) || 1;
           p.lookUntil = now + 1100;
           p.squashV += 1.5;
-          if (Math.random() < 0.3) { p.faceId = "happy"; p.faceT = now + 900; }
+          if (Math.random() < 0.3) { p.faceId = "happy"; p.faceT = now + 900; p.faceWhy = "NOTICED"; p.faceWhyId = "happy"; }
         }
       } else p.hovT = 0;
       // settle upkeep: parked pals pulse a soft content face now and then;
@@ -10328,21 +12646,33 @@ function frameBody(now) {
             : Math.abs(petX - p.x) > 300)) {
           p.settleUntil = 0; p.sitMate = null;
         } else {
-          if (Math.random() < dt * 0.3) { p.faceId = "content"; p.faceT = now + 1400; }
+          if (now > p.faceT && Math.random() < dt * 0.3) { p.faceId = "content"; p.faceT = now + 1400; p.faceWhy = p.sitMate ? "PAL TIME" : "FRESH AIR"; p.faceWhyId = "content"; }
           if (p.sitMate && Math.random() < dt * 0.3) { p.squashV += 1.2; p.sitMate.squashV += 1.2; }
+        }
+      }
+      // feel the tune: while the music box spins, pals in earshot tap
+      // along to the beat — a seated pal just sways (no displacement)
+      if (music && Date.now() < (music.spinUntil || 0) && !nappingP && p !== palHeld &&
+          Math.abs(p.x - music.x) < 300 && Math.abs(p.y - music.y) < 50) {
+        const beat = (now / 340) | 0;
+        if (beat !== p.bopBeat) {
+          p.bopBeat = beat;
+          p.squashV += 0.9;
+          if (now > p.faceT && Math.random() < 0.12) { p.faceId = "happy"; p.faceT = now + 700; p.faceWhy = "THE TUNE"; p.faceWhyId = "happy"; }
+          if (Math.random() < 0.3) fx.push({ x: p.x + (Math.random() - 0.5) * 20, y: p.y - 34, vx: (Math.random() - 0.5) * 12, vy: -16 - Math.random() * 12, life: 0.7, c: "#9fd8f0", spr: "mote" });
         }
       }
       // stack attempt: sidle up to a stackmate and climb on — the
       // Slime Rancher / Dragon Quest totem. riders can be mounts too,
       // so towers of 3 happen when MAX_PALS allows. rare, idle-only
-      if (p.walkT === null && !nappingP && !palQuiet && now > p.stackCd && Math.random() < dt * 0.55) {
+      if (p.walkT === null && !nappingP && !palQuiet && !p.scene && now > p.stackCd && Math.random() < dt * 0.55) {
         // chain walks are capped: a cyclic stack (A on B while B on A) would
         // otherwise spin this while-loop forever and hard-freeze the frame
         const depth = (q2) => { let d = 0; while (q2.stackOn && d <= pals.length) { q2 = q2.stackOn; d++; } return d; };
         // reject mounts that would close a loop: the target's own stack
         // chain must not already pass through p
         const chainHas = (q2, who) => { let s = 0; while (q2) { if (q2 === who) return true; if (++s > pals.length) return true; q2 = q2.stackOn; } return false; };
-        const q = pals.find((q2) => q2 !== p && q2 !== palHeld && !q2.fly &&
+        const q = pals.find((q2) => q2 !== p && q2 !== palHeld && !q2.fly && !q2.scene &&
           !isBaby(SPECIES[q2.sp]) && // babies are never mounts — a grown
           // slime clambering onto a newborn reads wrong, not cute
           now > (q2.restUntil || 0) && // no climbing onto a sleeping pal
@@ -10365,6 +12695,300 @@ function frameBody(now) {
       }
       }
     }
+    // ambient reactions: social faces that ride the frame, not the
+    // decision roll — a fresh contraption, a buddy riding the palm,
+    // a pal sailing past overhead. face + look only, never consumes
+    // nextT, so nothing here can starve an errand.
+    // CAUSALITY: every branch fires on an EPISODE, not a condition — a
+    // standing cause keys itself off its own timestamp (this rain spell,
+    // this rainbow arc, this new toy) so a pal reacts once per event;
+    // momentary causes get a cooldown. nothing below may re-fire just
+    // because the last face expired — that read as causeless churn
+    if (!p.fly && !p.stackOn && p !== palHeld && !nappingP && !p.scene &&
+        now > (p.faceT || 0) + 1400 && // a beat of neutral face between moods — churn read as causeless flicker
+        now > (p.restUntil || 0) && !(now < (p.hideUntil || 0)) && !(now < (p.chatUntil || 0))) {
+      const q2 = pals.find((o) => o !== p && o.fly && (Math.abs(o.vx) > 210 || o.vy < -290) &&
+        Math.abs(o.x - p.x) < 200 && Math.abs(o.y - p.y) < 60);
+      if (q2 && now > (p.flyRx || 0) && Math.random() < 0.3) {
+        p.flyRx = now + 10000; // one startled look per tumble, not a stare loop
+        p.faceId = "worry"; p.faceT = now + 800; p.faceWhy = "PAL FLYING"; p.faceWhyId = "worry";
+        p.lookDir = Math.sign(q2.x - p.x) || 1; p.lookUntil = now + 700;
+      } else if (propNewAt > (p.toyRx || 0) && Math.random() < 0.4) {
+        p.toyRx = propNewAt; // notices each new contraption once
+        p.faceId = "curious"; p.faceT = now + 1200; p.faceWhy = "NEW TOY"; p.faceWhyId = "curious";
+        p.lookDir = Math.sign(propNewX - p.x) || 1; p.lookUntil = now + 1100;
+      } else if (palHeld && Math.abs(palHeld.x - p.x) < 220 && Math.abs(palHeld.y - p.y) < 60 &&
+                 now > (p.palmRx || 0) && Math.random() < 0.4) {
+        p.palmRx = now + 14000;
+        p.faceId = "jealous"; p.faceT = now + 1000; p.faceWhy = "PALM PAL"; p.faceWhyId = "jealous";
+        p.lookDir = Math.sign(palHeld.x - p.x) || 1; p.lookUntil = now + 900;
+      } else if (!isBaby(psp) && now > (p.babyRx || 0) && Math.random() < 0.4) {
+        // babysitting instinct: a grown-up near a baby gives it a soft
+        // nuzzle — the little one flushes or beams back
+        const bb = pals.find((o) => o !== p && isBaby(SPECIES[o.sp]) && !o.fly && o !== palHeld &&
+          Math.abs(o.x - p.x) < 70 && Math.abs(o.y - p.y) < 24);
+        if (bb) {
+          p.babyRx = now + 16000;
+          p.faceId = "love"; p.faceT = now + 1200; p.faceWhy = "LITTLE ONE"; p.faceWhyId = "love";
+          p.lookDir = Math.sign(bb.x - p.x) || 1; p.lookUntil = now + 900;
+          bb.faceId = Math.random() < 0.5 ? "embar" : "happy"; bb.faceT = now + 1200;
+          hearts.push({ x: (p.x + bb.x) / 2, y: p.y - 56, life: 1 });
+          pairBondGain(p, bb, 1); // the nursery visits count as bonding too
+        }
+      } else if (!q2 && ball && !ballHeld && Math.hypot(ball.vx, ball.vy) > 320 &&
+                 Math.abs(ball.x - p.x) < 150 && Math.abs(ball.y - p.y) < 70 &&
+                 now > (p.ballRx || 0) && Math.random() < 0.4) {
+        p.ballRx = now + 9000;
+        // a ball zipping past — heads turn to track the play
+        p.faceId = "excited"; p.faceT = now + 800; p.faceWhy = "FAST BALL"; p.faceWhyId = "excited";
+        p.lookDir = Math.sign(ball.x - p.x) || 1; p.lookUntil = now + 900;
+      } else if (egg && p.eggRx !== egg && now - egg.t0 > 125000 && Math.abs(egg.x - p.x) < 300 &&
+                 Math.abs(egg.y - p.y) < 60 && Math.random() < 0.5) {
+        p.eggRx = egg; // one big gasp per hatch watch
+        // the egg is about to pop — everyone nearby crowds in to watch
+        p.faceId = Math.random() < 0.4 ? "star" : "curious"; p.faceT = now + 1100;
+        p.faceWhy = "EGG POPPING"; p.faceWhyId = p.faceId;
+        p.lookDir = Math.sign(egg.x - p.x) || 1; p.lookUntil = now + 1200;
+      } else if (now < rainbowUntil && p.rainRx !== rainbowUntil && Math.random() < 0.3) {
+        p.rainRx = rainbowUntil; // one awed look per arc
+        // rainbow watch — heads turn toward the arc in the corner
+        p.faceId = "star"; p.faceT = now + 1200; p.faceWhy = "RAINBOW"; p.faceWhyId = "star";
+        p.lookDir = Math.sign((winW - 46) - p.x) || 1; p.lookUntil = now + 1300;
+        // shoulder-to-shoulder at the rail: a pal watching beside a pal
+        // trades a little glance — the company is half the view
+        const rv = pals.find((o) => o !== p && o !== palHeld && now > (o.restUntil || 0) &&
+          !(now < (o.hideUntil || 0)) && Math.abs(o.x - p.x) < 64 && Math.abs(o.y - p.y) < 20);
+        if (rv && Math.random() < 0.5) {
+          p.lookDir = Math.sign(rv.x - p.x) || 1; p.lookUntil = now + 700;
+          rv.lookDir = -p.lookDir; rv.lookUntil = now + 700;
+          if (now > rv.faceT) { rv.faceId = "content"; rv.faceT = now + 1000; }
+          if (Math.random() < 0.4) hearts.push({ x: (p.x + rv.x) / 2, y: p.y - 56, life: 1 });
+        }
+      } else if (now < drizzleUntil && p.drizzleRx !== drizzleUntil && Math.random() < 0.18) {
+        p.drizzleRx = drizzleUntil; // one weather take per spell
+        // weather face — rain earns a curious tilt, night-rain a sleepy
+        // content, snow a little gasp of wonder
+        p.faceId = drizzleKind === "snow" ? (Math.random() < 0.5 ? "star" : "happy")
+          : nightMode ? (Math.random() < 0.5 ? "content" : "doze")
+          : (Math.random() < 0.4 ? "content" : "curious");
+        p.faceT = now + 1100;
+        p.faceWhy = drizzleKind === "snow" ? "SNOW" : "RAIN"; p.faceWhyId = p.faceId;
+      } else if (now < wetUntil && p.wetRx !== wetUntil && Math.random() < 0.22) {
+        p.wetRx = wetUntil; // one deep breath per dry-off
+        // sunning off: the rain's just stopped and the floor's still
+        // damp — stretch out in the fresh air with a content smile
+        p.faceId = "content"; p.faceT = now + 1400; p.faceWhy = "FRESH AIR"; p.faceWhyId = "content";
+        p.squashV += 1.2;
+      } else if (nightMode && now > (p.nightCd || 0) && Math.random() < 0.35) {
+        p.nightCd = now + 150000; // a slow droop now and then, not a loop
+        // midnight eyelids droop even for pals just standing around
+        p.faceId = "doze"; p.faceT = now + 1600; p.faceWhy = "LATE NIGHT"; p.faceWhyId = "doze";
+      }
+    }
+    // reaction echo: a fresh emotional beat is a little event — the
+    // nearest free pal glances over. once per face episode, so a long
+    // face doesn't chain-stare the whole neighbourhood
+    if (!p.fly && p !== palHeld && !(now < (p.hideUntil || 0)) && FACE_EMO[p.faceId] &&
+        now < (p.faceT || 0) && p.echoedAt !== (p.faceSetAt || 0)) {
+      p.echoedAt = p.faceSetAt; // one glance per expression, not per restamp
+      const ob = pals.find((o) => o !== p && !o.fly && o !== palHeld && !o.scene &&
+        now > (o.restUntil || 0) && !(now < (o.hideUntil || 0)) && !(now < (o.chatUntil || 0)) &&
+        Math.abs(o.x - p.x) < 150 && Math.abs(o.y - p.y) < 30);
+      if (ob) { ob.lookDir = Math.sign(p.x - ob.x) || 1; ob.lookUntil = now + 650; }
+    }
+    // ball play: a resting ball beside an awake pal gets a gentle shove,
+    // and a ball rolling in gets PASSED to the nearest free pal — the toy
+    // finally belongs to the pals' world, rallies and all
+    const bsp = ball && !ballHeld ? Math.hypot(ball.vx, ball.vy) : 0;
+    if (ball && !ballHeld && !palQuiet && !nappingP && !p.fly && !p.stackOn && p !== palHeld &&
+        now > (p.ballCd || 0) && Math.abs(ball.x - p.x) < 60 && Math.abs(ball.y - p.y) < 26 && bsp < 400) {
+      const incoming = bsp > 60 && Math.sign(ball.vx) === Math.sign(p.x - ball.x);
+      // a receiver pass aims for a real teammate — otherwise it's a shove
+      const mate = incoming ? pals.find((o) => o !== p && !o.fly && !o.stackOn && o !== palHeld &&
+        now > (o.restUntil || 0) && !(now < (o.hideUntil || 0)) &&
+        Math.abs(o.y - p.y) < 40 && Math.abs(o.x - p.x) > 60 && Math.abs(o.x - p.x) < 340) : null;
+      p.ballCd = now + (mate ? 2500 : 5000) + Math.random() * 5000;
+      if (mate) {
+        ball.vx = Math.sign(mate.x - ball.x) * (170 + Math.random() * 90);
+        ball.vy = -60 - Math.random() * 50;
+        if (now > p.faceT) { p.faceId = "serious"; p.faceT = now + 800; } // striker face
+      } else {
+        ball.vx = (Math.sign(ball.x - p.x) || (Math.random() < 0.5 ? -1 : 1)) * (90 + Math.random() * 90);
+        ball.vy = -80 - Math.random() * 60;
+        if (now > p.faceT) { p.faceId = "happy"; p.faceT = now + 900; }
+      }
+      p.lookDir = Math.sign(ball.vx) || 1; p.lookUntil = now + 700;
+      p.squashV += 2.5;
+      sfx.pop();
+      // the pet appreciates a good rally too
+      if (Math.abs(ball.x - petX) < 260 && Math.abs(ball.y - petY) < 60 && Math.random() < 0.35) { happyUntil = now + 900; petStamp("FAST BALL", "happy"); }
+    }
+    // race rematch: a sore loser issued a challenge — when the beat lands
+    // and both pals are still free, they run it back
+    if (p.rematch) {
+      const rm = p.rematch.mate;
+      if (nappingP || p === palHeld || p.fly || p.tag || p.scene || p.group || p.chatMate ||
+          now < (p.settleUntil || 0) ||
+          !rm || !pals.includes(rm) || now > p.rematch.at + 6000) p.rematch = null;
+      else if (now > p.rematch.at && !palQuiet &&
+          !rm.fly && !rm.scene && !rm.tag && !rm.group && !rm.chatMate && rm !== palHeld &&
+          now > (rm.restUntil || 0) && !(now < (rm.hideUntil || 0)) && !(now < (rm.settleUntil || 0)) &&
+          Math.abs(rm.x - p.x) < 300 && Math.abs(rm.y - p.y) < 60) {
+        p.rematch = null;
+        startScene(p, rm, "race", now);
+        p.faceId = "serious"; p.faceT = now + 1200;
+        p.faceWhy = "REMATCH"; p.faceWhyId = "serious";
+      }
+    }
+    // shake-off: a pal caught in the drizzle shimmies the drops loose —
+    // a fast squash pulse and a few stray droplets
+    if (now < drizzleUntil && !nappingP && !p.fly && !p.stackOn && p !== palHeld &&
+        now > (p.shakeCd || 0) && Math.random() < dt * 0.08) {
+      p.shakeCd = now + 8000 + Math.random() * 9000;
+      p.squashV += 4;
+      if (now > p.faceT) { p.faceId = "meh"; p.faceT = now + 700; }
+      for (let k = 0; k < 3; k++) drips.push({ x: p.x + (k - 1) * 10, y: p.y - 30, vx: (k - 1) * 30, vy: -40, life: 0.5, c: "#9ec8e8" });
+    }
+    // puddle steps: hurrying across a still-damp floor kicks spray —
+    // the rain is gone but the world remembers it for a bit
+    if (now < wetUntil && !nappingP && !p.fly && !p.stackOn && p !== palHeld &&
+        p.walkT !== null && Math.random() < dt * 2.4) {
+      drips.push({ x: p.x + (Math.random() * 18 - 9), y: p.y - 4, vx: (Math.random() - 0.5) * 60, vy: -24 - Math.random() * 36, life: 0.4, c: "#9ec8e8" });
+    }
+    // puddle splash: a pal standing right on a damp streak can't help
+    // itself — a little both-feet hop and a happy spray
+    if (now < wetUntil && !nappingP && !p.fly && !p.stackOn && p !== palHeld &&
+        !(now < (p.settleUntil || 0)) &&
+        p.walkT === null && !p.propGoal && now > (p.pudCd || 0) && Math.abs(p.y - winH) < 20 &&
+        Math.random() < dt * 0.09) {
+      let pudX = -1;
+      for (let i = 0; i < 8; i++) { const px = ((i * 211 + 37) % winW) + 14; if (Math.abs(px - p.x) < 24) { pudX = px; break; } }
+      if (pudX >= 0) {
+        p.pudCd = now + 16000;
+        p.fly = true; p.vy = -140 * animProf(p.sp).hop; p.vx = 0; p.hopT = now;
+        if (now > p.faceT) { p.faceId = "happy"; p.faceT = now + 900; p.faceWhy = "PUDDLE"; p.faceWhyId = "happy"; }
+        for (let i = 0; i < 5; i++)
+          drips.push({ x: p.x + (Math.random() * 26 - 13), y: p.y - 4, vx: (Math.random() - 0.5) * 150, vy: -40 - Math.random() * 60, life: 0.5, c: "#9ec8e8" });
+      }
+    }
+    // snow steps: crossing still-dusted ground kicks a little white
+    // powder off each stride — the snowfall is gone, its coat isn't
+    if (now < snowUntil && !nappingP && !p.fly && !p.stackOn && p !== palHeld &&
+        p.walkT !== null && Math.abs(p.y - winH) < 20 && Math.random() < dt * 2.2) {
+      drips.push({ x: p.x + (Math.random() * 18 - 9), y: p.y - 4, vx: (Math.random() - 0.5) * 50, vy: -18 - Math.random() * 30, life: 0.45, c: "#e8f0f8" });
+    }
+    // slippy drifts: a pal hurrying across a snow pile loses its footing —
+    // one pinwheel skid, a dizzy wobble, powder everywhere. walkers only
+    if (now < snowUntil && !nappingP && !p.fly && !p.stackOn && p !== palHeld &&
+        !(now < (p.settleUntil || 0)) &&
+        p.walkT !== null && (p.walkV || 0) > 30 && Math.abs(p.y - winH) < 20 &&
+        now > (p.slipCd || 0) && Math.random() < dt * 0.22) {
+      for (let i = 0; i < 8; i++) {
+        const px = ((i * 211 + 37) % winW) + 14;
+        if (Math.abs(px - p.x) < 24) {
+          p.slipCd = now + 20000;
+          p.fly = true; p.vy = -160 * animProf(p.sp).hop;
+          p.vx = Math.sign(p.walkT - p.x || 1) * (130 + Math.random() * 80); p.hopT = now;
+          p.faceId = "dizzy"; p.faceT = now + 1300; p.faceWhy = "SLIPPED!"; p.faceWhyId = "dizzy";
+          for (let k = 0; k < 6; k++) drips.push({ x: p.x + (Math.random() * 24 - 12), y: p.y - 6, vx: (Math.random() - 0.5) * 120, vy: -30 - Math.random() * 50, life: 0.5, c: "#e8f0f8" });
+          // a nearby buddy saw the whole thing — slapstick comedy
+          const saw = pals.find((q) => q !== p && !q.fly && q !== palHeld && now > (q.faceT || 0) &&
+            Math.abs(q.y - p.y) < 20 && Math.abs(q.x - p.x) < 100);
+          if (saw) { saw.faceId = "laugh"; saw.faceT = now + 1000; saw.faceWhy = "SLAPSTICK"; saw.faceWhyId = "laugh"; }
+          break;
+        }
+      }
+    }
+    // flake catch: in a snow spell a pal tips its face to the sky now
+    // and then — a flake drifts down onto it and it beams
+    if (now < drizzleUntil && drizzleKind === "snow" && !nappingP && !p.fly && !p.stackOn &&
+        p !== palHeld && now > (p.flakeCd || 0) && Math.random() < dt * 0.06) {
+      p.flakeCd = now + 12000 + Math.random() * 9000;
+      drips.push({ x: p.x + (Math.random() * 14 - 7), y: p.y - 46, vx: 0, vy: 16, life: 0.7, c: "#eef4ff", k: "snow" });
+      if (now > p.faceT) { p.faceId = Math.random() < 0.6 ? "star" : "gasp"; p.faceT = now + 900; p.faceWhy = "SNOWFLAKE"; p.faceWhyId = p.faceId; }
+    }
+    // found you! a seeker camped the box and its hider just popped out
+    if (p.seekFor) {
+      const hf = p.seekFor;
+      if (!pals.includes(hf) || now > (p.seekUntil || 0) || p === palHeld || nappingP ||
+          p.fly || p.tag || p.scene || p.group) {
+        // gave up: the hider never came out — a little shrug and off it goes
+        if (pals.includes(hf) && now > (p.seekUntil || 0) && now < (hf.hideUntil || 0) && now > (p.faceT || 0)) {
+          p.faceId = "meh"; p.faceT = now + 900;
+          p.lookDir = Math.sign(hf.x - p.x) || 1; p.lookUntil = now + 600;
+        }
+        p.seekFor = null; p.sawHide = false;
+      }
+      else if (now < (hf.hideUntil || 0)) p.sawHide = true; // still inside — wait for the pop
+      else if (p.sawHide) {
+        p.seekFor = null; p.sawHide = false;
+        if (Math.abs(hf.x - p.x) < 90 && hf !== palHeld) {
+          p.faceId = "excited"; p.faceT = now + 1000; p.squashV += 2.5;
+          hf.faceId = Math.random() < 0.5 ? "gasp" : "happy"; hf.faceT = now + 1100;
+          p.lookDir = Math.sign(hf.x - p.x) || 1; p.lookUntil = now + 900;
+          hf.lookDir = -p.lookDir; hf.lookUntil = now + 900;
+          hearts.push({ x: (p.x + hf.x) / 2, y: p.y - 56, life: 1 });
+          pairBondGain(p, hf, 1);
+          sfx.pop();
+          // round two: the found pal makes straight for the box to hide
+          // again, and the seeker stays "it" — waiting out the re-hide
+          if (box && Math.random() < 0.3) {
+            hf.rehideUntil = now + 6000;
+            hf.walkT = Math.max(plo, Math.min(phi, box.x));
+            p.seekFor = hf; p.sawHide = false; p.seekUntil = now + 16000;
+            p.walkT = Math.max(plo, Math.min(phi, box.x + (p.x < box.x ? -34 : 34)));
+          }
+        }
+      }
+    }
+    // hide again: the found pal reaches the box and ducks straight
+    // back in — the seeker parked outside gets another round
+    if (p.rehideUntil && box) {
+      if (now > p.rehideUntil || nappingP || p.fly || p === palHeld || p.tag || p.scene || p.group || now < (p.settleUntil || 0)) p.rehideUntil = 0;
+      else if (Math.abs(p.x - box.x) < 50 && Math.abs(p.y - box.y) < 40) {
+        p.rehideUntil = 0;
+        p.x = box.x; p.walkT = null;
+        p.hideUntil = now + 2600 + Math.random() * 2400;
+        p.boxCd = now + 40000 + Math.random() * 25000;
+        p.squashV += 3;
+        if (now > p.faceT) { p.faceId = "mischief"; p.faceT = now + 1500; }
+      }
+    }
+    // hi hello: a pal strolling past a friend can't resist a greeting —
+    // a twin hop-and-grin for close bonds (4+), just a wink for newer
+    // friends. ambient only, never eats a decision
+    if (!nappingP && !p.fly && p !== palHeld && p.walkT !== null && !palQuiet && now > (p.hiCd || 0)) {
+      const bf = pals.find((o) => o !== p && o !== palHeld && !o.fly && !o.tag && !o.scene && !o.group &&
+        !o.chatMate && now > (o.restUntil || 0) && !(now < (o.hideUntil || 0)) && !(now < (o.settleUntil || 0)) &&
+        pairBondLvl(p, o) >= 2 && Math.abs(o.x - p.x) < 46 && Math.abs(o.y - p.y) < 20);
+      if (bf) {
+        p.hiCd = now + 30000; bf.hiCd = now + 30000;
+        if (pairBondLvl(p, bf) >= 4) {
+          p.fly = true; p.vy = -130 * animProf(p.sp).hop; p.vx = 0; p.hopT = now;
+          bf.fly = true; bf.vy = -130 * animProf(bf.sp).hop; bf.vx = 0; bf.hopT = now;
+          if (now > p.faceT) { p.faceId = "happy"; p.faceT = now + 900; }
+          if (now > bf.faceT) { bf.faceId = "happy"; bf.faceT = now + 900; }
+          hearts.push({ x: (p.x + bf.x) / 2, y: p.y - 56, life: 1 });
+          pairBondGain(p, bf, 1);
+        } else {
+          if (now > p.faceT) { p.faceId = "wink"; p.faceT = now + 800; }
+          if (now > bf.faceT) { bf.faceId = "wink"; bf.faceT = now + 800; }
+          p.lookDir = Math.sign(bf.x - p.x) || 1; p.lookUntil = now + 700;
+          bf.lookDir = -p.lookDir; bf.lookUntil = now + 700;
+        }
+      } else {
+        // strangers brush past — no bond yet, so the greeting is a shy
+        // little embar glance instead of a hop
+        const shy = pals.find((o) => o !== p && o !== palHeld && !o.fly && !o.tag && !o.scene && !o.group &&
+          !o.chatMate && now > (o.restUntil || 0) && !(now < (o.hideUntil || 0)) && !(now < (o.settleUntil || 0)) &&
+          pairBondLvl(p, o) === 0 && Math.abs(o.x - p.x) < 30 && Math.abs(o.y - p.y) < 20 && Math.random() < 0.3);
+        if (shy) {
+          p.hiCd = now + 30000;
+          if (now > p.faceT) { p.faceId = "embar"; p.faceT = now + 800; }
+          p.lookDir = Math.sign(shy.x - p.x) || 1; p.lookUntil = now + 700;
+        }
+      }
+    }
     // body separation: grounded pals on the same deck shouldn't clip
     // through each other — a soft mutual shove keeps a slime-width gap
     // (reads as jostling, and it's what used to make crowds look fake)
@@ -10379,8 +13003,13 @@ function frameBody(now) {
         if (Math.abs(ddx) <= 0.01) ddx = ((pals.indexOf(p) - pals.indexOf(q)) || 1) * 0.12;
         if (Math.abs(p.y - q.y) < 18 && Math.abs(ddx) < 34) {
           const push = (34 - Math.abs(ddx)) * Math.sign(ddx) * dt * 2.2;
-          // a napping pal stays put — the awake one absorbs the full shove
-          if (now < (q.restUntil || 0)) p.x += push * 2; else { p.x += push; q.x -= push; }
+          // a napping or settled pal stays put — the moving one absorbs
+          // the full shove, both ways; two parked pals just overlap
+          const qPark = now < (q.restUntil || 0) || now < (q.settleUntil || 0);
+          const pPark = now < (p.restUntil || 0) || now < (p.settleUntil || 0);
+          if (qPark && !pPark) p.x += push * 2;
+          else if (pPark && !qPark) q.x -= push * 2;
+          else if (!pPark) { p.x += push; q.x -= push; }
           // jammed: p's target lies past q and q isn't moving out of the
           // way — two slimes can't walk through each other
           const s = Math.sign(q.x - p.x);
@@ -10398,8 +13027,12 @@ function frameBody(now) {
           const dir = Math.sign(p.walkT - p.x) || 1;
           if (palQuiet) {
             // quiet hours resolve jams politely — a short detour around
-            // the blocker instead of a leap over their head
-            p.walkT = Math.max(plo, Math.min(phi, p.x - dir * (80 + Math.random() * 40)));
+            // the blocker instead of a leap over their head. plo/phi are
+            // scoped to the platform block above — recompute from p.plat
+            const pp2 = p.plat || platUnder(p.x, p.y);
+            const pe2 = palEdge(p), pc2 = pp2.x + pp2.w / 2, pn2 = pp2.w < pe2 * 2;
+            const lo2 = pn2 ? pc2 : pp2.x + pe2, hi2 = pn2 ? pc2 : pp2.x + pp2.w - pe2;
+            p.walkT = Math.max(lo2, Math.min(hi2, p.x - dir * (80 + Math.random() * 40)));
           } else if (now > (jamQ.restUntil || 0) && (ppsy.pace || 1) >= 0.9 && Math.random() < 0.65) {
             // stepped on: squashed flat + a reaction set by the stepped
             // pal's own personality — shy slimes reel, feisty ones fume
@@ -10407,9 +13040,10 @@ function frameBody(now) {
             jamQ.walkT = null; jamQ.hopWind = 0;
             jamQ.nextT = Math.max(jamQ.nextT || 0, now + 1200); // stands there a beat
             const qpsy = PSYCH[(SPECIES[jamQ.sp] || {}).ps] || {};
-            if (qpsy.flee) { jamQ.faceId = "dizzy"; bangs.push({ x: jamQ.x, y: jamQ.y - 56, life: 0.9, t: "..." }); }
-            else if ((qpsy.pace || 1) <= 0.85 || (qpsy.startle || 1) > 1.2) { jamQ.faceId = "grumpy"; bangs.push({ x: jamQ.x, y: jamQ.y - 56, life: 0.9, t: "!" }); }
-            else { jamQ.faceId = "pout"; bangs.push({ x: jamQ.x, y: jamQ.y - 56, life: 0.9, t: "!!" }); }
+            if (qpsy.flee) jamQ.faceId = "dizzy";
+            else if ((qpsy.startle || 1) >= 1.3) jamQ.faceId = "hmph";
+            else if ((qpsy.pace || 1) <= 0.85) jamQ.faceId = "grumpy";
+            else jamQ.faceId = "pout";
             jamQ.faceT = now + 1100;
             p.fly = true; p.vy = -150 * animProf(p.sp).hop; p.vx = dir * 165;
           } else {
@@ -10431,7 +13065,7 @@ function frameBody(now) {
     const lgMain = LEG[SPECIES[active].id];
     if (lgMain && !petHome && now >= boxHide && !p.fly && p !== palHeld && !nappingP && Math.abs(p.y - petY) < 40) {
       const adx = petX - p.x;
-      if (lgMain.pulse && Math.abs(adx) > 60 && Math.abs(adx) < 320) {
+      if (lgMain.pulse && !(now < (p.settleUntil || 0)) && Math.abs(adx) > 60 && Math.abs(adx) < 320) {
         p.x += adx * dt * 0.05;
         if (Math.random() < dt * 1.2) fx.push({ x: p.x, y: p.y - 20, vx: -Math.sign(adx) * 20, vy: -10, life: 0.4, c: "#8ad4f0" });
       }
@@ -10444,7 +13078,7 @@ function frameBody(now) {
     // play: proximity with the main pet — face each other, hearts, bump apart.
     // sleep is sacred: a pal never bumps a dozing pet (that bump used to
     // pop open-eyed content faces over a still-sleeping slime)
-    if (!p.fly && p !== palHeld && !held && !flying && !petHome && !nappingP && state !== "sleeping" && !petBusy &&
+    if (!p.fly && p !== palHeld && !held && !flying && !petHome && !nappingP && state !== "sleeping" && !petBusy && !p.scene &&
         !(now < (p.settleUntil || 0)) && // a settled pal sits; it doesn't bump
         Math.abs(p.y - petY) < 20 && Math.abs(p.x - petX) < 74 &&
         now > p.playCd && now > mainPlayCd) {
@@ -10453,6 +13087,7 @@ function frameBody(now) {
       stats.plays = addSavedInt(stats.plays, 1);
       p.faceId = "happy";
       p.faceT = now + 900;
+      p.faceWhy = "BUMP!"; p.faceWhyId = "happy";
       contentUntil = now + 900;
       p.lookDir = Math.sign(petX - p.x) || 1;
       p.lookUntil = now + 800;
@@ -10470,7 +13105,7 @@ function frameBody(now) {
     for (const q of pals) {
       if (q === p || q === palHeld || p === palHeld || q.fly || p.fly || nappingP ||
           now < (q.restUntil || 0) || now < (q.hideUntil || 0) ||
-          p.tag || q.tag || p.stackOn || q.stackOn ||
+          p.tag || q.tag || p.stackOn || q.stackOn || p.scene || q.scene || p.group || q.group ||
           now < (p.settleUntil || 0) || now < (q.settleUntil || 0) ||
           Math.abs(q.y - p.y) > 20) continue;
       if (Math.abs(q.x - p.x) < 60 && now > p.playCd && now > q.playCd) {
@@ -10494,8 +13129,20 @@ function frameBody(now) {
           p.squashV += 3; q.squashV += 3;
           p.walkT = (p.x + q.x) / 2 - 18;
           q.walkT = (p.x + q.x) / 2 + 18;
+          // a nuzzle sometimes leaves one of them flustered
+          if (Math.random() < 0.3) { const e2 = Math.random() < 0.5 ? p : q; e2.faceId = "embar"; e2.faceT = now + 1600; }
           sfx.heart();
           continue;
+        }
+        // first contact with a never-met species — a beat of squinted "?"
+        // before the usual bump faces settle in
+        p.met = p.met || {}; q.met = q.met || {};
+        if (!p.met[q.sp] && !q.met[p.sp] && Math.random() < 0.7) {
+          p.met[q.sp] = q.met[p.sp] = 1;
+          const cur = Math.random() < 0.5 ? p : q;
+          cur.faceId = "curious"; cur.faceT = now + 1300;
+          cur.lookDir = Math.sign((cur === p ? q.x : p.x) - cur.x) || 1;
+          cur.lookUntil = now + 1200;
         }
         // bump escalations — synergy pops, tag chases, shove-fights — are
         // the loud tier: quiet hours keep it to faces and a soft part
@@ -10509,18 +13156,29 @@ function frameBody(now) {
             const a = Math.random() * 6.28;
             fx.push({ x: mx2 + Math.cos(a) * 12, y: p.y - 30 + Math.sin(a) * 10, vx: Math.cos(a) * syn.v, vy: syn.up ? -syn.v - Math.random() * 30 : Math.sin(a) * syn.v, life: 0.7, c: syn.c[(Math.random() * syn.c.length) | 0] });
           }
-          bangs.push({ x: mx2, y: p.y - 74, life: 0.9, t: syn.t });
-          p.faceId = q.faceId = "laugh";
+          p.faceId = q.faceId = "gasp";
           p.faceT = q.faceT = now + 900;
+          p.faceWhy = q.faceWhy = "SPARK"; p.faceWhyId = q.faceWhyId = "gasp";
           sfx.pop();
           continue;
+        }
+        // choreographed pair scenes — the big set-pieces: stare-downs,
+        // leapfrog, races, gifts, mirror play, piggyback rides. one at a
+        // time so each reads clean instead of colliding mid-tumble
+        if (now > sceneCd && !p.group && !q.group && Math.random() < 0.45) {
+          const sk = pickScene(p, q, ppsy, qpsy);
+          if (sk) { startScene(p, q, sk, now); continue; }
         }
         // sometimes the bump turns into a game of TAG — one chases, one flees
         if (Math.random() < 0.3 && !p.tag && !q.tag && !p.stackOn && !q.stackOn) {
           const [it, fl] = Math.random() < 0.5 ? [p, q] : [q, p];
           it.tag = { on: fl, it: true, until: now + 3200 };
           fl.tag = { on: it, it: false, until: now + 3200 };
-          bangs.push({ x: it.x, y: it.y - 72, life: 0.8, t: "!" });
+          it.faceId = "serious"; it.faceT = now + 1100; // game face — it hunts
+          it.faceWhy = "TAG"; it.faceWhyId = "serious";
+          fl.faceId = Math.random() < 0.25 ? "meh" : "excited"; // "ugh, not it" or "WHEE"
+          fl.faceT = now + 1100;
+          fl.faceWhy = "TAG"; fl.faceWhyId = fl.faceId;
           continue;
         }
         // ...and sometimes it's just a friendly SHOVE
@@ -10529,9 +13187,14 @@ function frameBody(now) {
           vi.fly = true;
           vi.vx = Math.sign(vi.x - sh.x || 1) * (110 + Math.random() * 60);
           vi.vy = -130 * animProf(vi.sp).hop;
-          vi.faceId = "shock"; vi.faceT = now + 800;
-          sh.faceId = "laugh"; sh.faceT = now + 900;
-          bangs.push({ x: vi.x, y: vi.y - 70, life: 0.8, t: "!?" });
+          // timid slimes yelp; feistier ones land already sulking — and
+          // the truly chill ones can't even be bothered: a flat "meh"
+          const vpsy = PSYCH[(SPECIES[vi.sp] || {}).ps] || {};
+          vi.faceId = vpsy.flee ? "shock" : (vpsy.pace || 1) > 1.6 && Math.random() < 0.55 ? "meh" : "hmph";
+          vi.faceT = now + 900;
+          vi.faceWhy = "SHOVED"; vi.faceWhyId = vi.faceId;
+          sh.faceId = "mischief"; sh.faceT = now + 1000;
+          sh.faceWhy = "SHOVED!"; sh.faceWhyId = "mischief";
           sfx.pop();
           continue;
         }
@@ -10549,15 +13212,18 @@ function frameBody(now) {
     // face each other and trade little bubbles until one drifts off.
     // needs no contact: pals that just happen to idle side by side get
     // a social beat instead of only colliding into one
-    if (!p.chatMate && !p.fly && !p.stackOn && p !== palHeld && !nappingP && !p.tag &&
+    if (!p.chatMate && !p.fly && !p.stackOn && p !== palHeld && !nappingP && !p.tag && !p.scene &&
         p.walkT === null && !p.propGoal && now > (p.chatCd || 0) && Math.random() < dt * 0.4) {
-      const q = pals.find((q2) => q2 !== p && q2 !== palHeld && !q2.fly && !q2.stackOn && !q2.tag &&
+      // kinship first: same-species neighbors always have more to gossip
+      // about — they're picked first and the chat runs a little longer
+      const chatOk = (q2) => q2 !== p && q2 !== palHeld && !q2.fly && !q2.stackOn && !q2.tag && !q2.scene &&
         !q2.chatMate && q2.walkT === null && !q2.propGoal && now > (q2.chatCd || 0) &&
         now > (q2.restUntil || 0) && !(now < (q2.hideUntil || 0)) &&
-        Math.abs(q2.y - p.y) < 20 && Math.abs(q2.x - p.x) > 30 && Math.abs(q2.x - p.x) < 96);
+        Math.abs(q2.y - p.y) < 20 && Math.abs(q2.x - p.x) > 30 && Math.abs(q2.x - p.x) < 96;
+      const q = pals.find((q2) => chatOk(q2) && q2.sp === p.sp) || pals.find(chatOk);
       if (q) {
         p.chatMate = q; q.chatMate = p;
-        p.chatUntil = q.chatUntil = now + 1900 + Math.random() * 1300;
+        p.chatUntil = q.chatUntil = now + 1900 + Math.random() * 1300 + (q.sp === p.sp ? 700 : 0);
         p.chatNext = now + 260; q.chatNext = now + 700;
         p.lookDir = Math.sign(q.x - p.x) || 1; q.lookDir = -p.lookDir;
         p.lookUntil = q.lookUntil = now + 500;
@@ -10567,7 +13233,7 @@ function frameBody(now) {
 
     // copycat hop: a pal that just leapt is contagious — nearby grounded
     // pals sometimes bounce along (play contagion, Slime Rancher-style)
-    if (!p.fly && p !== palHeld && !p.stackOn && !nappingP && !p.chatMate) {
+    if (!p.fly && p !== palHeld && !p.stackOn && !nappingP && !p.chatMate && !(now < (p.settleUntil || 0))) {
       for (const q of pals) {
         if (q === p || !q.hopT || now - q.hopT > 380 || q.fly || Math.abs(q.y - p.y) > 20 || Math.abs(q.x - p.x) > 130) continue;
         if (Math.random() < dt * 4) {
@@ -10581,18 +13247,19 @@ function frameBody(now) {
     }
 
     // mood contagion: a laugh or heart-eyes in the crowd is catching —
-    // a nearby pal glances over and smiles along instead of ignoring it
+    // a nearby pal glances over and smiles along instead of ignoring it.
+    // yawning is contagious too — one napper's tuck-in sets off the next
     if (!p.fly && p !== palHeld && !nappingP && now > (p.faceT || 0) && now > (p.echoCd || 0)) {
       for (const q of pals) {
         if (q === p || q.fly || now < (q.restUntil || 0) || now < (q.hideUntil || 0) || !(q.faceT > now + 200) ||
-            !(q.faceId === "laugh" || q.faceId === "love" || q.faceId === "star")) continue;
-        if (Math.abs(q.x - p.x) < 130 && Math.abs(q.y - p.y) < 24 && Math.random() < dt * 1.6) {
+            !(q.faceId === "laugh" || q.faceId === "love" || q.faceId === "star" || q.faceId === "yawn")) continue;
+        if (Math.abs(q.x - p.x) < 130 && Math.abs(q.y - p.y) < 24 && Math.random() < dt * (q.faceId === "yawn" ? 0.9 : 1.6)) {
           p.echoCd = now + 7000;
           p.lookDir = Math.sign(q.x - p.x) || 1;
           p.lookUntil = now + 600;
-          p.faceId = q.faceId === "star" ? "star" : "happy";
-          p.faceT = now + 800;
-          if (Math.random() < 0.4) bangs.push({ x: p.x, y: p.y - 60, life: 0.8, t: "♪" });
+          p.faceId = q.faceId === "star" ? "star" : q.faceId === "yawn" ? "yawn" : "happy";
+          p.faceT = now + (q.faceId === "yawn" ? 1100 : 800);
+          p.faceWhy = q.faceId === "yawn" ? "CONTAGIOUS" : "GOOD VIBES"; p.faceWhyId = p.faceId;
         }
       }
     }
@@ -10602,8 +13269,10 @@ function frameBody(now) {
       p.lookDir = Math.sign(petX - p.x) || 1;
       p.lookUntil = now + 600;
       if (Math.random() < 0.15 && now > p.faceT) {
-        p.faceId = Math.random() < 0.5 ? "shock" : "happy";
+        const ar = Math.random();
+        p.faceId = ar < 0.3 ? "shock" : ar < 0.55 ? "gasp" : "happy";
         p.faceT = now + 800;
+        p.faceWhy = "THE SHOW"; p.faceWhyId = p.faceId;
       }
     }
 
@@ -10614,7 +13283,7 @@ function frameBody(now) {
       if (tr === "spark") fx.push({ x: p.x + Math.random() * 16 - 8, y: p.y - 8, vx: 0, vy: -30, life: 0.9, c: "#f0a05c" });
       else if (tr === "drip") fx.push({ x: p.x + Math.random() * 14 - 7, y: p.y - 4, vx: 0, vy: 50, life: 0.5, c: "#69b7ec" });
       else if (tr === "wisp") fx.push({ x: p.x + Math.random() * 30 - 15, y: p.y - 22 - Math.random() * 14, vx: Math.random() * 8 - 4, vy: -10, life: 1.2, c: "#c4b2f0" });
-      else if (tr === "glint" || tr === "royal") bangs.push({ x: p.x + Math.random() * 30 - 15, y: p.y - Math.random() * 44 - 10, life: 0.7, t: "✦" });
+      else if (tr === "glint" || tr === "royal") fx.push({ x: p.x + Math.random() * 30 - 15, y: p.y - Math.random() * 44 - 10, vx: 0, vy: -20, life: 0.7, c: "#ffe9a8", spr: "star5" });
       else if (tr === "bubble") fx.push({ x: p.x + Math.random() * 16 - 8, y: p.y - 14, vx: Math.random() * 6 - 3, vy: -28, life: 1, c: "#b8e8f5" });
       const plga = LEG[psp.id];
       if (plga) {
@@ -10627,7 +13296,7 @@ function frameBody(now) {
         if (plga.trail && pmoving && Math.random() < 0.5) fx.push({ x: p.x, y: p.y - 8, vx: (Math.random() - 0.5) * 16, vy: 36, life: 0.4, c: plga.trail });
         if (plga.drool && Math.random() < 0.15) fx.push({ x: p.x + 8, y: p.y - 16, vx: 0, vy: 26, life: 0.7, c: "#8ad4f0" });
         if (plga.chips && pmoving && Math.random() < 0.3) fx.push({ x: p.x + (Math.random() - 0.5) * 20, y: p.y - 4, vx: (Math.random() - 0.5) * 40, vy: -30, life: 0.5, c: "#c8b8a0" });
-        if (plga.notes && Math.random() < 0.1) bangs.push({ x: p.x + (Math.random() - 0.5) * 30, y: p.y - 50, life: 1.1, t: "♪" });
+        if (plga.notes && Math.random() < 0.1 && now > p.faceT) { p.faceId = "happy"; p.faceT = now + 800; } // humming to itself
       }
     }
 
@@ -10637,7 +13306,7 @@ function frameBody(now) {
     if (!(now < (p.hideUntil || 0))) {
     const psc = (1.3 + level * 0.4) * sizeMul * (isBaby(psp) ? 0.55 : 0.92);
     const pbs = Math.sin(t * 2.6 + p.ph) * 0.028;
-    const pmsq = p.squash / (1 + Math.abs(p.squash) * 0.5) * (reduceMotion ? 0.4 : 1);
+    const pmsq = p.squash / (1 + Math.abs(p.squash) * 0.5) * (reduceMotion ? 0.4 : 1) * animProf(p.sp).squash;
     const psx = psc * (1 + pmsq * 0.25 + pbs);
     const psy2 = psc * (1 - pmsq * 0.18 - pbs * 0.7);
     const groundY = p.fly ? p.y : (p.plat ? p.plat.y : p.y);
@@ -10657,7 +13326,30 @@ function frameBody(now) {
     const phov = psp.mv === "hover" && !p.fly ? 10 + Math.sin(t * 2.2 + p.ph) * 6 : 0;
     // gait bob: same footfall bounce the main pet gets, driven by p.gait
     const pBob = !p.fly && !p.stackOn && p.walkT !== null ? Math.abs(Math.sin(p.gait || 0)) * 2 : 0;
-    ctx.translate(p.x, p.y - phov - pBob);
+    let pf = "idle";
+    if (now < (p.restUntil || 0)) pf = now < (p.dreamT || 0)
+      ? DREAM_FACES[(p.restUntil / 997 | 0) & 3]
+      : now < (p.dreamWake || 0) ? "doze" // the dream fades — lids flutter shut again
+      : (now < p.faceT && now < (p.napGrace || 0)) ? p.faceId : "sleeping";
+    else if (now < p.faceT) {
+      // blink-transition: a fresh expression opens with a 90ms blink —
+      // the swap reads as eyes closing then opening to the new mood,
+      // not a hard cut between sprites
+      if (p.faceId !== p.facePrev) { p.facePrev = p.faceId; p.faceSwap = now + 90; }
+      pf = now < (p.faceSwap || 0) ? "blink" : (p.faceId || "happy");
+    }
+    else {
+      p.facePrev = null;
+      if (now < (p.stuffUntil || 0)) pf = "stuffed"; // post-munch puffed cheeks
+      else if (now < p.lookUntil) pf = p.lookDir < 0 ? "lookL" : "lookR";
+      else {
+        const pap = animProf(p.sp);
+        if ((t * 1000 + p.ph * 1000) % pap.blink < pap.blinkLen) pf = "blink";
+      }
+    }
+    p.pf = pf; // the status card draws the pal's live face
+    const pj = faceJig(pf, p.ph);
+    ctx.translate(p.x + pj.x, p.y - phov - pBob + pj.y);
     // totem riders sway on top of the stack; grounded walkers lean in —
     // smoothed so a direction flip rolls through instead of snapping
     if (p.stackOn) { ctx.rotate(Math.sin(t * 6 + p.ph) * 0.07); p.leanSm = 0; }
@@ -10666,19 +13358,12 @@ function frameBody(now) {
       p.leanSm = (p.leanSm || 0) + (plGoal - (p.leanSm || 0)) * Math.min(1, dt * 9);
       ctx.rotate(p.leanSm);
     }
-    let pf = "idle";
-    if (now < (p.restUntil || 0)) pf = "sleeping";
-    else if (now < p.faceT) pf = p.faceId || "happy";
-    else if (now < p.lookUntil) pf = p.lookDir < 0 ? "lookL" : "lookR";
-    else {
-      const pap = animProf(p.sp);
-      if ((t * 1000 + p.ph * 1000) % pap.blink < pap.blinkLen) pf = "blink";
-    }
-    p.pf = pf; // the status card draws the pal's live face
+    // a rolling pal tumbles through the air — full turn over the arc
+    if (p.act && p.act.k === "roll" && p.fly) ctx.rotate(p.act.dir * Math.min(1, (now - p.act.t0) / 640) * 6.28);
     if (psp.trait === "wisp") ctx.globalAlpha = 0.85;
     const plg = LEG[psp.id];
-    if (plg && plg.wings) drawWings(ctx, t + p.ph, psx, psy2, p.fly, plg.wings);
-    ctx.drawImage(sprite(pf, p.sp, false, true), -SW * psx / 2, -SH * psy2, SW * psx, SH * psy2);
+    if (plg && plg.wings) drawWings(ctx, t + p.ph, psx, psy2 * (1 + pj.sq), p.fly, plg.wings);
+    drawSm(ctx, sprite(faceFrame(pf, p.ph), p.sp, false, true), -SW * psx / 2, -SH * psy2 * (1 + pj.sq), SW * psx, SH * psy2 * (1 + pj.sq));
     const eq2 = accEquip[psp.id];
     if (eq2) {
       accMV = { jig: (p.leanSm || 0) * 0.55, lean: p.leanSm || 0, bob: pBob, sq: pmsq, t, ph: p.ph };
@@ -10692,6 +13377,11 @@ function frameBody(now) {
       if (Math.random() < dt * 2.5) {
         fx.push({ x: p.x + (Math.random() - 0.5) * 16, y: p.y - SH * psy2 - 18, vx: (Math.random() - 0.5) * 14, vy: -18, life: 0.6, c: "#ffd75e", spr: "mote" });
       }
+    }
+    // reason bubble: a fresh reaction face pops a glyph naming the cause —
+    // the moment the face changes, WHY it changed is on screen
+    if (now < (p.whyUntil || 0)) {
+      whyBubble(ctx, p.carry ? -16 : 0, -SH * psy2 - 13 + Math.sin(t * 4 + p.ph) * 1.2, p.whyIc, (p.whyUntil - now) / 1400);
     }
     ctx.restore();
     ctx.globalAlpha = 1;
@@ -10719,7 +13409,8 @@ function frameBody(now) {
 
   if (!petHome && now >= boxHide) {
   ctx.save();
-  ctx.translate(petX, petY - bob - hoverBob - spinLift * 13);
+  const petJg = faceJig(faceName(now), 0);
+  ctx.translate(petX + petJg.x, petY - bob - hoverBob - spinLift * 13 + petJg.y);
   ctx.rotate((angle + leanTilt) * (reduceMotion ? 0.35 : 1));
   // soft-body shear: the jelly's top drags behind horizontal motion —
   // feet stay planted at y=0, the crown smears sideways under accel
@@ -10742,7 +13433,7 @@ function frameBody(now) {
   const lg = LEG[SPECIES[active].id];
   if (lg && lg.wings) drawWings(ctx, t, sx, sy, flying, lg.wings);
   if (lg && lg.legs && webbing) drawLegs(ctx, t, sx, sy);
-  ctx.drawImage(currentSprite(now), -drawW / 2, -SH * sy, drawW, SH * sy);
+  drawSm(ctx, currentSprite(now), -drawW / 2, -SH * sy * (1 + petJg.sq), drawW, SH * sy * (1 + petJg.sq));
   const eq = accEquip[SPECIES[active].id];
   if (eq) {
     accMV = { jig: jigX, lean: leanTilt + angle, bob, sq: msq, t, ph: 0 };
@@ -10757,6 +13448,12 @@ function frameBody(now) {
     drawSpr(ctx, "flake", Math.sin(t * 3) * 14 * sx, -SH * sy - 6 - Math.sin(t * 5) * 3, 2);
   ctx.restore();
   ctx.globalAlpha = 1;
+  }
+  // the pet's reason bubble — same little icon language the pals use,
+  // drawn in screen space so a lean or a spin never tilts it
+  if (!petHome && now >= boxHide && now < petWhyUntil) {
+    whyBubble(ctx, petX, petY - bob - hoverBob - SH * sy - 14 + Math.sin(t * 4) * 1.2,
+      petWhyIc, (petWhyUntil - now) / 1400);
   }
 
   // status-card target: gold ring under the tracked slime + a bouncing
@@ -10826,6 +13523,100 @@ function frameBody(now) {
     else { ctx.fillStyle = p.c; ctx.fillRect(p.x, p.y, 3, 3); }
   }
   ctx.globalAlpha = 1;
+  // drizzle rain — thin streaks, drawn outside the fx pool so creature
+  // particle audits never count weather as ghost emissions
+  for (let i = drips.length - 1; i >= 0; i--) {
+    const d = drips[i];
+    d.x += d.vx * dt; d.y += d.vy * dt; d.life -= dt;
+    if (d.k === "snow") d.x += Math.sin(d.y * 0.07) * 12 * dt; // flakes drift
+    if (d.k === "petal" || d.k === "leaf") d.x += Math.sin(d.y * 0.05 + d.life) * 22 * dt; // petals flutter more
+    if (d.k === "firefly") { d.x += Math.sin(d.life * 2.2) * 14 * dt; d.y += Math.cos(d.life * 1.6) * 8 * dt; } // wander
+    if (d.k === "star" && !petHome && now >= boxHide && Math.random() < 0.55) fx.push({ x: d.x - d.vx * 0.012, y: d.y - d.vy * 0.012, vx: 0, vy: 6, life: 0.4, c: "#e8ddaa", spr: "mote" }); // ember trail
+    if (d.life <= 0 || d.y > winH + 6) { drips.splice(i, 1); continue; }
+    ctx.globalAlpha = d.k === "firefly"
+      ? 0.3 + 0.35 * (0.5 + 0.5 * Math.sin(d.life * 7))
+      : Math.min(d.k === "snow" ? 0.75 : 0.55, d.life * 0.7);
+    ctx.fillStyle = d.c;
+    if (d.k === "snow") ctx.fillRect(d.x, d.y, 3, 3);
+    else if (d.k === "petal") ctx.fillRect(d.x, d.y, 3, 2);
+    else if (d.k === "leaf") ctx.fillRect(d.x, d.y, 4, 2);
+    else if (d.k === "firefly") ctx.fillRect(d.x, d.y, 2, 2);
+    else if (d.k === "star") { ctx.fillRect(d.x, d.y, 5, 2); ctx.globalAlpha *= 0.4; ctx.fillRect(d.x - d.vx * 0.018, d.y - d.vy * 0.018, 4, 1); }
+    else ctx.fillRect(d.x, d.y, 2, 6);
+  }
+  ctx.globalAlpha = 1;
+  // snow dusting — a soft white line along the floor that melts after
+  if (snowAcc > 0.04) {
+    ctx.fillStyle = "#eef4ff";
+    ctx.globalAlpha = Math.min(0.8, snowAcc * 0.9);
+    const n = (snowAcc * 30) | 0;
+    for (let i = 0; i < n; i++) ctx.fillRect((i * 137 + 11) % winW, winH - 2, 14, 3);
+    ctx.globalAlpha = 1;
+  }
+  // after-rain puddles — faint damp streaks along the floor that dry
+  // out over ~12s; hurrying pals kick a little spray off them
+  if (now < wetUntil) {
+    ctx.globalAlpha = Math.min(0.5, (wetUntil - now) / 4000) * 0.5;
+    ctx.fillStyle = "#7f9fb8";
+    for (let i = 0; i < 8; i++) ctx.fillRect((i * 211 + 37) % winW, winH - 2, 20 + (i % 3) * 8, 2);
+    ctx.globalAlpha = 1;
+  }
+  // snow dust — white drifts sit where the flakes landed, fading over
+  // the same ~12s window the puddles use after rain
+  if (now < snowUntil) {
+    ctx.globalAlpha = Math.min(0.6, (snowUntil - now) / 4000) * 0.6;
+    ctx.fillStyle = "#e8f0f8";
+    for (let i = 0; i < 8; i++) ctx.fillRect((i * 211 + 37) % winW, winH - 2, 22 + (i % 3) * 8, 2);
+    ctx.globalAlpha = 1;
+  }
+  // dawn mist — a few soft bands drifting along the floor, 5-7am only
+  if (dawnMode && !reduceMotion) {
+    ctx.globalAlpha = 0.07 + Math.sin(t * 0.3) * 0.02;
+    ctx.fillStyle = "#dfe8f0";
+    for (let i = 0; i < 3; i++) {
+      const mx = ((t * 14 + i * 300) % (winW + 160)) - 80;
+      ctx.fillRect(mx, winH - 12 - i * 5, 110, 4);
+    }
+    ctx.globalAlpha = 1;
+  }
+  // lightning flash — a quick pale wash that fades inside ~160ms, with a
+  // jagged bolt seared across the sky while the wash is still bright
+  if (now < thunderAt + 160) {
+    const fl = (1 - (now - thunderAt) / 160);
+    ctx.fillStyle = `rgba(240,246,255,${(fl * 0.45).toFixed(3)})`;
+    ctx.fillRect(0, 0, winW, winH);
+    if (now < thunderAt + 110) {
+      // the bolt itself: a fixed zigzag dropped from the cloud line —
+      // deterministic so it doesn't jitter across the flash
+      const bx = thunderBoltX;
+      ctx.fillStyle = `rgba(255,250,214,${(fl * 0.95).toFixed(3)})`;
+      let bxx = bx, byy = 0;
+      const seg = [[14, 10], [-9, 12], [11, 11], [-7, 10], [8, 9]];
+      for (const [ddx, ddy] of seg) {
+        const nx = bxx + ddx, ny = byy + ddy;
+        // thick 2px stroke via two offset rects along the segment
+        const steps = Math.max(Math.abs(ddx), ddy);
+        for (let s2 = 0; s2 <= steps; s2++) {
+          const px = bxx + (nx - bxx) * (s2 / steps), py = byy + (ny - byy) * (s2 / steps);
+          ctx.fillRect(px | 0, py | 0, 2, 2);
+        }
+        bxx = nx; byy = ny;
+      }
+    }
+  }
+  // after-rain arc — a tiny six-band rainbow tucked in the corner
+  if (now < rainbowUntil && !reduceMotion) {
+    ctx.globalAlpha = Math.min(1, (rainbowUntil - now) / 3000) * 0.85;
+    const cols = ["#f38b8b", "#f7c873", "#f4f39a", "#9adba8", "#9cc3f0", "#c4aef0"];
+    for (let i = 0; i < cols.length; i++) {
+      ctx.strokeStyle = cols[i];
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(winW - 46, winH - 4, 40 - i * 3, Math.PI, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
 
   if (!petHome && state === "sleeping" && !held && !flying) {
     if (now > bubblePop) bubble += dt * 14;
@@ -10866,8 +13657,18 @@ function frameBody(now) {
     z.x += 6 * dt;
     z.life -= dt * 0.5;
     if (z.life <= 0) { zzzs.splice(i, 1); continue; }
-    ctx.globalAlpha = Math.min(1, z.life);
-    drawText(ctx, "Z", z.x, z.y, 2, "#7b95a8", "#00000044", true);
+    // snot bubble instead of a letter: inflates as it rises off the snorer
+    ctx.globalAlpha = Math.min(1, z.life) * 0.85;
+    const br2 = 2.2 + (1 - z.life) * 2.4;
+    ctx.beginPath();
+    ctx.arc(z.x, z.y, br2, 0, 6.284);
+    ctx.fillStyle = "rgba(184,216,232,0.5)";
+    ctx.fill();
+    ctx.strokeStyle = "#8fb8cc";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = "#eaf6fb";
+    ctx.fillRect(z.x - br2 * 0.4, z.y - br2 * 0.5, 1.6, 1.6);
   }
 
   for (let i = bangs.length - 1; i >= 0; i--) {
@@ -10924,6 +13725,11 @@ function frameBody(now) {
     // static shine — the light stays put while the ball spins under it
     ctx.fillStyle = "rgba(255,255,255,0.45)";
     ctx.fillRect(Math.round(ball.x - 5), Math.round(ball.y - ball.r * 2 + 3), 4, 2);
+    // resting on the deck — a soft contact shadow like the furniture
+    if (!ballHeld && Math.hypot(ball.vx, ball.vy) < 40) {
+      ctx.fillStyle = "rgba(46,32,20,0.15)";
+      ctx.fillRect(Math.round(ball.x - 9), Math.round(ball.y + ball.r - 1), 18, 2);
+    }
   }
   // treat buffs float a small icon above the slime while they last
   if (!petHome && now < hyperUntil) drawTreat(petX - 14, petY - SH * sy - 14 + Math.sin(t * 4) * 1.5, 0, 2);
@@ -10931,6 +13737,32 @@ function frameBody(now) {
 
   // everything below is UI — hidden while a photo snapshot is being taken
   if (!photoHide) {
+  // tooltip bubble: hints wear a little cream box with a tail pointing at
+  // what it describes — bare text floating over the slime read as noise
+  const tipBox = (lines, tx, y, alpha, textCol, tailUp) => {
+    const w = Math.max(...lines.map((l) => textW(l, 1))) + 12;
+    const h = lines.length * 10 + 6;
+    const bx = Math.max(4, Math.min(winW - w - 4, Math.round(tx - w / 2)));
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = "#f7ecd7";
+    ctx.fillRect(bx + 1, y, w - 2, h);
+    ctx.fillRect(bx, y + 1, w, h - 2);
+    ctx.strokeStyle = "#8a6b4a";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bx + 0.5, y + 0.5, w - 1, h - 1);
+    // little tail aimed at the thing it describes
+    const tailX = Math.max(bx + 4, Math.min(bx + w - 4, Math.round(tx)));
+    ctx.fillStyle = "#f7ecd7";
+    if (tailUp) { ctx.fillRect(tailX - 2, y - 3, 5, 2); ctx.fillRect(tailX - 1, y - 4, 3, 1); }
+    else { ctx.fillRect(tailX - 2, y + h + 1, 5, 2); ctx.fillRect(tailX - 1, y + h + 3, 3, 1); }
+    ctx.strokeStyle = "#8a6b4a";
+    if (tailUp) ctx.fillRect(tailX - 1, y - 5, 3, 1);
+    else ctx.fillRect(tailX - 1, y + h + 4, 3, 1);
+    for (let i = 0; i < lines.length; i++)
+      drawText(ctx, lines[i], bx + 6, y + 5 + i * 10, 1, textCol || "#5c4632");
+    ctx.globalAlpha = 1;
+  };
+
   // crosshair while aiming a throw
   if (treatAim && curX > -9000) {
     ctx.globalAlpha = 0.9;
@@ -10973,7 +13805,7 @@ function frameBody(now) {
       const t2 = `${awayReport.mins} MIN AWAY`;
       drawText(ctx, t2, cx2 - textW(t2, 1) / 2, py2 + 22, 1, "#8a6b4a");
       const t3 = `+${awayReport.gems}`;
-      drawText(ctx, t3, cx2 - textW(t3, 2) / 2 - 8, py2 + 38, 2, "#2f9e63");
+      drawText(ctx, t3, cx2 - textW(t3, 2) / 2 - 8, py2 + 38, 2, "#7aa888");
       bubbleIcon(ctx, cx2 + textW(t3, 2) / 2 + 2, py2 + 45);
       const t4 = "WELCOME BACK";
       drawText(ctx, t4, cx2 - textW(t4, 1) / 2, py2 + 64, 1, "#b09468");
@@ -10990,9 +13822,38 @@ function frameBody(now) {
   ctx.strokeStyle = "#8a6b4a";
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.arc(fbx, fby, 16, 0, 6.29); ctx.stroke();
-  ctx.drawImage(sprite("idle", active, false), fbx - 11, fby - 8, 22, 16);
+  drawSm(ctx, sprite("idle", active, false), fbx - 11, fby - 8, 22, 16);
   ctx.globalAlpha = 1;
-  drawText(ctx, fabOpen ? "-" : "+", fbx + 9, fby - 20, 1, "#8a6b4a", null, true);
+  // chevron pip on the rim: points toward where the items unfold (flips
+  // near the screen bottom), and reverses while open — "fold me back".
+  // the old floating "+/-" text read as a stray glyph, not a control
+  {
+    const safe2 = usableRectAt(fbx, fby);
+    const down2 = fby + 26 + FAB_ITEMS.length * 40 <= safe2.bottom - 8;
+    const pointUp = down2 === fabOpen;
+    const px = fbx + 11, py = fby - 12;
+    ctx.globalAlpha = hovF || fabOpen || fabDrag ? 0.95 : 0.6;
+    ctx.beginPath(); ctx.arc(px, py, 6, 0, 6.29); ctx.fillStyle = "#f3e6cd"; ctx.fill();
+    ctx.strokeStyle = "#8a6b4a"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(px, py, 5.5, 0, 6.29); ctx.stroke();
+    ctx.fillStyle = "#5c4632";
+    if (pointUp) { ctx.fillRect(px - 2, py - 1, 5, 1); ctx.fillRect(px - 1, py - 3, 3, 2); ctx.fillRect(px, py - 4, 1, 1); }
+    else { ctx.fillRect(px - 2, py + 1, 5, 1); ctx.fillRect(px - 1, py - 1, 3, 2); ctx.fillRect(px, py + 3, 1, 1); }
+    ctx.globalAlpha = 1;
+  }
+  // battery-saver pip: a tiny leaf badge says the frame cap is engaged —
+  // the world is dozing at low fps until the next interaction
+  if (saverCapMs()) {
+    const lx = fbx - 13, ly = fby + 12;
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath(); ctx.arc(lx, ly, 6, 0, 6.29); ctx.fillStyle = "#dff0d8"; ctx.fill();
+    ctx.strokeStyle = "#6a9e58"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(lx, ly, 5.5, 0, 6.29); ctx.stroke();
+    ctx.fillStyle = "#4c9e50"; // little leaf: two angled cells + stem
+    ctx.fillRect(lx - 2, ly - 3, 3, 4); ctx.fillRect(lx, ly - 2, 3, 4);
+    ctx.fillRect(lx - 3, ly + 1, 1, 2);
+    ctx.globalAlpha = 1;
+  }
   // jelly chip: the wallet balance pinned left of the fab — until now the
   // count only existed inside the ranch, so it felt like jelly was hidden
   {
@@ -11008,24 +13869,17 @@ function frameBody(now) {
     drawText(ctx, jt, jx + 21, fby - 6, 1, "#5c4632");
     ctx.globalAlpha = 1;
   }
-  // pet parked at the ranch: badge the menu and hint how to wake it
+  // pet parked at the ranch: a drifting snot-bubble — the same nap cue
+  // the slimes themselves get, no floating letters
   if (petHome) {
-    ctx.globalAlpha = 0.9;
-    drawText(ctx, "Z", fbx + 8, fby - 24 + Math.sin(t * 3) * 2, 1, "#5c86c9");
-    drawText(ctx, "Z", fbx + 14, fby - 28 + Math.sin(t * 3 + 1) * 2, 1, "#8aa8d9");
-    ctx.globalAlpha = 1;
-    if (!fabOpen) {
-      const ht = "PET IS HOME - CLICK TO WAKE";
-      const hx = Math.max(4, Math.min(winW - textW(ht, 1) - 4, fbx - textW(ht, 1) / 2));
-      drawText(ctx, ht, hx + 1, fby + 31, 1, "#5c4632");
-      drawText(ctx, ht, hx, fby + 30, 1, "#fff6e8");
-    }
+    if (now - fabZzzT > 2200) { fabZzzT = now; zzzs.push({ x: fbx - 12, y: fby - 16, life: 0.7 }); }
+    if (!fabOpen) tipBox(["PET IS HOME - CLICK TO WAKE"], fbx, fby + 32, 1, "#5c4632", true);
   }
 
   // accordion: the action items fold out of the circle (down, or up when
   // the menu is parked near the screen bottom)
   if (fabOpen) {
-    const onMap = { recall: petHome, snack: treatAim, toys: toyboxOpen || ball || bowl || cushion, barn: ranchOpen, gear: settingsOpen };
+    const onMap = { recall: petHome, snack: treatAim, toys: toyboxOpen || ball || bowl || cushion || box || plant || music || mirror || mat || jar, barn: ranchOpen, gear: settingsOpen };
     for (let k = 0; k < FAB_ITEMS.length; k++) {
       const [ix, iy, iw, ih] = fabItemRect(k);
       const id = FAB_ITEMS[k];
@@ -11037,15 +13891,17 @@ function frameBody(now) {
       ctx.lineWidth = 2;
       ctx.strokeRect(ix + 1, iy + 1, iw - 2, ih - 2);
       const icx = ix + iw / 2, icy = iy + ih / 2;
-      if (id === "recall") ctx.drawImage(sprite("idle", active, false), icx - 11, icy - 8, 22, 16);
+      if (id === "recall") drawSm(ctx, sprite("idle", active, false), icx - 11, icy - 8, 22, 16);
       else if (id === "snack") drawTreat(icx, icy, 0, treatKind);
       else if (id === "toys") drawSpr(ctx, "toys", icx, icy + 2, 2);
       else if (id === "barn") drawSpr(ctx, "barn", icx, icy + 2, 2);
       else if (id === "gear") drawSpr(ctx, "gear", icx, icy, 2);
       ctx.globalAlpha = 1;
     }
-    // toybox prop strip: nine slots hanging left of the toys item
-    if (toyboxOpen) {
+    // toybox prop strip: nine slots hanging left of the toys item —
+    // drawn only while the parent accordion is still unfolded, so the
+    // visible chooser always matches its clickable region
+    if (toyboxOpen && fabOpen) {
       const [sx, sy] = toyboxStripRect();
       const on = [ball, bowl, cushion, box, plant, music, mirror, mat, jar];
       for (let k = 0; k < 9; k++) {
@@ -11063,61 +13919,65 @@ function frameBody(now) {
 
   // first-run tutorial hint floating above the slime
   if (!seen && Date.now() - bootT < 60000) {
-    const l1 = "JELLY DRIPS IN";
-    const l2 = "RIGHT CLICK = STATUS";
-    const ty = Math.max(8, petY - SH * sy - 46 + Math.sin(t * 2.4) * 2);
-    const x1 = Math.max(4, Math.min(winW - textW(l1, 1) - 4, petX - textW(l1, 1) / 2));
-    const x2 = Math.max(4, Math.min(winW - textW(l2, 1) - 4, petX - textW(l2, 1) / 2));
-    drawText(ctx, l1, x1 + 1, ty + 1, 1, "#5c4632");
-    drawText(ctx, l2, x2 + 1, ty + 13, 1, "#5c4632");
-    drawText(ctx, l1, x1, ty, 1, "#fff6e8");
-    drawText(ctx, l2, x2, ty + 12, 1, "#fff6e8");
+    const ty = Math.max(8, petY - SH * sy - 52 + Math.sin(t * 2.4) * 2);
+    tipBox(["JELLY DRIPS IN", "RIGHT CLICK = STATUS"], petX, ty, 1);
   }
 
-  // discovery hint: same floating spot as the tutorial — gold text so it
-  // reads as a tip, not chatter; fades out over its last 600ms
+  // discovery hint: same floating spot as the tutorial — reads as a tip,
+  // not chatter; fades out over its last 600ms
   if (now < hintUntil && hintText) {
-    const hy = Math.max(8, petY - SH * sy - 46 + Math.sin(t * 2.4) * 2);
-    const hx = Math.max(4, Math.min(winW - textW(hintText, 1) - 4, petX - textW(hintText, 1) / 2));
-    ctx.globalAlpha = Math.min(1, (hintUntil - now) / 600);
-    drawText(ctx, hintText, hx + 1, hy + 1, 1, "#5c4632");
-    drawText(ctx, hintText, hx, hy, 1, "#ffd75e");
-    ctx.globalAlpha = 1;
+    const hy = Math.max(8, petY - SH * sy - 52 + Math.sin(t * 2.4) * 2);
+    tipBox([hintText], petX, hy, Math.min(1, (hintUntil - now) / 600), "#b8860b");
   }
 
-  // settings panel: sound toggle, size cycle, quit
+  // settings panel: captioned sections, name-left / state-right rows,
+  // a close chip, and the lifetime stats pinned to a footer strip
   if (settingsOpen) {
     const [px, py, pw, ph] = settingsRect();
     ctx.globalAlpha = 0.96;
     ctx.fillStyle = "#f7ecd7";
     ctx.fillRect(px, py, pw, ph);
+    ctx.globalAlpha = 1;
     ctx.strokeStyle = "#8a6b4a";
     ctx.lineWidth = 2;
     ctx.strokeRect(px + 1, py + 1, pw - 2, ph - 2);
-    ctx.globalAlpha = 1;
-    drawText(ctx, "SETTINGS", px + pw / 2 - textW("SETTINGS", 1) / 2, py + 11, 1, "#5c4632");
-    const rows = settingsRows();
+    // inner sticker-highlight: the same double-edge chrome the pals got
+    ctx.strokeStyle = "#fffcf2";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(px + 3.5, py + 3.5, pw - 7, ph - 7);
+    // title: the active pal greets from the corner, X chip on the right
+    drawSm(ctx, sprite("idle", active, false), px + 10, py + 5, 22, 16);
+    drawText(ctx, "SETTINGS", px + 38, py + 10, 1, "#5c4632", null, true);
+    const cxR = [px + pw - 26, py + 7, 18, 15];
+    const hovX = curX >= px + pw - 28 && curX <= px + pw - 8 && curY >= py + 6 && curY <= py + 22;
+    ctx.fillStyle = hovX ? "#e05a6e" : "#e8d6b2";
+    ctx.fillRect(cxR[0], cxR[1], cxR[2], cxR[3]);
+    ctx.strokeStyle = "#8a6b4a";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(cxR[0] + 0.5, cxR[1] + 0.5, cxR[2] - 1, cxR[3] - 1);
+    drawText(ctx, "X", cxR[0] + 6, cxR[1] + 4, 1, hovX ? "#fff6e8" : "#5c4632", null, true);
+    // version badge lives in the title bar, just left of the close chip —
+    // the old footer spot collided with the FOCUS stat on long counters
+    const ver = newVer ? `NEW V${newVer}!` : DEMO ? "DEMO" : `V${APP_VER}`;
+    drawText(ctx, ver, cxR[0] - 8 - textW(ver, 1), py + 11, 1, newVer ? "#d4a017" : DEMO ? "#e05a6e" : "#c3ab88", null, !!newVer);
+    // a hairline under the title keeps the scrolling list out of the chrome
+    ctx.fillStyle = "#d8c49a";
+    ctx.fillRect(px + 4, py + SET_VIEW_TOP - 3, pw - 8, 1);
+
+    const cells = settingsCells();
     const pomoLbl = pomo
       ? `${pomoPhase === "focus" ? "FOCUS" : "BREAK"} ${Math.max(0, Math.ceil((pomoUntil - Date.now()) / 60000))}M`
-      : "POMO OFF";
-    const lbls = [
-      vol <= 0.001 ? "SOUND OFF" : `SOUND ${Math.round(vol * 100)}%`,
-      `SIZE ${sizeMul.toFixed(1)}X`,
-      reduceMotion ? "MOTION LOW" : "MOTION FULL",
-      "PHOTO",
-      "ALBUM",
-      pomoLbl,
-      `FOCUS ${pomoFocusMin}M`,
-      `BREAK ${pomoBreakMin}M`,
-      "SHARE",
-      weatherOn ? "WEATHER ON" : "WEATHER OFF",
-      bootOn ? "BOOT ON" : "BOOT OFF",
-      "JELLY",
-      "REDEEM",
-      `ID ${uid}`,
-      Date.now() < resetArm ? "SURE?" : "RESET",
-      "QUIT",
-    ];
+      : "OFF";
+    // name-left / state-right: toggles show their value, doors show a chevron
+    const NAME = { 0: "SOUND", 1: "SIZE", 2: "MOTION", 3: "PHOTO", 4: "ALBUM", 5: "POMO",
+      6: "FOCUS", 7: "BREAK", 8: "SHARE", 9: "WEATHER", 10: "BOOT", 11: "JELLY",
+      12: "REDEEM", 13: "MY ID", 14: Date.now() < resetArm ? "SURE?" : "RESET", 15: "QUIT",
+      16: "POWER" };
+    const VAL = { 0: vol <= 0.001 ? "OFF" : `${Math.round(vol * 100)}%`, 1: `${sizeMul.toFixed(1)}X`,
+      2: reduceMotion ? "LOW" : "FULL", 5: pomoLbl, 6: `${pomoFocusMin}M`, 7: `${pomoBreakMin}M`,
+      9: weatherOn ? "ON" : "OFF", 10: bootOn ? "ON" : "OFF", 13: uid ? uid.slice(0, 8) : "-",
+      16: SAVER_LABEL[saverMode] };
+    const DOOR = new Set([3, 4, 8, 11, 12]);
     // rows paint inside a clipped viewport — the title and the footer
     // stats stay put while the list slides underneath
     const vy0 = py + SET_VIEW_TOP, vy1 = py + ph - SET_VIEW_BOT;
@@ -11125,30 +13985,52 @@ function frameBody(now) {
     ctx.beginPath();
     ctx.rect(px + 2, vy0, pw - 4, vy1 - vy0);
     ctx.clip();
-    const rowIds = settingsRowIds();
-    for (let i = 0; i < rows.length; i++) {
-      const R = rows[i];
-      const id = rowIds[i];
+    for (const c of cells) {
+      if (c.cap !== undefined) {
+        // section caption: small dim label with a hairline trailing off
+        if (c.y + SET_CAP_H < vy0 || c.y > vy1) continue;
+        drawText(ctx, c.cap, px + 14, c.y + 4, 1, "#a8845c");
+        const lx = px + 14 + textW(c.cap, 1) + 8;
+        ctx.fillStyle = "#d8c49a";
+        ctx.fillRect(lx, c.y + 8, px + pw - 14 - lx, 1);
+        continue;
+      }
+      const R = c.r, id = c.id;
       if (R[1] + R[3] < vy0 || R[1] > vy1) continue; // fully scrolled out
       const hov2 = curX >= R[0] && curX <= R[0] + R[2] && curY >= R[1] && curY <= R[1] + R[3] && curY >= vy0 && curY <= vy1;
-      const danger = id === 15 || (id === 14 && Date.now() < resetArm);
-      ctx.fillStyle = danger ? "#e05a6e" : hov2 ? "#efe0c2" : "#e3d0aa";
+      const armed = id === 14 && Date.now() < resetArm;
+      const half = R[2] < 100;
+      // borderless soft-fill rows: the section hairlines carry the
+      // structure, so a row only needs a quiet surface + a hover state
+      ctx.fillStyle = armed ? "#e05a6e" : hov2 ? "#fbf2dc" : "#efe2c4";
       ctx.fillRect(R[0], R[1], R[2], R[3]);
-      ctx.strokeStyle = "#8a6b4a";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(R[0] + 0.5, R[1] + 0.5, R[2] - 1, R[3] - 1);
-      drawText(ctx, lbls[id], px + pw / 2 - textW(lbls[id], 1) / 2, R[1] + 6, 1, danger ? "#fff6e8" : "#5c4632");
+      const ty2 = R[1] + 6;
+      if (half) {
+        // split cells center their compact "NAME VALUE" pair
+        const lbl = VAL[id] !== undefined ? `${NAME[id]} ${VAL[id]}` : NAME[id];
+        drawText(ctx, lbl, R[0] + R[2] / 2 - textW(lbl, 1) / 2, ty2, 1, armed ? "#fff6e8" : "#5c4632");
+      } else {
+        const nameCol = armed ? "#fff6e8" : id === 14 || id === 15 ? "#b03a4a" : "#5c4632";
+        drawText(ctx, NAME[id], R[0] + 10, ty2, 1, nameCol);
+        if (VAL[id] !== undefined) {
+          const v = VAL[id];
+          // one muted value voice — ON/OFF is carried by the word itself
+          drawText(ctx, v, R[0] + R[2] - 10 - textW(v, 1), ty2, 1, armed ? "#fff6e8" : "#a8845c");
+        } else if (DOOR.has(id)) {
+          drawText(ctx, ">", R[0] + R[2] - 16, ty2, 1, "#c9a06c");
+        }
+      }
       if (id === 0) {
         // volume slider: the row's bottom strip is a progress bar —
         // click/drag anywhere on the row sets the level
-        const tx = R[0] + 8, tw = R[2] - 16, ty = R[1] + R[3] - 5;
-        ctx.fillStyle = "#8a6b4a";
-        ctx.fillRect(tx, ty, tw, 3);
+        const tx = R[0] + 10, tw = R[2] - 20, tyy = R[1] + R[3] - 5;
+        ctx.fillStyle = "#c9b088";
+        ctx.fillRect(tx, tyy, tw, 3);
         if (vol > 0.001) {
           ctx.fillStyle = "#e08a5a";
-          ctx.fillRect(tx, ty, Math.round(tw * vol), 3);
+          ctx.fillRect(tx, tyy, Math.round(tw * vol), 3);
           // knob nub at the fill edge — reads as a draggable handle
-          ctx.fillRect(tx + Math.round(tw * vol) - 2, ty - 2, 4, 7);
+          ctx.fillRect(tx + Math.round(tw * vol) - 2, tyy - 2, 4, 7);
         }
       }
     }
@@ -11158,7 +14040,7 @@ function frameBody(now) {
     if (msc > 0) {
       const th = Math.max(18, (vy1 - vy0) * (vy1 - vy0) / (vy1 - vy0 + msc));
       const ty = vy0 + (vy1 - vy0 - th) * (setScroll / msc);
-      ctx.fillStyle = "#d8c49a";
+      ctx.fillStyle = "#e0cdaa";
       ctx.fillRect(px + pw - 7, vy0, 3, vy1 - vy0);
       ctx.fillStyle = "#8a6b4a";
       ctx.fillRect(px + pw - 8, ty, 5, th);
@@ -11168,11 +14050,11 @@ function frameBody(now) {
         ctx.fillRect(px + pw - 8 + k, vy1 - 6 + k, 5 - k * 2, 1);
       }
     }
-    // lifetime counters — groundwork for future achievements
-    drawText(ctx, `PULLS ${stats.pulls}  BREEDS ${stats.breeds}  SHINY ${stats.shiny}`, px + 16, py + ph - 26, 1, "#8a6b4a");
-    drawText(ctx, `TREATS ${stats.treats}  PLAYS ${stats.plays}  FOCUS ${Math.floor((stats.focusSec || 0) / 60)}M`, px + 16, py + ph - 14, 1, "#8a6b4a");
-    if (newVer) drawText(ctx, `NEW V${newVer}!`, px + 120, py + ph - 14, 1, "#d4a017", null, true);
-    else drawText(ctx, DEMO ? "DEMO" : `V${APP_VER}`, px + 152, py + ph - 14, 1, DEMO ? "#e05a6e" : "#b09a78");
+    // footer strip: lifetime counters — groundwork for future achievements
+    ctx.fillStyle = "#d8c49a";
+    ctx.fillRect(px + 4, vy1 + 2, pw - 8, 1);
+    drawText(ctx, `PULLS ${stats.pulls}  BREEDS ${stats.breeds}  SHINY ${stats.shiny}`, px + 14, py + ph - 26, 1, "#8a6b4a");
+    drawText(ctx, `TREATS ${stats.treats}  PLAYS ${stats.plays}  FOCUS ${Math.floor((stats.focusSec || 0) / 60)}M`, px + 14, py + ph - 14, 1, "#8a6b4a");
   }
   // gem shop: pack prices, store link, and the redeem door. buying
   // happens on the itch.io page — the code comes back here
@@ -11205,12 +14087,12 @@ function frameBody(now) {
       drawText(ctx, price, BR[0] - 8 - textW(price, 1), R[1] + 7, 1, "#5c4632", null, true);
       const live = STORE ? !!prod : !!packUrl(packIds[i]);
       const hovB = curX >= BR[0] && curX <= BR[0] + BR[2] && curY >= BR[1] && curY <= BR[1] + BR[3];
-      ctx.fillStyle = hovB && live ? "#b8e8c8" : live ? "#d8ecc9" : "#ddd0b8";
+      ctx.fillStyle = hovB && live ? "#f8e8c4" : live ? "#f0dcae" : "#ddd0b8";
       ctx.fillRect(BR[0], BR[1], BR[2], BR[3]);
-      ctx.strokeStyle = live ? "#2f9e63" : "#a8907a";
+      ctx.strokeStyle = live ? "#e08a5a" : "#a8907a";
       ctx.lineWidth = 1;
       ctx.strokeRect(BR[0] + 0.5, BR[1] + 0.5, BR[2] - 1, BR[3] - 1);
-      drawText(ctx, "BUY", BR[0] + BR[2] / 2 - textW("BUY", 1) / 2, BR[1] + 7, 1, live ? "#2f7e4e" : "#a8907a", null, true);
+      drawText(ctx, "BUY", BR[0] + BR[2] / 2 - textW("BUY", 1) / 2, BR[1] + 7, 1, live ? "#b05a2a" : "#a8907a", null, true);
     }
     if (STORE) {
       drawText(ctx, "APP STORE CHECKOUT", gx + gw / 2 - textW("APP STORE CHECKOUT", 1) / 2, gy + 168, 1, "#8a6b4a");
