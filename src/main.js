@@ -78,8 +78,8 @@ const SHAPES = { round: HW_ROUND, tall: HW_TALL, flat: HW_FLAT, square: HW_SQUAR
 const FACE_EMO = {
   happy: 1, laugh: 1, excited: 1, love: 1, star: 1, curious: 1, gasp: 1,
   shock: 1, worry: 1, sad: 1, cry: 1, jealous: 1, sideeye: 1,
-  pout: 1, hmph: 1, embar: 1, smug: 1, mischief: 1, wink: 1, drool: 1,
-  stuffed: 1, sneeze: 1, dizzy: 1, wince: 1,
+  hmph: 1, embar: 1, smug: 1, mischief: 1, wink: 1, drool: 1,
+  stuffed: 1, sneeze: 1, dizzy: 1,
 };
 
 // reason -> little glyph: a fresh emotional face pops an icon bubble
@@ -126,14 +126,15 @@ const WHY_ICON = {
 const PET_FACE_WHY = {
   dizzy: "FLUNG!", shock: "SURPRISED!", gasp: "SURPRISED!", sneeze: "ACHOO",
   tearjoy: "TICKLED", laugh: "TICKLED", cry: "GOODBYE", worry: "PAL FLYING",
-  pout: "POKED", grumpy: "POKED", drool: "TREAT?", stuffed: "SNACK",
+  grumpy: "POKED", drool: "TREAT?", stuffed: "SNACK",
   munch: "SNACK", chew: "SNACK", jealous: "PALM PAL", yawn: "WAKE UP",
   sad: "IGNORED", doze: "SLEEPY",
 };
 let petWhy = null, petWhyF = null, petWhyAt = 0; // one queued cause stamp
+let petFaceWhy = {};                             // per-face live causes for status card
 let petWhyIc = null, petWhyUntil = 0;            // the icon it resolved to
 let petEchoCd = 0; // pet-glance-at-pal-outburst cooldown
-function petStamp(why, f) { petWhy = why; petWhyF = f; petWhyAt = performance.now(); }
+function petStamp(why, f) { petWhy = why; petWhyF = f; petWhyAt = performance.now(); if (f && why) petFaceWhy[f] = why; }
 
 // rarity: 0 common, 1 rare, 2 epic, 3 legendary
 const SPECIES = [
@@ -957,29 +958,32 @@ function drawAccRaw(c, id, x, y, u) {
 // face pixel coords on the 36x26 grid. eyes: left x11-13 / right x22-24, rows 10-13.
 const FACES = {
   idle: {
-    e: [[10,10],[11,10],[12,10],[13,10],[10,11],[11,11],[12,11],[13,11],[10,12],[11,12],[12,12],[13,12],
-        [10,13],[11,13],[12,13],[13,13],[10,14],[11,14],[12,14],[13,14],
-        [22,10],[23,10],[24,10],[25,10],[22,11],[23,11],[24,11],[25,11],[22,12],[23,12],[24,12],[25,12],
-        [22,13],[23,13],[24,13],[25,13],[22,14],[23,14],[24,14],[25,14]],
-    w: [[10,10],[11,10],[10,11],[13,14],[22,10],[23,10],[22,11],[25,14]],
+    e: [[11,10],[12,10],[10,11],[11,11],[12,11],[13,11],[10,12],[11,12],[12,12],[13,12],
+        [10,13],[11,13],[13,13],[11,14],[12,14],
+        [23,10],[24,10],[22,11],[23,11],[24,11],[25,11],[22,12],[23,12],[24,12],[25,12],
+        [22,13],[24,13],[25,13],[23,14],[24,14]],
+    w: [[11,11],[11,12],[23,11],[23,12]],
+    u: [[12,13],[23,13]],
     m: [[16,15],[19,15],[17,16],[18,16]],
     k: [[7,14],[8,14],[7,15],[8,15],[28,14],[29,14],[28,15],[29,15]],
   },
   lookL: {
-    e: [[9,10],[10,10],[11,10],[12,10],[9,11],[10,11],[11,11],[12,11],[9,12],[10,12],[11,12],[12,12],
-        [9,13],[10,13],[11,13],[12,13],[9,14],[10,14],[11,14],[12,14],
-        [21,10],[22,10],[23,10],[24,10],[21,11],[22,11],[23,11],[24,11],[21,12],[22,12],[23,12],[24,12],
-        [21,13],[22,13],[23,13],[24,13],[21,14],[22,14],[23,14],[24,14]],
-    w: [[9,10],[10,10],[9,11],[12,14],[21,10],[22,10],[21,11],[24,14]],
+    e: [[10,10],[11,10],[9,11],[10,11],[11,11],[12,11],[9,12],[10,12],[11,12],[12,12],
+        [9,13],[10,13],[12,13],[10,14],[11,14],
+        [22,10],[23,10],[21,11],[22,11],[23,11],[24,11],[21,12],[22,12],[23,12],[24,12],
+        [21,13],[22,13],[24,13],[22,14],[23,14]],
+    w: [[10,11],[10,12],[22,11],[22,12]],
+    u: [[11,13],[22,13]],
     m: [[16,15],[19,15],[17,16],[18,16]],
     k: [[7,14],[8,14],[7,15],[8,15],[28,14],[29,14],[28,15],[29,15]],
   },
   lookR: {
-    e: [[11,10],[12,10],[13,10],[14,10],[11,11],[12,11],[13,11],[14,11],[11,12],[12,12],[13,12],[14,12],
-        [11,13],[12,13],[13,13],[14,13],[11,14],[12,14],[13,14],[14,14],
-        [23,10],[24,10],[25,10],[26,10],[23,11],[24,11],[25,11],[26,11],[23,12],[24,12],[25,12],[26,12],
-        [23,13],[24,13],[25,13],[26,13],[23,14],[24,14],[25,14],[26,14]],
-    w: [[11,10],[12,10],[11,11],[14,14],[23,10],[24,10],[23,11],[26,14]],
+    e: [[12,10],[13,10],[11,11],[12,11],[13,11],[14,11],[11,12],[12,12],[13,12],[14,12],
+        [11,13],[12,13],[14,13],[12,14],[13,14],
+        [24,10],[25,10],[23,11],[24,11],[25,11],[26,11],[23,12],[24,12],[25,12],[26,12],
+        [23,13],[24,13],[26,13],[24,14],[25,14]],
+    w: [[12,11],[12,12],[24,11],[24,12]],
+    u: [[13,13],[24,13]],
     m: [[16,15],[19,15],[17,16],[18,16]],
     k: [[7,14],[8,14],[7,15],[8,15],[28,14],[29,14],[28,15],[29,15]],
   },
@@ -1061,26 +1065,20 @@ const FACES = {
   // one eye closed in a playful wink + crooked smirk
   wink: {
     e: [[10,11],[11,12],[12,12],[13,11],
-        [23,10],[24,10],[25,10],[23,11],[24,11],[25,11],[23,12],[24,12],[25,12],
-        [23,13],[24,13],[25,13],[24,14]],
-    w: [[23,10],[23,11]],
+        [23,11],[24,11],[22,12],[23,12],[24,12],[25,12],[22,13],[23,13],[24,13],[25,13],[23,14],[24,14]],
+    w: [[23,12]],
+    u: [[23,13],[24,13]],
     m: [[15,15],[16,16],[17,16],[18,16],[19,15],[20,14]],
     k: [[7,14],[8,14],[7,15],[8,15],[28,14],[29,14],[28,15],[29,15]],
   },
   // teary eyes — mistreated, mourning a departed pal
   cry: {
-    e: [[10,11],[11,11],[12,11],[13,11],[10,12],[11,12],[12,12],[13,12],[10,13],[11,13],[12,13],[13,13],
-        [22,11],[23,11],[24,11],[25,11],[22,12],[23,12],[24,12],[25,12],[22,13],[23,13],[24,13],[25,13]],
-    w: [[10,11],[22,11]],
+    e: [[11,11],[12,11],[10,12],[11,12],[12,12],[13,12],[10,13],[11,13],[12,13],[13,13],
+        [23,11],[24,11],[22,12],[23,12],[24,12],[25,12],[22,13],[23,13],[24,13],[25,13]],
+    w: [[11,12],[23,12]],
     d: [[11,15],[11,16],[24,15],[24,16],[12,17],[23,17]],
     m: [[15,16],[16,15],[17,16],[18,15],[19,16],[20,15]],
     k: [[7,14],[8,14],[28,14],[29,14]],
-  },
-  // puffed-cheek pout: mildly sulking, not full grumpy
-  pout: {
-    e: [[10,12],[11,11],[12,12],[13,12],[22,12],[23,11],[24,12],[25,12]],
-    m: [[16,16],[19,16],[17,17],[18,17]],
-    k: [[6,14],[7,14],[8,14],[6,15],[7,15],[8,15],[28,14],[29,14],[30,14],[28,15],[29,15],[30,15]],
   },
   // pure contentment: closed-eye curve + little cat omega mouth
   content: {
@@ -1092,8 +1090,8 @@ const FACES = {
   blep: {
     e: [[10,12],[11,11],[12,11],[13,12],[22,12],[23,11],[24,11],[25,12]],
     m: [[15,15],[16,15],[17,15],[18,15],[19,15],[20,15],
-        [16,16],[17,16],[18,16],[19,16],
-        [17,17],[18,17],[17,18],[18,18],[17,19],[18,19]],
+        [16,16],[19,16],[16,17],[19,17],[17,18],[18,18]],
+    v: [[17,16],[18,16],[17,17],[18,17]],
     k: [[7,14],[8,14],[28,14],[29,14]],
   },
   // smug half-lidded smirk: nailed the pounce, dodged your poke, knows it
@@ -1188,9 +1186,12 @@ const FACES = {
     m: [[16,16],[17,16],[18,16],[19,16],[20,17]],
     k: [[7,14],[8,14],[28,14],[29,14]],
   },
-  // curious: one eye open, one squinted (generated), tiny o mouth —
-  // first sight of a new species or a strange contraption landing
+  // curious: plain open eyes (generated), tiny o mouth — wonder at a
+  // new species or a strange contraption landing
   curious: {
+    e: [[11,10],[12,10],[10,11],[11,11],[12,11],[13,11],[10,12],[11,12],[12,12],[13,12],
+        [23,10],[24,10],[22,11],[23,11],[24,11],[25,11],[22,12],[23,12],[24,12],[25,12]],
+    w: [[11,10],[23,10]],
     m: [[17,16],[18,16],[17,17],[18,17]],
     k: [[7,14],[8,14],[28,14],[29,14]],
   },
@@ -1228,7 +1229,7 @@ const FACES = {
   // mid-tag, mid-staredown
   serious: {
     m: [[16,16],[17,16],[18,16],[19,16]],
-    g: [[9,8],[10,9],[26,8],[25,9]],
+    g: [[9,9],[10,10],[26,9],[25,10]],
   },
   // tearjoy: laughing so hard it leaks — squeezed eyes + open grin +
   // tears flung from the corners
@@ -1290,9 +1291,9 @@ const FACES = {
     k: [[7,14],[8,14],[28,14],[29,14]],
   },
   cry2: {
-    e: [[10,11],[11,11],[12,11],[13,11],[10,12],[11,12],[12,12],[13,12],[10,13],[11,13],[12,13],[13,13],
-        [22,11],[23,11],[24,11],[25,11],[22,12],[23,12],[24,12],[25,12],[22,13],[23,13],[24,13],[25,13]],
-    w: [[10,11],[22,11]],
+    e: [[11,11],[12,11],[10,12],[11,12],[12,12],[13,12],[10,13],[11,13],[12,13],[13,13],
+        [23,11],[24,11],[22,12],[23,12],[24,12],[25,12],[22,13],[23,13],[24,13],[25,13]],
+    w: [[11,12],[23,12]],
     d: [[11,16],[11,17],[24,16],[24,17],[12,18],[23,18]],
     m: [[16,15],[17,16],[18,16],[19,15]],
     k: [[7,14],[8,14],[28,14],[29,14]],
@@ -1309,22 +1310,25 @@ const FACES = {
   },
 };
 
-// per-species EYE styles: the open-eyed faces (idle/lookL/lookR) are
-// generated from 5x5 templates stamped at the eye's base x — each is a
-// cute-animal eye: authored for the LEFT eye with col0 at the temple,
-// then mirrored onto the right eye so droops/flicks/lashes face outward.
-// chars: e=eye w=shine u=depth c=gold glint .=none
+// per-species EYE styles: the open-eyed faces (idle/lookL/lookR) and
+// expression poses are generated from clean 4x5 templates centered
+// symmetrically at x=10..13 (left) and x=22..25 (right).
+// each entry carries:
+//   g: 5 rows x 4 cols silhouette for the LEFT eye (mirrored 3-x onto right)
+//   w: upper-left catchlight coords stamped after mirroring onto occupied
+//      cells so light stays consistent and never overwrites/drops pupil pixels
+// chars: e=eye w=shine u=iris depth c=gold glint .=none
 const EYE_TPL = [
-  // 0 puppy — begging eyes: droopy outer corner, fat shine
-  [".eee.", "wweee", "weeee", "eeeee", "e.uu."],
-  // 1 kitty — upturned flick at the temple, confident gleam
-  ["eeee.", "weeee", "weeee", "e.ee.", ".uuw."],
-  // 2 hamster — small glossy bead, tucked glint
-  [".....", ".wee.", "weee.", ".eee.", "....."],
-  // 3 fawn — watery doe eyes: gold fleck, outer lash hint
-  ["e....", "wweee", "weeee", "eecww", ".uuu."],
-  // 4 sleepy — heavy lid sagging at the temple
-  [".....", "weeee", "eeeee", "eeeee", ".wu.."],
+  // 0 round — tall glossy oval: vertical 2px gleam + iris depth at the bottom
+  { g: [".ee.", "eeee", "eeee", "eeue", ".ee."], w: [[1, 1], [1, 2]] },
+  // 1 sparkle — tallest 4x5 oval, triple catchlight run
+  { g: [".ee.", "eeee", "eeee", "eeee", ".ee."], w: [[1, 1], [2, 2], [1, 3]] },
+  // 2 bead — clean minimalist 2x4 glossy pill + iris dot
+  { g: ["....", ".ee.", ".ee.", ".eu.", ".ee."], w: [[1, 1]] },
+  // 3 starry — tall eye, gold fleck + gleam
+  { g: [".ee.", "eeee", "eeee", "eece", ".ee."], w: [[1, 1], [1, 2]] },
+  // 4 mellow — cozy half-lidded sleepy oval, soft gleam tucked under lid
+  { g: ["....", "....", "eeee", "eeue", ".ee."], w: [[1, 3]] },
 ];
 function eyeStyle(i) {
   const id = SPECIES[i] && SPECIES[i].id;
@@ -1334,31 +1338,31 @@ function eyeStyle(i) {
   const r = ((s * 1664525 + 1013904223) >>> 0) / 4294967296;
   return r < 0.40 ? 0 : r < 0.60 ? 1 : r < 0.74 ? 2 : r < 0.87 ? 3 : 4;
 }
-// faces with generated eyes — the rest of the face (mouth/blush/etc)
-// rides the authored table untouched
-const EYE_BASE = { idle: [11, 21], lookL: [10, 20], lookR: [12, 22] };
-// open-mouth expression faces get their eyes from the SAME species
-// template — each pose just shifts, lifts or lids it, so an excited
-// fawn keeps its doe eyes instead of falling back to a generic speck.
-// dy/dx offset the stamp, keepFrom/dropTop trim lid rows, side pins a
-// trim to one eye only (0=left, 1=right)
+// faces with generated eyes — mathematically symmetric around 17.5
+// (10..13 & 22..25), matching FACES and fitting inside Prism's glasses
+const EYE_BASE = { idle: [10, 22], lookL: [9, 21], lookR: [11, 23] };
+// expression poses reuse each species' eye template via a 4x5 local buffer:
+//   perk: sleepy/mellow eyes open +1 row when excited or gasping
+//   slant: gentle outer-top droop for sad/worried brows (works on all styles)
+//   lid: keep bottom N rows with a crisp flat upper eyelid (2=squint, 3=serious)
+//   dx/dy: glance offset, side: apply lid/slant to one eye only (0=L, 1=R)
 const EYE_EXPR = {
-  excited:  {},                       // the plain pretty eye + a big grin
-  gasp:     {},                       // plain wide eyes + the little O
-  sad:      { dropTop: 1 },           // brow droops over the shine
+  excited:  { perk: true },           // bright open eyes + big grin
+  gasp:     { perk: true },           // wide perked eyes + little O
+  sad:      { slant: true },          // gentle outer brow droop
   sideeye:  { dx: -2 },               // same eyes, glancing sideways
-  doze:     { keepFrom: 2 },          // heavy lid leaves the lower rows
-  mischief: { dropTop: 3, side: 0 },  // one squeezed eye, one clear
-  jealous:  { dx: -2, dropTop: 2 },   // narrowed glare slid at the rival
-  curious:  { dropTop: 2, side: 1 },  // right eye squints — quizzical
-  worry:    { dropTop: 1 },           // same brow lift as sad, new mouth
-  hmph:     { dx: 2, dropTop: 1 },    // turned-away lids + puffed cheeks
-  drool:    {},                     // plain eager eyes, food locked on
-  serious:  { dropTop: 1 },           // lids down, brow set — game face
-  meh:      { dropTop: 2, dx: -1 },   // half-mast eyes glancing away
-  excited2: {},                     // frame-2 of excited — same eyes
-  drool2:   {},                     // frame-2 of drool — drip falls
-  worry2:   { dropTop: 1 },           // frame-2 of worry — mouth wobble
+  doze:     { lid: 2 },               // heavy flat lid, 2 rows visible
+  mischief: { lid: 2, side: 0 },      // left eye squints, right eye wide
+  jealous:  { dx: -2, lid: 2 },       // narrowed glare slid at the rival
+  curious:  {},                       // plain open eyes + tiny o mouth — wonder
+  worry:    { slant: true },          // gentle outer brow droop + wavy frown
+  hmph:     { dx: 2, lid: 2 },        // turned-away lids + puffed cheeks
+  drool:    {},                       // plain eager eyes, food locked on
+  serious:  { lid: 3 },               // flat determined lids + brow
+  meh:      { lid: 2, dx: -1 },       // half-mast eyes glancing away
+  excited2: { perk: true },           // frame-2 of excited — same eyes
+  drool2:   {},                       // frame-2 of drool — drip falls
+  worry2:   { slant: true },          // frame-2 of worry — mouth wobble
 };
 function faceSet(spIdx) {
   if (spIdx == null) return FACES;
@@ -1366,32 +1370,75 @@ function faceSet(spIdx) {
   if (c[spIdx]) return c[spIdx];
   const tpl = EYE_TPL[eyeStyle(spIdx)];
   const set = Object.assign({}, FACES);
-  // one stamp pass per eye — shapes mirror for the right eye, shines don't
-  const stamp = (px, bi, bx, dx, dy, keep) => {
+  let topR = 5, botR = -1;
+  for (let y = 0; y < 5; y++) {
+    if (tpl.g[y] !== "....") { if (y < topR) topR = y; botR = y; }
+  }
+  const stamp = (px, bi, bx, spec) => {
+    const dx = (spec && spec.dx) || 0;
+    const dy = (spec && spec.dy) || 0;
+    const sideMatch = !spec || spec.side == null || spec.side === bi;
+    const lid = sideMatch && spec && spec.lid ? spec.lid : 0;
+    const slant = sideMatch && spec && spec.slant;
+    const perk = sideMatch && spec && spec.perk;
+    const buf = Array.from({ length: 5 }, () => new Array(4).fill("."));
+    let r0 = topR, r1 = botR;
+    if (perk && topR >= 2) {
+      buf[topR - 1][1] = "e";
+      buf[topR - 1][2] = "e";
+      r0 = topR - 1;
+    }
     for (let y = 0; y < 5; y++) {
-      if (keep && !keep(y, bi)) continue;
-      for (let x = 0; x < 5; x++) {
-        const ch = tpl[y][x];
-        if (ch !== ".") px[ch].push([bx + (bi && ch !== "w" ? 4 - x : x) + dx, 10 + y + dy]);
+      for (let x = 0; x < 4; x++) {
+        const ch = tpl.g[y][x];
+        if (ch !== ".") buf[y][bi ? 3 - x : x] = ch;
+      }
+    }
+    if (lid) {
+      const keepStart = Math.max(r0 + (r1 - r0 + 1 >= 4 ? 1 : 0), r1 - lid + 1);
+      for (let y = 0; y < keepStart; y++) buf[y].fill(".");
+      for (let x = 0; x < 4; x++) {
+        if (buf[keepStart][x] !== ".") buf[keepStart][x] = "e";
+      }
+      r0 = keepStart;
+    }
+    if (slant) {
+      const outerX = bi ? 3 : 0;
+      const outerIn = bi ? 2 : 1;
+      if (buf[r0][outerX] !== ".") buf[r0][outerX] = ".";
+      else if (r0 + 1 <= r1 && buf[r0 + 1][outerX] !== ".") buf[r0 + 1][outerX] = ".";
+      if (buf[r0][outerIn] !== ".") buf[r0][outerIn] = "e";
+    }
+    const ws = Array.isArray(tpl.w) ? tpl.w : (bi ? tpl.w.r : tpl.w.l);
+    for (const [wx, wy] of ws) {
+      if (lid && wy <= r0) {
+        if (wy + 1 <= r1 && buf[wy + 1][wx] !== ".") buf[wy + 1][wx] = "w";
+        continue;
+      }
+      if (wy >= 0 && wy < 5 && buf[wy][wx] !== ".") buf[wy][wx] = "w";
+    }
+    if (perk && topR >= 2 && buf[topR][1] !== ".") {
+      for (const [wx, wy] of ws) if (wy >= topR + 1 && buf[wy][wx] === "w") buf[wy][wx] = "e";
+      buf[topR][1] = "w";
+    }
+    for (let y = 0; y < 5; y++) {
+      for (let x = 0; x < 4; x++) {
+        const ch = buf[y][x];
+        if (ch !== ".") px[ch].push([bx + x + dx, 10 + y + dy]);
       }
     }
   };
   for (const f in EYE_BASE) {
     const px = { e: [], w: [], u: [], c: [] };
-    stamp(px, 0, EYE_BASE[f][0], 0, 0, null);
-    stamp(px, 1, EYE_BASE[f][1], 0, 0, null);
+    stamp(px, 0, EYE_BASE[f][0], null);
+    stamp(px, 1, EYE_BASE[f][1], null);
     set[f] = Object.assign({}, FACES[f], px);
   }
-  // expression eyes: same template, different pose — keepFrom/dropTop trim
-  // lid rows, dx slides the stamp, dy lifts it; mouths/blush survive
   for (const f in EYE_EXPR) {
     const spec = EYE_EXPR[f];
     const px = { e: [], w: [], u: [], c: [] };
-    const keep = (y, bi) =>
-      !(spec.keepFrom != null && y < spec.keepFrom)
-      && !(spec.dropTop && y < spec.dropTop && (spec.side == null || spec.side === bi));
-    stamp(px, 0, 11, spec.dx || 0, spec.dy || 0, keep);
-    stamp(px, 1, 21, spec.dx || 0, spec.dy || 0, keep);
+    stamp(px, 0, 10, spec);
+    stamp(px, 1, 22, spec);
     set[f] = Object.assign({}, FACES[f], px);
   }
   return (c[spIdx] = set);
@@ -1405,10 +1452,9 @@ function mixRgb(a, b, f) {
 }
 const SWEAT = hexRgb("#8fd4f0");
 const FIXED = { d: SWEAT, c: hexRgb("#ffd75e"), g: hexRgb("#2f2f3a"), v: hexRgb("#ff8fb8") };
-// face-mass chars — eyes, shines, iris, glints, blush. these get an
-// anti-aliased rim: outer quadrants blend toward the body they border,
-// so faces read round and glossy at 2x instead of stepped pixel blobs
-const FACE_SOFT = { e: 1, w: 1, u: 1, c: 1, k: 1 };
+// eye-mass chars (for corner rounding only on multi-pixel ovals) and crisp face chars (no body grain)
+const EYE_CH = { e: 1, w: 1, u: 1, c: 1 };
+const NO_GRAIN = { e: 1, w: 1, u: 1, c: 1, m: 1, v: 1, d: 1, g: 1 };
 
 // per-species silhouette variation: every slime is the same base shape
 // but a slightly different blob — seeded by species index so it's stable
@@ -1430,14 +1476,9 @@ function shapeVar(i) {
     w = Math.round(w * bulge * (0.88 + 0.24 * Math.sin(Math.PI * y / SH)));
     hw[y] = Math.max(0, Math.min(CX - 1, w));
   }
-  // coord remap for authored pixels (top doodads + faces): height scaled
-  // around the baseline, x drifted by the lean at that row
+  // coord remap for authored silhouette doodads (ears, crowns, top stems)
   const tfm = (x, y) => {
     const ny = Math.max(0, Math.min(SH - 1, SH - 1 - Math.round((SH - 1 - y) * hs)));
-    // scale x by the row-width ratio (clamped — degenerate tip rows
-    // would explode it), so a pixel authored at the old edge lands at
-    // the new edge; then allow at most 4px of protrusion past the edge
-    // so ears/crowns still poke out but never float away
     const srcW = hw0[y] || 1, dstW = hw[ny] || 1;
     const r = Math.min(2, Math.max(0.4, dstW / srcW));
     let nx = CX + Math.round((x - CX) * r) + Math.round(lean * (1 - ny / SH));
@@ -1445,7 +1486,24 @@ function shapeVar(i) {
     nx = Math.max(CX - lim, Math.min(CX + lim, nx));
     return [Math.max(0, Math.min(SW - 1, nx)), ny];
   };
-  return (shapeVarCache[i] = { hw, tfm });
+  // rigid integer face anchor: shifts the face as one unit to match each
+  // species' height and lean without ever splitting or shearing eye pixels
+  let fdy = (SH - 1 - Math.round((SH - 1 - 12) * hs)) - 12;
+  if (hw[Math.max(0, Math.min(SH - 1, 10 + fdy))] <= 11 && 16 + fdy <= SH - 3) fdy += 1;
+  let fdx = Math.round(lean * (1 - (12 + fdy) / SH));
+  const eyeMinW = Math.min(
+    hw[Math.max(0, Math.min(SH - 1, 11 + fdy))] || 0,
+    hw[Math.max(0, Math.min(SH - 1, 12 + fdy))] || 0,
+    hw[Math.max(0, Math.min(SH - 1, 13 + fdy))] || 0,
+    hw[Math.max(0, Math.min(SH - 1, 14 + fdy))] || 0,
+  );
+  const maxShift = Math.max(0, eyeMinW - 9);
+  fdx = Math.max(-maxShift, Math.min(maxShift, fdx));
+  const faceTfm = (x, y) => [
+    Math.max(0, Math.min(SW - 1, x + fdx)),
+    Math.max(0, Math.min(SH - 1, y + fdy)),
+  ];
+  return (shapeVarCache[i] = { hw, tfm, faceTfm });
 }
 
 // per-species animation timing: two round commons no longer share the
@@ -1504,13 +1562,16 @@ function buildSprite(faceName, pal, top, hw, sil, spIdx, opa) {
       grid[y][x] = c;
     }
   }
-  // authored pixels ride the same transform as the silhouette they sit on
+  // authored top doodads ride the silhouette transform; glasses ("g") and
+  // face pixels ride the rigid face anchor so eyes & frames stay pixel-crisp
   const tfm = v ? v.tfm : (x, y) => [x, y];
-  const F = faceSet(spIdx)[faceName];
+  const ftfm = v ? v.faceTfm : (x, y) => [x, y];
+  const fset = faceSet(spIdx);
+  const F = fset[faceName] || fset.idle;
   for (const px of top || []) {
     if (!Array.isArray(px) || px.length < 3) continue;
     const [x, y, ch] = px;
-    const [nx, ny] = tfm(x, y);
+    const [nx, ny] = ch === "g" ? ftfm(x, y) : tfm(x, y);
     // Saved hybrids can outlive several sprite formats. Never let one stale
     // decoration coordinate index outside the sprite grid and kill frame().
     if (Number.isInteger(nx) && Number.isInteger(ny) && ny >= 0 && ny < SH && nx >= 0 && nx < SW) grid[ny][nx] = ch;
@@ -1534,7 +1595,7 @@ function buildSprite(faceName, pal, top, hw, sil, spIdx, opa) {
   }
   for (const ch in F) {
     if (ch === "a") continue;
-    for (const [x, y] of F[ch]) { const [nx, ny] = tfm(x, y); grid[ny][nx] = ch; }
+    for (const [x, y] of F[ch]) { const [nx, ny] = ftfm(x, y); grid[ny][nx] = ch; }
   }
   const off = document.createElement("canvas");
   // 3x supersampled: every logical pixel becomes a 3x3 block — the extra
@@ -1547,8 +1608,7 @@ function buildSprite(faceName, pal, top, hw, sil, spIdx, opa) {
   const img = octx.createImageData(SW * SS, SH * SS);
   // pastel translucent-jelly pipeline: every shade lifts toward the
   // light color and then toward white (hue-preserving pastel), the
-  // outline tints toward the body instead of going near-black, and the
-  // inner pixels get alpha so the desktop bleeds through like real jelly
+  // outline tints toward the body instead of going near-black
   const WHT = [255, 255, 255];
   const bR = sil ? null : hexRgb(pal.b), lR = sil ? null : hexRgb(pal.l || pal.b);
   const sR = sil ? null : hexRgb(pal.s || pal.b), oR = sil ? null : hexRgb(pal.o || pal.b);
@@ -1563,7 +1623,10 @@ function buildSprite(faceName, pal, top, hw, sil, spIdx, opa) {
   const oIn = sil ? null : mixRgb(oR, mixRgb(bR, lR, 0.35), 0.45 + lift);        // soft tinted outline
   const lIn = sil ? null : mixRgb(lR, WHT, 0.16);                    // milky highlight
   const eIn = sil ? null : hexRgb(pal.e || "#26262e");
-  const uIn = sil ? null : mixRgb(hexRgb(pal.e || "#26262e"), lR, 0.45); // iris depth row — lighter than the pupil
+  const uIn = sil ? null : mixRgb(eIn, lR, 0.28); // rich iris depth tint — stays glossy without hollowing pale slimes
+  const colorOf = (ch) => sil ? hexRgb(pal[ch] || pal.b)
+    : ch === "i" ? iIn : ch === "b" ? bIn : ch === "s" ? sIn : ch === "o" ? oIn
+    : ch === "l" ? lIn : ch === "u" ? uIn : (FIXED[ch] || hexRgb(pal[ch] || pal.b));
   // Fully opaque interior — any translucency lets window text/UI ghost through
   // the body (reads as phantom bright strips, e.g. between the eyes).
   const ALPHA = opa ? { i: 252, b: 252, s: 253, l: 254 } : { i: 252, b: 252, s: 253, l: 254 };
@@ -1574,68 +1637,45 @@ function buildSprite(faceName, pal, top, hw, sil, spIdx, opa) {
       if (c === ".") continue;
       // silhouettes resolve only through the silhouette palette — no
       // fixed-color leaks that would spoil gacha reveals (crowns, stars)
-      const rgb = sil ? hexRgb(pal[c] || pal.b)
-        : c === "i" ? iIn
-        : c === "b" ? bIn
-        : c === "s" ? sIn
-        : c === "o" ? oIn
-        : c === "l" ? lIn
-        : c === "u" ? uIn
-        : (FIXED[c] || hexRgb(pal[c] || pal.b));
+      const rgb = colorOf(c);
       const baseA = sil ? 255 : (ALPHA[c] !== undefined ? ALPHA[c] : 255);
-      // eyelid rim zone: a body cell hugging the eye's OUTER edge — 1-3 eye
-      // neighbors in its 8-ring. interior template holes are fully enclosed
-      // (4+) so they stay clean catchlight specks, not smudges
-      const ec = !sil && (c === "b" || c === "i" || c === "s" || c === "l")
-        ? [cellAt(x - 1, y), cellAt(x + 1, y), cellAt(x, y - 1), cellAt(x, y + 1),
-           cellAt(x - 1, y - 1), cellAt(x + 1, y - 1), cellAt(x - 1, y + 1), cellAt(x + 1, y + 1)]
-            .reduce((n, ch) => n + (ch === "e" || ch === "u" || ch === "w" || ch === "c" ? 1 : 0), 0)
+      // count orthogonal eye neighbors: only multi-pixel eye ovals soften
+      // their 1/3 outer corner subpixel, keeping 1px strokes (^^ >< --) crisp
+      const eyeOrth = !sil && (c === "e" || c === "u")
+        ? (EYE_CH[cellAt(x - 1, y)] ? 1 : 0) + (EYE_CH[cellAt(x + 1, y)] ? 1 : 0)
+          + (EYE_CH[cellAt(x, y - 1)] ? 1 : 0) + (EYE_CH[cellAt(x, y + 1)] ? 1 : 0)
         : 0;
-      // write the 2x2 sub-block: each quadrant shades by its own outward
-      // neighbor — empty = translucent feather edge, outline = contact
-      // shadow, lit cells = a little bounce light. deterministic hash
-      // noise keeps it stable per-pixel (no crawl across rebuilds)
+      // write the 3x3 sub-block: outer subpixels (0 and SS-1) inspect their
+      // outward neighbors while center subpixel (1) stays 100% pure
       for (let qy = 0; qy < SS; qy++) {
+        const offY = qy === 0 ? -1 : qy === SS - 1 ? 1 : 0;
         for (let qx = 0; qx < SS; qx++) {
-          const nx = cellAt(x + (qx ? 1 : -1), y), ny = cellAt(x, y + (qy ? 1 : -1));
-          const nc = cellAt(x + (qx ? 1 : -1), y + (qy ? 1 : -1));
+          const offX = qx === 0 ? -1 : qx === SS - 1 ? 1 : 0;
+          const nx = offX ? cellAt(x + offX, y) : c;
+          const ny = offY ? cellAt(x, y + offY) : c;
+          const nc = (offX || offY) ? cellAt(x + offX, y + offY) : c;
           let r = rgb[0], g = rgb[1], b = rgb[2], a = baseA;
           if (nx === "." || ny === "." || nc === ".") {
             a = baseA * 0.45; // feathered silhouette edge
-            r = mixRgb(rgb, oIn || rgb, 0.4)[0]; g = mixRgb(rgb, oIn || rgb, 0.4)[1]; b = mixRgb(rgb, oIn || rgb, 0.4)[2];
-          } else if (!sil && FACE_SOFT[c]) {
-            // round the face mass: a quadrant that faces non-face pixels
-            // borrows that neighbor's color — corners blend hardest, edge
-            // halves a little, diagonal nicks just a touch. the eye stops
-            // being a jagged stamp and reads as a smooth glossy bead
-            const ff = (ch) => !!FACE_SOFT[ch];
-            const out = !ff(nx) ? nx : !ff(ny) ? ny : !ff(nc) ? nc : null;
-            let ext = !ff(nx) && !ff(ny) ? 0.5 : !ff(nx) || !ff(ny) ? 0.32 : !ff(nc) ? 0.14 : 0;
-            if (c === "e") ext *= 0.45; // pupils keep a crisp edge — the soft blend reads blurry
-            if (ext > 0 && out) {
-              const nr = out === "i" ? iIn : out === "b" ? bIn : out === "s" ? sIn : out === "o" ? oIn
-                : out === "l" ? lIn : out === "u" ? uIn : (FIXED[out] || hexRgb(pal[out] || pal.b));
-              const mx = mixRgb(rgb, nr, ext);
-              r = mx[0]; g = mx[1]; b = mx[2];
-              a = baseA * (1 - ext * 0.2);
-            }
-          } else if (!sil && ec >= 1 && ec <= 3 &&
-                     (nx === "e" || nx === "u" || nx === "w" || nx === "c" ||
-                      ny === "e" || ny === "u" || ny === "w" || ny === "c" ||
-                      nc === "e" || nc === "u" || nc === "w" || nc === "c")) {
-            // eyelid rim: the quadrant facing the eye darkens toward the
-            // pupil — a soft line nesting the bead eyes, not a smudge
-            const eyeQ = nx === "e" || nx === "u" || nx === "w" || nx === "c" ||
-                         ny === "e" || ny === "u" || ny === "w" || ny === "c";
-            const mx = mixRgb(rgb, eIn, eyeQ ? 0.3 : 0.14);
+            const fm = mixRgb(rgb, oIn || rgb, 0.4);
+            r = fm[0]; g = fm[1]; b = fm[2];
+          } else if (!sil && (c === "e" || c === "u") && eyeOrth >= 2 && offX && offY && !EYE_CH[nx] && !EYE_CH[ny]) {
+            // round ONLY outer corners of multi-pixel eye ovals into glossy beads
+            const mx = mixRgb(rgb, colorOf(nx), 0.42);
             r = mx[0]; g = mx[1]; b = mx[2];
-          } else if (nx === "o" || ny === "o") {
+          } else if (!sil && c === "k" && (offX || offY) && (nx !== "k" || ny !== "k")) {
+            // soft rosy cheek edge
+            const out = nx !== "k" ? nx : ny;
+            const ext = (nx !== "k" && ny !== "k") ? 0.52 : 0.28;
+            const mx = mixRgb(rgb, colorOf(out), ext);
+            r = mx[0]; g = mx[1]; b = mx[2];
+          } else if (!NO_GRAIN[c] && (nx === "o" || ny === "o")) {
             r *= 0.86; g *= 0.86; b *= 0.86; // contact shadow against the rim
           } else if ((nx === "l" || ny === "l" || nc === "i") && (c === "b" || c === "i")) {
             r = Math.min(255, r * 1.06); g = Math.min(255, g * 1.06); b = Math.min(255, b * 1.06);
           }
-          const n2 = (((x * 2 + qx) * 73856093) ^ ((y * 2 + qy) * 19349663)) >>> 0;
-          const dt2 = ((n2 % 11) - 5) * 1.6; // ±8 of stable grain
+          const n2 = (((x * SS + qx) * 73856093) ^ ((y * SS + qy) * 19349663)) >>> 0;
+          const dt2 = NO_GRAIN[c] ? 0 : ((n2 % 11) - 5) * 1.4; // stable body grain, clean eyes/mouth
           const i2 = ((y * SS + qy) * SW * SS + (x * SS + qx)) * 4;
           img.data[i2] = Math.max(0, Math.min(255, r + dt2));
           img.data[i2 + 1] = Math.max(0, Math.min(255, g + dt2));
@@ -1880,6 +1920,10 @@ const SAVER_LABEL = ["OFF", "AUTO", "ON"];
 function saverCapMs() {
   if (saverMode === 2) return 40;
   if (saverMode !== 1) return 0;
+  if (held || flying || palHeld || ballHeld || propHeld || fabDrag || volDrag
+      || rideWob > 0.05 || pullAnim || treatFly || egg
+      || ranchOpen || nurseryOpen || settingsOpen || gemShop || albumOpen
+      || cardTarget || awayReport || redeemMode) return 0;
   const idle = Date.now() - Math.max(awakeAt, lastUiTap);
   return idle > 240000 ? 80 : idle > 90000 ? 40 : 0;
 }
@@ -1889,7 +1933,7 @@ function touch() {
   const gap = Date.now() - awakeAt;
   awakeAt = Date.now();
   ignoreT = 0; // any real interaction resets the loneliness clock
-  if (gap > RETURN_GRUMPY) annoyedUntil = performance.now() + 1800;
+  if (gap > RETURN_GRUMPY) { annoyedUntil = performance.now() + 1800; petStamp("IGNORED", "grumpy"); }
 }
 let munchUntil = 0;
 let blinkUntil = 0;
@@ -2880,7 +2924,7 @@ function copyInstallId(rowY) {
 }
 // tuck-in: a cursor left alone for 5min gets a tiny blanket. lastCurMove
 // only advances on real movement so idle detection survives the poll stream
-let lastCurMove = Date.now();
+let lastCurMove = 0;
 let blanketT0 = 0;      // walking over to tuck in
 let blanketUntil = 0;   // blanket visible window
 let blanketX = 0, blanketY = 0;
@@ -3524,7 +3568,7 @@ function propArrive(g, now) {
       // came all this way for crumbs — an empty bowl earns a pout
       lookUntil = now + 1400;
       poutUntil = now + 1600;
-      petStamp("BOWL", "pout");
+      petStamp("BOWL", "hmph");
       bowlCd = now + 60000;
       return;
     }
@@ -3632,7 +3676,7 @@ function propArrive(g, now) {
     if ((PSYCH[SPECIES[active].ps] || {}).flee) {
       shockUntil = now + 900;
       poutUntil = now + 1400;
-      petStamp("MIRROR", "pout");
+      petStamp("MIRROR", "hmph");
       flying = true; petVY = -150; petVX = -lookDir * 130;
       sfx.drop();
     } else {
@@ -3657,7 +3701,7 @@ function propArrive(g, now) {
     jarCd = now + 50000;
     if ((jar.fill ?? 2) <= 0) {
       poutUntil = now + 1500;
-      petStamp("JAR", "pout");
+      petStamp("JAR", "hmph");
     } else {
       jar.fill--;
       // Stock is persisted independently of bond gain. The global bond
@@ -3923,6 +3967,10 @@ function sendPetHome() {
   flying = false;
   startleFall = false;
   landPeak = 0;
+  squash = 0;
+  squashV = 0;
+  jigX = 0;
+  jigV = 0;
   climbing = false;
   climbPhase = 0;
   climbEdge = 0;
@@ -3961,6 +4009,22 @@ function sendPetHome() {
   worryUntil = 0;
   jealousUntil = 0;
   curiousUntil = 0;
+  yawnUntil = 0;
+  dozeUntil = 0;
+  sadUntil = 0;
+  excitedUntil = 0;
+  mischiefUntil = 0;
+  sideeyeUntil = 0;
+  stuffedUntil = 0;
+  gaspUntil = 0;
+  petSwapBlink = 0;
+  petWhy = null;
+  petWhyF = null;
+  petWhyAt = 0;
+  petFaceWhy = {};
+  petWhyIc = null;
+  petWhyUntil = 0;
+  lastFace = null;
   wiggleBuf.length = 0;
   petUntil = 0;
   rubDir = 0;
@@ -3993,6 +4057,12 @@ function bringPetHome() {
   cushionNapW = 0;
   sitUntil = 0;
   boxHide = 0;
+  squash = 0;
+  squashV = 0;
+  jigX = 0;
+  jigV = 0;
+  petSwapBlink = 0;
+  lastFace = null;
   petX = Math.max(60, Math.min(winW - 60, curX > -9000 ? curX : winW / 2));
   petY = 60;
   petVX = 0;
@@ -4071,6 +4141,7 @@ function legFlair(sp, now) {
       break;
     case "siren": // rising three-note run — she beams mid-song, a heart drifts after
       happyUntil = now + 1700;
+      petStamp("THE TUNE", "happy");
       hearts.push({ x: petX + 14, y: petY - 60, life: 1 });
       sfx.heart();
       break;
@@ -4093,6 +4164,7 @@ function legFlair(sp, now) {
       spinT0 = now;
       munchUntil = now + 550;
       blepUntil = now + 900;
+      petStamp("WHEE!", "blep");
       sfx.boing();
       break;
     case "spidr": // silk bounce — a little hop trailing web glints
@@ -4351,7 +4423,7 @@ const SCENES = {
       const win = Math.abs(a.x - sc.goal) <= Math.abs(b.x - sc.goal) ? a : b, los = win === a ? b : a;
       sc.win = win; sc.los = los; // the rematch hook reads these at scene end
       win.faceId = "star"; win.faceT = now + 1500; win.squashV += 5;
-      los.faceId = Math.random() < 0.5 ? "sad" : "pout"; los.faceT = now + 1300;
+      los.faceId = Math.random() < 0.5 ? "sad" : "hmph"; los.faceT = now + 1300;
       sfx.pop();
     }],
     [2950, () => {}],
@@ -4827,6 +4899,7 @@ function gainXp(n, bx, by) {
     jelly = addSavedInt(jelly, 1);
     if (bx != null && !petHome && performance.now() >= boxHide) {
       starUntil = performance.now() + 900;
+      petStamp("LUCKY!", "star");
       sfx.heart();
     }
   }
@@ -5191,6 +5264,12 @@ function recall() {
   // as new contact. touch() may immediately earn a fresh grumpy greeting when
   // the real absence itself was long enough, which is intentional.
   annoyedUntil = 0;
+  petWhy = null;
+  petWhyF = null;
+  petWhyAt = 0;
+  petFaceWhy = {};
+  petWhyIc = null;
+  petWhyUntil = 0;
   touch();
   const releasedPetDrag = cancelPetDrag();
   const releasedPalDrag = cancelPalDrag();
@@ -5206,6 +5285,10 @@ function recall() {
   flying = true;
   startleFall = false;
   landPeak = 0;
+  squash = 0;
+  squashV = 0;
+  jigX = 0;
+  jigV = 0;
   climbing = false;
   climbPhase = 0;
   walkTarget = null;
@@ -5258,6 +5341,16 @@ function recall() {
   worryUntil = 0;
   jealousUntil = 0;
   curiousUntil = 0;
+  yawnUntil = 0;
+  dozeUntil = 0;
+  sadUntil = 0;
+  excitedUntil = 0;
+  mischiefUntil = 0;
+  sideeyeUntil = 0;
+  stuffedUntil = 0;
+  gaspUntil = 0;
+  petSwapBlink = 0;
+  lastFace = null;
   wiggleBuf.length = 0;
   petUntil = 0;
   rubDir = 0;
@@ -5290,11 +5383,24 @@ function recall() {
     p.sigId = null;
     p.sigDid = 0;
     p.accAct = null;
+    p.act = null;
+    p.follow = null;
+    if (p.scene) {
+      const sc = p.scene;
+      if (sc.a && sc.a.scene === sc) sc.a.scene = null;
+      if (sc.b && sc.b.scene === sc) sc.b.scene = null;
+    }
     p.boopT = 0;
     p.rubDir = 0;
     p.rubCount = 0;
     p.faceId = null;
     p.faceT = 0;
+    p.facePrev = null;
+    p.faceSwap = 0;
+    p.faceWhy = null;
+    p.faceWhyId = null;
+    p.whyUntil = 0;
+    p.stuffUntil = 0;
     p.lookUntil = 0;
     p.web = 0;
     p.webA = 0;
@@ -5932,7 +6038,7 @@ cv.addEventListener("pointermove", (e) => {
         for (const j of pals) {
           if (j !== palHeld && !j.fly && !j.stackOn && Math.random() < 0.3) {
             if (!(now < (j.settleUntil || 0))) j.walkT = palHeld.x + (j.x < palHeld.x ? -50 : 50);
-            j.faceId = Math.random() < 0.65 ? "pout" : "grumpy"; // sulks more than it rages
+            j.faceId = Math.random() < 0.65 ? "hmph" : "grumpy"; // sulks more than it rages
             j.faceT = now + 1100;
             j.faceWhy = "MY TURN!"; j.faceWhyId = j.faceId;
           }
@@ -6217,7 +6323,7 @@ cv.addEventListener("pointerup", (e) => {
       hearts.push({ x: petX + 8, y: petY - bh2 - 6, life: 1 });
       embarUntil = pnowD + 1300; // a boop right on the snoot melts it
       petStamp("BOOP", "embar");
-      if (Math.random() < 0.5) winkUntil = pnowD + 900; // sometimes it winks back
+      if (Math.random() < 0.5) { winkUntil = pnowD + 900; petStamp("BOOP", "wink"); } // sometimes it winks back
       sfx.heart();
       return;
     }
@@ -6243,6 +6349,7 @@ cv.addEventListener("pointerup", (e) => {
         squashV += 9;
       } else {
         poutUntil = pnowD + 1300; // sulks before it snaps
+        petStamp("POKED", "hmph");
       }
       sfx.angry();
     }
@@ -7666,18 +7773,38 @@ function closeCard() {
 }
 function cardMood(t2, now) {
   if (t2 === "pet") {
-    // pet faces get their reason named too — each timer mostly has one
-    // cause, and the happy hangover inherits whatever just expired
-    if (now < annoyedUntil) return "ANNOYED · POKED";
-    if (now < dizzyUntil) return "DIZZY · FLUNG";
+    // pet faces get their reason named too — stamped petCardWhy wins when
+    // it matches the active expression, then specific timers & hangovers
+    const whyFor = (f, fallback) => petFaceWhy[f] || fallback || PET_FACE_WHY[f] || null;
+    const fmt = (word, why) => why ? `${word} · ${why}` : word;
+    if (now < annoyedUntil) return fmt("ANNOYED", whyFor("grumpy", "POKED"));
+    if (now < dizzyUntil || now < splatUntil) return "DIZZY · FLUNG";
     if (now < cryUntil) return "CRYING · BYE BYE";
     if (state === "sleeping") return "SLEEPY";
     if (now < munchUntil) return "EATING · SNACK";
     if (now < stuffedUntil) return "STUFFED · SNACK";
     if (now < shockUntil) return "STARTLED · SURPRISE";
+    if (now < gaspUntil) return fmt("SURPRISED", whyFor("gasp"));
+    if (now < sneezeUntil) return "SNEEZY · ACHOO";
+    if (now < tearjoyUntil || now < tickleUntil) return "LAUGHING · TICKLED";
     if (now < petUntil) return "PAMPERED · PETTED";
-    if (now < poutUntil) return "SULKING";
-    if (now < curiousUntil) return "CURIOUS";
+    if (now < starUntil) return fmt("AMAZED", whyFor("star"));
+    if (now < excitedUntil) return fmt("EXCITED", whyFor("excited"));
+    if (now < mischiefUntil) return fmt("UP TO SOMETHING", whyFor("mischief"));
+    if (now < winkUntil) return fmt("PLAYFUL", whyFor("wink"));
+    if (now < worryUntil) return fmt("WORRIED", whyFor("worry"));
+    if (now < sadUntil) return fmt("SAD", whyFor("sad"));
+    if (now < poutUntil) return fmt("SULKING", whyFor("hmph"));
+    if (now < smugUntil) return fmt("SMUG", whyFor("smug"));
+    if (now < blepUntil) return fmt("SILLY", whyFor("blep"));
+    if (now < sideeyeUntil) return fmt("SUSPICIOUS", whyFor("sideeye"));
+    if (now < happyUntil) return fmt("HAPPY", whyFor("happy"));
+    if (now < embarUntil) return fmt("FLUSTERED", whyFor("embar"));
+    if (now < droolUntil) return fmt("HUNGRY", whyFor("drool"));
+    if (now < jealousUntil) return fmt("JEALOUS", whyFor("jealous"));
+    if (now < curiousUntil) return fmt("CURIOUS", whyFor("curious"));
+    if (now < yawnUntil) return fmt("SLEEPY", whyFor("yawn"));
+    if (now < dozeUntil) return fmt("DROWSY", whyFor("doze"));
     if (now < contentUntil) {
       const pwhy = petUntil && now - petUntil < 2600 ? "PETTED"
         : stuffedUntil && now - stuffedUntil < 3200 ? "STUFFED"
@@ -7692,9 +7819,9 @@ function cardMood(t2, now) {
   if (now < t2.faceT) {
     const word = { love: "IN LOVE", laugh: "LAUGHING", happy: "HAPPY", shock: "STARTLED", grumpy: "GRUMPY", dizzy: "DIZZY",
       curious: "CURIOUS", gasp: "SURPRISED", jealous: "JEALOUS", worry: "WORRIED", sad: "SAD", cry: "CRYING",
-      meh: "UNIMPRESSED", pout: "POUTING", hmph: "SULKING", embar: "FLUSTERED", smug: "SMUG", sideeye: "SUSPICIOUS",
+      meh: "UNIMPRESSED", hmph: "SULKING", embar: "FLUSTERED", smug: "SMUG", sideeye: "SUSPICIOUS",
       mischief: "UP TO SOMETHING", wink: "PLAYFUL", drool: "HUNGRY", stuffed: "STUFFED", sneeze: "SNEEZY",
-      wince: "SORE", yawn: "SLEEPY", star: "AMAZED", excited: "EXCITED", doze: "DROWSY", serious: "FOCUSED",
+      yawn: "SLEEPY", star: "AMAZED", excited: "EXCITED", doze: "DROWSY", serious: "FOCUSED",
       content: "CONTENT", blink: "BLINKING" }[t2.faceId] || "HAPPY";
     // every expression has a reason — stamped whys win; for the rest,
     // the state it's in names the cause. a mood reads as
@@ -8430,7 +8557,7 @@ function doPull10() {
   dirty = true;
   checkDex();
   pullResults = { t0: performance.now(), list, refunded };
-  if (list.some((r) => r.isNew || r.shiny)) starUntil = performance.now() + 1400;
+  if (list.some((r) => r.isNew || r.shiny)) { starUntil = performance.now() + 1400; petStamp("HATCHED!", "star"); }
   sfx.drop();
   setTimeout(() => sfx.reveal(), 500);
 }
@@ -8690,7 +8817,7 @@ function faceName(now) {
   if (now < cryUntil) return "cry";
   if (now < worryUntil) return "worry"; // a pal in trouble outranks the sulk
   if (now < sadUntil) return "sad";
-  if (now < poutUntil) return "pout";
+  if (now < poutUntil) return "hmph";
   if (now < smugUntil) return "smug";
   if (now < blepUntil) return "blep";
   if (now < sideeyeUntil) return "sideeye";
@@ -8739,6 +8866,7 @@ function currentSprite(now) {
         (f === "smug" || f === "star" || f === "sideeye" || f === "wink" || f === "mischief")) pw = "THE SHOW";
     if (FACE_EMO[f] && pw && WHY_ICON[pw]) { petWhyIc = WHY_ICON[pw]; petWhyUntil = now + 1400; }
     else petWhyUntil = 0;
+    if (pw) petFaceWhy[f] = pw;
   }
   return sprite(faceFrame(now < petSwapBlink ? "blink" : f), active, false);
 }
@@ -8854,7 +8982,7 @@ function frameBody(now) {
   const t = now / 1000;
   // petBusy: a cushion nap or a box hide both park the slime — no AI,
   // no movement, no acts until it's back out
-  const petBusy = now < cushionNap || now < boxHide;
+  let petBusy = now < cushionNap || now < boxHide;
   // a pet hiding in the box rides it — dragging the box used to leave the
   // hidden pet behind, then it popped out where the box no longer was
   if (now < boxHide && box) {
@@ -8934,6 +9062,7 @@ function frameBody(now) {
       starUntil = now + 1400;
       petStamp("GROWN UP!", "star");
       happyUntil = now + 2200;
+      petStamp("GROWN UP!", "happy");
       squashV += 8;
       sfx.reveal();
     }
@@ -9006,7 +9135,7 @@ function frameBody(now) {
           const nr = Math.random() + (animProf(active).glee - 0.5) * 0.5;
           if (nr < 0.4) { squashV += 3.5; sfx.pop(); }                    // curious bounce
           else if (nr < 0.7) { hearts.push({ x: petX + 16, y: petY - 66, life: 1 }); sfx.heart(); }
-          else { curiousUntil = now + 1200; }
+          else { curiousUntil = now + 1200; petStamp("NOTICED", "curious"); }
         }
       } else noticeT = Math.max(0, noticeT - dt * 2);
     } else {
@@ -9059,6 +9188,7 @@ function frameBody(now) {
         lookDir = Math.sign(curX - petX) || lookDir;
         lookUntil = now + 120;
         mischiefUntil = now + 150; // the plotting face while the butt wiggles
+        petStamp("PLAY", "mischief");
       } else {
         huntT0 = 0;
         huntCd = now + 8000 + Math.random() * 6000;
@@ -9096,7 +9226,7 @@ function frameBody(now) {
     }
     // tuck-in: a cursor parked for 5+ minutes looks asleep, so the pet
     // waddles over and tucks it in — wholesome clip bait
-    if (!sigT0 && !blanketT0 && state === "idle" && !petBusy && now - lastCurMove > 300000 && now > blanketCd &&
+    if (!sigT0 && !blanketT0 && state === "idle" && !petBusy && (lastCurMove > 0 ? now - lastCurMove : now) > 300000 && now > blanketCd &&
         curX > 40 && curX < winW - 40 && cdist > 80 && cdist < 900 &&
         walkTarget === null && hopTarget === null && Math.random() < dt * 0.8) {
       walkTarget = Math.max(lo, Math.min(hi, curX));
@@ -9105,7 +9235,7 @@ function frameBody(now) {
     }
     // arriving: drop the quilt just under the cursor, sit a beat, done
     if (blanketT0) {
-      if (now - lastCurMove < 3000) blanketT0 = 0; // cursor woke up — abort
+      if (lastCurMove > 0 && now - lastCurMove < 3000) blanketT0 = 0; // cursor woke up — abort
       else if (Math.abs(curX - petX) < 46) {
         blanketT0 = 0;
         blanketX = curX; blanketY = curY + 20;
@@ -9151,6 +9281,7 @@ function frameBody(now) {
         petVY = -170;
         petVX = Math.sign(petX - curX || 1) * 140;
         poutUntil = now + 1300;
+        petStamp("POKED", "hmph");
         sfx.pop();
       }
     } else boopT = Math.max(0, boopT - dt * 2);
@@ -9164,7 +9295,7 @@ function frameBody(now) {
         rubCd = now + 3500;
         contentUntil = now + 2400;
         petUntil = now + 900;
-        if (Math.random() < 0.5) embarUntil = now + 3100; // blush tail after the melt
+        if (Math.random() < 0.5) { embarUntil = now + 3100; petStamp("PETTED", "embar"); } // blush tail after the melt
         squashV += 4;
         hearts.push({ x: petX + (Math.random() * 20 - 10), y: petY - 62, life: 1.1 });
         sfx.heart();
@@ -9185,6 +9316,7 @@ function frameBody(now) {
           spinT0 = now;
           dizzyUntil = now + 1600;
           excitedUntil = now + 1500;
+          petStamp("WHEE!", "excited");
           squashV += 5;
           sfx.boing();
         }
@@ -9211,6 +9343,7 @@ function frameBody(now) {
       cuddleUntil = now + 2200;
       contentUntil = now + 2000;
       embarUntil = now + 3400; // flustered afterglow once content fades
+      petStamp("NUZZLED", "embar");
       hearts.push({ x: petX + 10, y: petY - 60, life: 1.1 });
       squashV += 3;
       if (Math.random() < 0.5) sfx.heart();
@@ -9257,6 +9390,7 @@ function frameBody(now) {
         bondGain(SPECIES[active].id, 3); // fed a snack — the good stuff
         jelly = addSavedInt(jelly, 1);
         starUntil = now + 900;
+        petStamp("SNACK", "star");
         dirty = true;
         squashV += 5;
         sfx.munch();
@@ -9266,6 +9400,7 @@ function frameBody(now) {
           fx.push({ x: petX + Math.random() * 40 - 20, y: sy2 - Math.random() * 30 - 6, vx: Math.random() * 90 - 45, vy: -Math.random() * 70, life: 0.8, c: "#e8e0c8" });
         }
         starUntil = now + 1000;
+        petStamp("SNACK", "star");
       } else {
         petX += Math.sign(dx) * 160 * dt;
         lookDir = Math.sign(dx);
@@ -9286,10 +9421,12 @@ function frameBody(now) {
       }
       munchUntil = now + 120;
       excitedUntil = now + 220; // vibrating with want the whole stalk
+      petStamp("TREAT?", "excited");
       if (Math.random() < dt * 0.5) hearts.push({ x: petX + 14, y: petY - bh - 8, life: 0.8 });
     } else if (danceT0 && now - danceT0 < 1700) {
       contentUntil = now + 300;
       happyUntil = now + 400;
+      petStamp("THE TUNE", "happy");
       if (sp.r >= 3 && Math.random() < dt * 1.2) {
         fx.push({ x: petX + Math.random() * 40 - 20, y: petY - 10, vx: 0, vy: -40, life: 0.8, c: "#ffd75e" });
       }
@@ -9324,7 +9461,7 @@ function frameBody(now) {
         if (walkSpd !== baseSpd && !treat) followCd = now + 4000;
         walkSpd = baseSpd;
         squashV += 3;
-        if (walkGoal) { const g = walkGoal; walkGoal = null; propArrive(g, now); }
+        if (walkGoal) { const g = walkGoal; walkGoal = null; propArrive(g, now); petBusy = now < cushionNap || now < boxHide; }
       } else if (sp.mv === "hop") {
         // frogs bounce instead of walking — crouch, then a little leap
         lookDir = Math.sign(dx);
@@ -9704,14 +9841,14 @@ function frameBody(now) {
         ? { x: Math.random() * winW, y: -4, vx: (Math.random() - 0.5) * 26, vy: 40 + Math.random() * 30, life: 3, c: "#eef4ff", k: "snow" }
         : { x: Math.random() * winW, y: -4, vx: (Math.random() - 0.5) * 8, vy: 90 + Math.random() * 50, life: 1.6, c: "#9ec8e8" });
     }
-    contentUntil = Math.max(contentUntil, now + 700); // the pet loves the weather
+    if (!held && !flying && !petBusy && state === "idle" && now > shockUntil) contentUntil = Math.max(contentUntil, now + 700); // the pet loves the weather
     if (snow) {
       snowAcc = Math.min(1, snowAcc + dt * 0.05); // a dusting builds up
       // flake-catching: a snowflake lands on the pet now and then —
       // it notices, beams a little, and shakes it off
       if (Math.random() < dt * 0.25 && !petBusy && !held && state === "idle") {
         drips.push({ x: petX + (Math.random() * 16 - 8), y: petY - 44, vx: 0, vy: 14, life: 0.8, c: "#eef4ff", k: "snow" });
-        if (Math.random() < 0.5) happyUntil = now + 800;
+        if (Math.random() < 0.5) { happyUntil = now + 800; petStamp("SNOW", "happy"); }
       }
     } else {
       snowAcc = Math.max(0, snowAcc - dt * 0.04);
@@ -9833,6 +9970,7 @@ function frameBody(now) {
     petBoxTapCd = now + 9000;
     lookDir = Math.sign(box.x - petX) || 1; lookUntil = now + 900;
     curiousUntil = Math.max(curiousUntil, now + 1000);
+    petStamp("BOX", "curious");
     squashV += 1.6;
     sfx.pop();
     for (const hq of pals) {
@@ -9849,7 +9987,7 @@ function frameBody(now) {
   // idle fidgets: a menu of micro-animations so standing still never
   // looks static — weighted by mood: lazy pets yawn and sigh, lively
   // ones shuffle and peek around
-  if (onGround && walkTarget === null && hopTarget === null && !held && state === "idle" && now > nextFidget && now > begUntil && !petBusy) {
+  if (onGround && walkTarget === null && hopTarget === null && !held && state === "idle" && now > nextFidget && now > begUntil && now > shockUntil && rideWob < 0.08 && !petBusy) {
     const lazy = energy < 0.4;
     const fr = Math.random();
     if (lazy && now > yawnNext && fr < 0.3) {
@@ -9943,7 +10081,7 @@ function frameBody(now) {
   if (pomo && pomoPhase === "focus" && !petHome && now >= boxHide && now > pomoHeartNext) {
     pomoHeartNext = now + 40000 + Math.random() * 30000;
     hearts.push({ x: petX + (Math.random() * 40 - 20), y: petY - 80, life: 1 });
-    if (Math.random() < 0.3) excitedUntil = now + 1200; // a little cheer squad of one
+    if (Math.random() < 0.3) { excitedUntil = now + 1200; petStamp("GOOD VIBES", "excited"); } // a little cheer squad of one
   }
 
   let stretch = 0;
@@ -10094,6 +10232,8 @@ function frameBody(now) {
         if (Math.abs(petVY) > 800) {
           dizzyUntil = now + 1100;
           annoyedUntil = now + 2600;
+          petStamp("FLUNG!", "grumpy");
+          squashV += 7.5;
           for (let i = 0; i < 3; i++) {
             fx.push({ x: petX - 20 + i * 20, y: petY - bh - 14, vx: (i - 1) * 24, vy: -30 - i * 10, life: 0.7, c: "#ffd75e", spr: "star5" });
           }
@@ -10122,6 +10262,7 @@ function frameBody(now) {
             startleFall = false;
             dizzyUntil = now + 1300;
             poutUntil = now + 1800;
+            petStamp("BUMP!", "hmph");
           }
           dirty = true;
           sfx.pop();
@@ -10132,10 +10273,11 @@ function frameBody(now) {
             if (Math.hypot(curX - petX, curY - (petY - bh / 2)) < 120) {
               hearts.push({ x: petX + 14, y: petY - 64, life: 1.2 });
               smugUntil = now + 1800; // caught the cursor and knows it
+              petStamp("PLAY", "smug");
               contentUntil = now + 1500;
               sfx.heart();
               ignoreT = 0;
-            } else poutUntil = now + 900;
+            } else { poutUntil = now + 900; petStamp("PLAY", "hmph"); }
           }
           // landing ripple + a puff of dust — drago lands HEAVY
           const hvy = LEG[sp.id] && LEG[sp.id].heavy;
@@ -10150,7 +10292,7 @@ function frameBody(now) {
     if (petY > winH + 80) {
       petY = floorAt(petX); flying = false; petVY = 0; petVX = 0;
       if (accAct && accAct.id === "flyby") { accAct = null; propSpin = 0; }
-      if (startleFall) { startleFall = false; dizzyUntil = now + 1300; poutUntil = now + 1800; }
+      if (startleFall) { startleFall = false; dizzyUntil = now + 1300; poutUntil = now + 1800; petStamp("BUMP!", "hmph"); }
     }
   }
 
@@ -10326,7 +10468,7 @@ function frameBody(now) {
       gainXp(tk.xp, petX + 20, petY - 96);
       munchUntil = now + 500;
       // a favorite snack — the pet's eyes turn to hearts for it
-      if (TREAT_PREF[sp.trait] === tkIdx) { loveUntil = now + 1300; bondGain(sp.id, 1); }
+      if (TREAT_PREF[sp.trait] === tkIdx) { loveUntil = now + 1300; bondGain(sp.id, 1); petStamp("SNACK", "love"); }
       // snack morsels tumble off — everyone leaves crumbs now
       if (crumbs.length < 12 && Math.random() < 0.6) {
         crumbs.push({ x: petX + (Math.random() * 60 - 30), y: petY - 80, vy: 0, life: 1, floor: petY });
@@ -10335,7 +10477,7 @@ function frameBody(now) {
       bondGain(SPECIES[active].id, 3);
       // treat side-effects: chili rush, coffee buzz, cake delight
       if (tk.id === "chili") { hyperUntil = now + 60000; gaspUntil = now + 900; }
-      else if (tk.id === "coffee") { noSleepUntil = Date.now() + 300000; excitedUntil = now + 1600; }
+      else if (tk.id === "coffee") { noSleepUntil = Date.now() + 300000; excitedUntil = now + 1600; petStamp("SNACK", "excited"); }
       else if (tk.id === "cake") squashV += 8;
       dirty = true;
       sfx.munch();
@@ -10381,7 +10523,7 @@ function frameBody(now) {
             const a = Math.random() * 6.28;
             fx.push({ x: petX + Math.cos(a) * 52, y: petY - 22 + Math.sin(a) * 30, vx: -Math.cos(a) * 65, vy: -Math.sin(a) * 45, life: 0.7, c: "#6b5a9e" });
           }
-        } else { starUntil = now + 1000; sfx.reveal(); alive = false; }
+        } else { starUntil = now + 1000; petStamp("THE SHOW", "star"); sfx.reveal(); alive = false; }
         break;
       case "veil": // aurora: shimmering ribbon of light
         if (e < 1500) {
@@ -10431,6 +10573,7 @@ function frameBody(now) {
         if (e < 1200) {
           angle = Math.sin(e / 190) * 0.12; // rocks side to side like she's bathing in it
           starUntil = now + 90; // starstruck the whole time — it's HER fountain
+          petStamp("THE SHOW", "star");
           if (Math.random() < dt * 30) fx.push({ x: petX + Math.random() * 10 - 5, y: petY - bh, vx: Math.random() * 140 - 70, vy: -140 - Math.random() * 80, life: 0.9, c: "#ffd75e" });
         } else { angle = 0; alive = false; }
         break;
@@ -10542,6 +10685,7 @@ function frameBody(now) {
             p.walkT = clampPlatformX(petX + (Math.random() * 140 - 70), pl, pe);
           }
           starUntil = now + 1300;
+          petStamp("THE SHOW", "star");
         }
         if (flying) {
           // holds a regal pose at the apex, crown-sparkles trailing
@@ -10570,6 +10714,7 @@ function frameBody(now) {
               life: 0.8 + Math.random() * 0.5, c: cols[i % 5] });
           }
           excitedUntil = now + 1200;
+          petStamp("THE SHOW", "excited");
         } else if (e > 700) alive = false;
         break;
       case "flare": // lanty: warm lantern pulse rings outward
@@ -10672,6 +10817,7 @@ function frameBody(now) {
           }
         } else {
           blepUntil = now + 1400; // tongue lolls out after the rampage
+          petStamp("THE SHOW", "blep");
           hearts.push({ x: petX + 14, y: petY - 62, life: 1 });
           squashV += 5;
           sfx.pop();
@@ -10713,6 +10859,7 @@ function frameBody(now) {
           if (Math.random() < dt * 3) squashV += 1.2;
         } else {
           starUntil = now + 1100;
+          petStamp("THE SHOW", "star");
           sfx.reveal();
           alive = false;
         }
@@ -10755,6 +10902,7 @@ function frameBody(now) {
       if (sigId === "shower" && Math.random() < 0.25) {
         jelly = addSavedInt(jelly, 1);
         starUntil = now + 1200;
+        petStamp("LUCKY!", "star");
         sfx.heart();
         dirty = true;
       }
@@ -11003,7 +11151,7 @@ function frameBody(now) {
   // flourishes, totem towers, cursor webs) and stick to calm business.
   // idle hands = full silliness. cute, never in the way
   const palQuiet = focusKind() === "editor" ||
-    (now - lastCurMove >= 0 && now - lastCurMove < 15000);
+    (lastCurMove > 0 && now - lastCurMove >= 0 && now - lastCurMove < 15000);
   // the flock's occasional all-together moment — rolls rarely, collapses
   // the moment it loses its trio
   tickGroup(now, dt, palQuiet);
@@ -11243,10 +11391,11 @@ function frameBody(now) {
         for (const pl of plats) {
           if (pl.y < 60) continue;
           if (p.x > pl.x - 14 && p.x < pl.x + pl.w + 14 && prevY <= pl.y + 4 && p.y >= pl.y) {
+            const prevPl = p.plat;
             p.x = clampPlatformX(p.x, pl, pEdgeFly);
             p.y = pl.y; p.fly = false; p.vy = 0; p.vx = 0; p.plat = pl;
             p.squashV += 2 + Math.min(5.5, (p.fallPk || 0) * 0.007); p.fallPk = 0;
-            p.walkT = null; // the old target belongs to a different platform
+            if (prevPl !== pl) p.walkT = null; // the old target belongs to a different platform
             ripples.push({ x: p.x, y: pl.y + 2, r: 5, life: 0.8 });
             break;
           }
@@ -11351,7 +11500,7 @@ function frameBody(now) {
           if (p.boopT > 1.0 / (ppsy.startle || 1)) {
             p.boopT = 0;
             p.fly = true; p.vy = -150; p.vx = Math.sign(p.x - curX || 1) * 120;
-            p.faceId = "pout"; p.faceT = now + 1100; p.walkT = null;
+            p.faceId = "hmph"; p.faceT = now + 1100; p.walkT = null;
             sfx.pop();
           }
         } else p.boopT = Math.max(0, (p.boopT || 0) - dt * 2);
@@ -11525,11 +11674,11 @@ function frameBody(now) {
         // y-gap, grab, and web checks either way
         if (now > p.tag.until || !o || !pals.includes(o) || o === palHeld || now < o.web ||
             now < (o.restUntil || 0) || now < (o.hideUntil || 0) ||
-            Math.abs(o.y - p.y) > 30 || (p.tag.it && o.fly)) {
+            Math.abs(o.y - p.y) > 45 || (p.tag.it && o.fly && Math.abs(o.y - p.y) > 45)) {
           // a clean timeout ends with a shared beat — both stop, trade a
           // tired laugh, then wander off. without this the chase just
           // evaporated mid-stride which read as a glitch
-          if (now > p.tag.until && o && pals.includes(o) && o.tag && !o.fly && o !== palHeld && now > o.web && Math.abs(o.y - p.y) <= 30) {
+          if (now > p.tag.until && o && pals.includes(o) && o.tag && o !== palHeld && now > o.web && Math.abs(o.y - p.y) <= 45) {
             p.lookDir = Math.sign(o.x - p.x) || 1; p.lookUntil = now + 700;
             o.lookDir = -p.lookDir; o.lookUntil = now + 700;
             p.faceId = o.faceId = "laugh"; p.faceT = o.faceT = now + 800;
@@ -11572,6 +11721,7 @@ function frameBody(now) {
               }
             }
           }
+          if (o && o.tag && o.tag.on === p) o.tag = null;
           p.tag = null;
         }
         else if (p.tag.it) {
@@ -11714,6 +11864,7 @@ function frameBody(now) {
               Math.random() < dt * 0.5) {
             petEavesCd = now + 9000;
             curiousUntil = Math.max(curiousUntil, now + 1300);
+            petStamp("GOSSIP", "curious");
             lookDir = Math.sign(p.x - petX) || 1; lookUntil = now + 1400;
           }
         }
@@ -11803,7 +11954,7 @@ function frameBody(now) {
       }
       // wish upon it: a pal that catches the streak looks up star-eyed —
       // and every so often the wish actually lands, a little gold dust
-      if (!p.fly && p !== palHeld && !nappingP && now > (p.starCd || 0) && now > p.faceT) {
+      if (!p.fly && p !== palHeld && !nappingP && !p.accAct && now > (p.starCd || 0) && now > p.faceT) {
         const st = drips.find((d) => d.k === "star" && d.life > 0.25);
         if (st) {
           p.starCd = now + 25000;
@@ -11849,6 +12000,7 @@ function frameBody(now) {
           if (!held && !flying && state === "idle" && !petBusy && !(now < boxHide) && !petHome && !petDozing &&
               walkTarget === null && Math.abs(petY - p.y) < 40 && Math.abs(petX - p.x) < 460) {
             curiousUntil = Math.max(curiousUntil, now + 1500);
+            petStamp("WATCHING", "curious");
             walkTarget = Math.max(lo, Math.min(hi, p.x + (petX < p.x ? -46 : 46)));
             lookDir = Math.sign(p.x - petX) || 1; lookUntil = now + 1200;
           }
@@ -11923,7 +12075,7 @@ function frameBody(now) {
                 } else {
                   // sulky, genuinely crestfallen — or a competitive
                   // side-eye at whoever just beat them to it
-                  p.faceId = Math.random() < 0.5 ? "pout" : ((ppsy.startle || 1) >= 1.3 ? "jealous" : "sad");
+                  p.faceId = Math.random() < 0.5 ? "hmph" : ((ppsy.startle || 1) >= 1.3 ? "jealous" : "sad");
                   p.faceT = now + 1100;
                   p.squashV += 1.5;
                 }
@@ -12134,6 +12286,7 @@ function frameBody(now) {
                 lookDir = Math.sign(p.x - petX) || 1;
                 lookUntil = now + 1300;
                 embarUntil = now + 2200; // a gift it never asked for — the blush says thanks
+                petStamp("PRESENT", "embar");
                 hearts.push({ x: (p.x + petX) / 2, y: p.y - 62, life: 1.1 });
                 hearts.push({ x: petX, y: petY - 84, life: 1.1 });
                 sfx.heart();
@@ -12206,19 +12359,21 @@ function frameBody(now) {
               Math.abs(q.y - p.y) < 20 && Math.abs(q.x - p.x) < 90 &&
               pairBondLvl(p, q) >= 2 && Math.sign(q.walkT - q.x) === Math.sign(dx));
             if (pmate) p.walkV = pmate.walkV;
+            let stepV = p.walkV;
             // tiptoes: nobody stomps past a sleeper — a walker in earshot
-            // of a napper softens its gait to a creep
+            // of a napper softens its gait to a creep (apply to stepV, not
+            // p.walkV, so the 0.5× factor doesn't compound per frame to ~5px/s)
             if (pals.some((q2) => q2 !== p && now < (q2.restUntil || 0) &&
-                Math.abs(q2.y - p.y) < 24 && Math.abs(q2.x - p.x) < 70)) p.walkV *= 0.5;
+                Math.abs(q2.y - p.y) < 24 && Math.abs(q2.x - p.x) < 70)) stepV *= 0.5;
             // feeling it: a FRESH emotional face earns one short beat —
             // the pal visibly hesitates to react, then walks on; holding
             // the slow for the whole face read as a trudge, not a pause
-            if (now < p.faceT && FACE_EMO[p.faceId] && now - (p.faceSetAt || 0) < 500) p.walkV *= 0.3;
-            p.x += Math.sign(dx) * p.walkV * dt;
+            if (now < p.faceT && FACE_EMO[p.faceId] && now - (p.faceSetAt || 0) < 500) stepV *= 0.3;
+            p.x += Math.sign(dx) * stepV * dt;
             // distance-driven gait: each footfall dips the blob a touch —
             // babies toddle, so each step wobbles harder and one in a blue
             // moon the little one actually trips over its own nothing
-            p.gait = (p.gait || 0) + p.walkV * dt * 0.14;
+            p.gait = (p.gait || 0) + stepV * dt * 0.14;
             const pgs = Math.floor(p.gait / Math.PI);
             if (pgs !== (p.gaitStep || 0)) {
               p.gaitStep = pgs;
@@ -13067,7 +13222,7 @@ function frameBody(now) {
             if (qpsy.flee) jamQ.faceId = "dizzy";
             else if ((qpsy.startle || 1) >= 1.3) jamQ.faceId = "hmph";
             else if ((qpsy.pace || 1) <= 0.85) jamQ.faceId = "grumpy";
-            else jamQ.faceId = "pout";
+            else jamQ.faceId = "hmph";
             jamQ.faceT = now + 1100;
             jamQ.faceWhy = "STEPPED ON"; jamQ.faceWhyId = jamQ.faceId;
             p.fly = true; p.vy = -150 * animProf(p.sp).hop; p.vx = dir * 165;
