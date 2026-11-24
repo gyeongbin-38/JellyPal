@@ -1086,10 +1086,10 @@ const FACES = {
     m: [[15,16],[16,15],[17,16],[18,15],[19,16],[20,15]],
     k: [[7,14],[8,14],[28,14],[29,14]],
   },
-  // pure contentment: closed-eye curve + little cat omega mouth
+  // pure contentment: closed-eye curve + little smile
   content: {
     e: [[10,12],[11,13],[12,13],[13,12],[22,12],[23,13],[24,13],[25,12]],
-    m: [[15,16],[17,15],[19,15],[21,16],[16,17],[20,17]],
+    m: [[16,16],[17,17],[18,17],[19,16]],
     k: [[6,14],[7,14],[8,14],[7,15],[8,15],[27,14],[28,14],[29,14],[28,15],[29,15]],
   },
   // tongue-out goofball: burps, tail-chases, extra silly moods
