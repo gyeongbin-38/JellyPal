@@ -1269,9 +1269,9 @@ const FACES = {
     m: [[16,15],[17,15],[18,15],[19,15],[16,16],[17,16],[18,16],[19,16],[17,17],[18,17]],
     d: [[13,18],[14,18],[21,18],[22,18],[15,19],[20,19]],
   },
-  // ---- frame-2 variants: the looping second frame of animated faces.
-  // same eyes/feel as the base, one detail moved — laugh rocks its
-  // mouth shut, the drip falls, hearts bob, sparkles twinkle
+  // ---- loop variants: the extra frames of animated faces. same eyes
+  // and feel as the base, one detail moved — laugh's jaw pumps, the
+  // drip falls, hearts bob, sparkles twinkle
   happy2: {
     e: [[10,12],[11,11],[12,11],[13,12],[22,12],[23,11],[24,11],[25,12]],
     m: [[15,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],[17,17],[18,17]],
@@ -1279,7 +1279,22 @@ const FACES = {
   },
   laugh2: {
     e: [[9,10],[10,11],[11,12],[10,13],[9,14],[26,10],[25,11],[24,12],[25,13],[26,14]],
-    m: [[15,16],[20,16],[16,17],[17,17],[18,17],[19,17]],
+    m: [[15,16],[20,16],[16,17],[17,17],[18,17],[19,17],[16,18],[17,18],[18,18],[19,18]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // laugh3: the biggest "HA!" of the loop — mouth drops a row lower and
+  // widens, so the four-frame cycle reads big-small-big-biggest
+  laugh3: {
+    e: [[9,10],[10,11],[11,12],[10,13],[9,14],[26,10],[25,11],[24,12],[25,13],[26,14]],
+    m: [[15,16],[20,16],[15,17],[16,17],[17,17],[18,17],[19,17],[20,17],[16,18],[17,18],[18,18],[19,18],[17,19],[18,19]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // tearjoy2: same squeeze, mouth half-laughing and the tears flung one
+  // pixel further out — the drops drip instead of hovering
+  tearjoy2: {
+    e: [[9,10],[10,11],[11,12],[10,13],[9,14],[26,10],[25,11],[24,12],[25,13],[26,14]],
+    m: [[15,16],[20,16],[16,17],[17,17],[18,17],[19,17],[16,18],[17,18],[18,18],[19,18]],
+    d: [[7,12],[7,13],[28,12],[28,13]],
     k: [[7,14],[8,14],[28,14],[29,14]],
   },
   love2: {
@@ -1719,13 +1734,14 @@ function sprite(face, spIdx, sil, opa) {
   return spriteCache[key];
 }
 
-// face animation: these faces loop a 2-frame sequence — the BASE id
+// face animation: these faces loop a frame sequence — the BASE id
 // drives timers, the status card and body jiggle; only the sprite
-// lookup swaps to the frame-2 variant. pals desync via their own ph
+// lookup swaps through the variants. pals desync via their own ph
 // so a crowd of laughing slimes never marches in lockstep
 const FACE_ANIM = {
   happy:   ["happy", "happy2"],     // tongue bobs in the grin
-  laugh:   ["laugh", "laugh2"],     // rocking open/shut laugh
+  laugh:   ["laugh", "laugh2", "laugh", "laugh3"], // HA-ha-HA-HA! two-beat
+  tearjoy: ["tearjoy", "tearjoy2"], // tears fling outward as it laughs
   excited: ["excited", "excited2"], // big grin pulses
   love:    ["love", "love2"],       // hearts bob
   star:    ["star", "star2"],       // sparkles twinkle cross/diamond
@@ -1741,7 +1757,7 @@ const FACE_ANIM = {
 const DREAM_FACES = ["content", "content", "happy", "laugh"];
 function faceFrame(f, ph) {
   const s = FACE_ANIM[f];
-  return s ? s[Math.floor(performance.now() / 240 + (ph || 0)) & 1] : f;
+  return s ? s[Math.floor(performance.now() / 240 + (ph || 0)) % s.length] : f;
 }
 
 // face-driven body micro-motion — tiny translate/squash pulses on top
@@ -1749,17 +1765,18 @@ function faceFrame(f, ph) {
 // rock, excited bodies shiver, sleeping bodies breathe, worried bodies
 // tremble. skipped under reduceMotion
 const FACE_JIG = {
-  laugh:   { x: 1.3, f: 9 },   excited: { y: -0.9, f: 12 }, star:  { y: -0.6, f: 8 },
+  laugh:   { x: 0.5, y: -1.1, sq: 0.05, r: 0.05, f: 5.2 }, // ha-ha bounce + belly rock
+  excited: { y: -0.9, f: 12 }, star:  { y: -0.6, f: 8 },
   worry:   { x: 0.8, f: 13 },  cry:     { x: 0.9, f: 9 },    dizzy: { x: 1.1, f: 5.5 },
   sneeze:  { x: 1.4, f: 15 },  plead:   { y: -0.5, f: 2.6 }, love:  { y: -0.6, f: 2.4 },
   sleeping:{ sq: 0.05, f: 1.5 },happy:  { sq: 0.018, f: 6 }, curious:{ x: 0.4, f: 3 },
-  tearjoy: { x: 1.3, f: 9 },
+  tearjoy: { x: 0.6, y: -1.3, sq: 0.06, r: 0.06, f: 6 },
 };
 function faceJig(f, ph) {
   const j = FACE_JIG[f];
-  if (!j || reduceMotion) return { x: 0, y: 0, sq: 0 };
+  if (!j || reduceMotion) return { x: 0, y: 0, sq: 0, r: 0 };
   const w = performance.now() / 1000 * (j.f || 8) + (ph || 0);
-  return { x: (j.x || 0) * Math.sin(w), y: (j.y || 0) * Math.sin(w * 1.13), sq: (j.sq || 0) * Math.sin(w) };
+  return { x: (j.x || 0) * Math.sin(w), y: (j.y || 0) * Math.sin(w * 1.13), sq: (j.sq || 0) * Math.sin(w), r: (j.r || 0) * Math.sin(w * 0.79 + 1.2) };
 }
 
 // ---------- audio: all sounds synthesized, no assets ----------
@@ -13657,6 +13674,7 @@ function frameBody(now) {
     }
     // a rolling pal tumbles through the air — full turn over the arc
     if (p.act && p.act.k === "roll" && p.fly) ctx.rotate(p.act.dir * Math.min(1, (now - p.act.t0) / 640) * 6.28);
+    if (pj.r) ctx.rotate(pj.r); // face-driven belly rock (laugh, tearjoy)
     if (psp.trait === "wisp") ctx.globalAlpha = 0.85;
     const plg = LEG[psp.id];
     if (plg && plg.wings) drawWings(ctx, t + p.ph, psx, psy2 * (1 + pj.sq), p.fly, plg.wings);
@@ -13708,7 +13726,7 @@ function frameBody(now) {
   ctx.save();
   const petJg = faceJig(faceName(now), 0);
   ctx.translate(petX + petJg.x, petY - bob - hoverBob - spinLift * 13 + petJg.y);
-  ctx.rotate((angle + leanTilt) * (reduceMotion ? 0.35 : 1));
+  ctx.rotate((angle + leanTilt) * (reduceMotion ? 0.35 : 1) + petJg.r);
   // soft-body shear: the jelly's top drags behind horizontal motion —
   // feet stay planted at y=0, the crown smears sideways under accel
   if (!reduceMotion) ctx.transform(1, 0, jigX, 1, 0, 0);
