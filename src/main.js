@@ -117,7 +117,7 @@ const WHY_ICON = {
   "GROWN UP!": "star",
   "PEEK": "dots", "STRETCH": "sun", "DOODAD": "star", "WATCHING": "dots",
   "BOOM!": "bolt", "ALL CLEAR": "sun", "STILL RAINING": "drop",
-  "SPARK": "bolt",
+  "SPARK": "bolt", "PETAL": "star", "LEAF": "star",
 };
 // the pet's faces carry causes too — faces whose timer means exactly one
 // thing resolve through this map; multi-cause faces (happy, excited,
@@ -495,7 +495,7 @@ const FLAVOR = {
   hyb: "BORN RIGHT ON THIS DESKTOP|ONE OF A KIND",
 };
 
-const APP_VER = "0.4.0"; // keep in sync with tauri.conf.json version
+const APP_VER = "0.4.1"; // keep in sync with tauri.conf.json version
 
 // species -> personality assignment (hybrids inherit one parent's)
 const PSY_ASSIGN = {
@@ -9734,7 +9734,7 @@ function frameBody(now) {
               !q.chatMate && !q.propGoal && q.walkT === null && now > (q.restUntil || 0) &&
               !(now < (q.hideUntil || 0)) && !(now < (q.settleUntil || 0)) && now > (q.boxCd || 0) &&
               Math.abs(q.x - box.x) < 560 && Math.abs(q.x - box.x) > 60) {
-            q.walkT = box.x; q.propGoal = { kind: "box" }; q.duckedWx = true;
+            q.walkT = box.x; q.propGoal = { kind: "box" }; q.duckedWx = drizzleUntil;
           }
         }
       }
@@ -9769,7 +9769,7 @@ function frameBody(now) {
     if (duck) {
       duck.walkT = box.x;
       duck.propGoal = { kind: "box" };
-      duck.duckedWx = true; // it came in for the sky — check again on the way out
+      duck.duckedWx = drizzleUntil; // remember WHICH sky it fled — the beat only counts for this spell
       if (now > duck.faceT) { duck.faceId = "gasp"; duck.faceT = now + 900; duck.faceWhy = "RAIN"; duck.faceWhyId = "gasp"; } // "rain!!"
     }
   }
@@ -11165,14 +11165,15 @@ function frameBody(now) {
       // relieved hop + a shake-off; still drizzling earns a disappointed
       // squint up at the clouds
       if (p.duckedWx) {
-        p.duckedWx = false;
-        if (now > drizzleUntil) {
+        const wxEp = p.duckedWx === drizzleUntil; // still the spell it hid for?
+        p.duckedWx = 0; // consumed either way — a stale flag can't misfire later
+        if (wxEp && now > drizzleUntil) {
           p.faceId = "happy"; p.faceT = now + 1100;
           p.faceWhy = "ALL CLEAR"; p.faceWhyId = "happy";
           p.squashV += 2.5;
           p.fly = true; p.vy = -140 * animProf(p.sp).hop; p.vx = 0; p.hopT = now;
           for (let k = 0; k < 4; k++) fx.push({ x: p.x + (Math.random() - 0.5) * 18, y: p.y - 26, vx: (Math.random() - 0.5) * 40, vy: -14 - Math.random() * 14, life: 0.5, c: "#9ec8e8" });
-        } else {
+        } else if (wxEp) {
           p.faceId = "sideeye"; p.faceT = now + 1200;
           p.faceWhy = "STILL RAINING"; p.faceWhyId = "sideeye";
           p.lookDir = -p.lookDir || 1; p.lookUntil = now + 900;
@@ -11592,6 +11593,7 @@ function frameBody(now) {
             // slime, which turns away with puffed cheeks instead
             o.faceId = (PSYCH[(SPECIES[o.sp] || {}).ps] || {}).startle >= 1.3 && Math.random() < 0.5 ? "hmph" : "laugh";
             p.faceT = o.faceT = now + 900;
+            p.faceWhy = o.faceWhy = "TAG"; p.faceWhyId = p.faceId; o.faceWhyId = o.faceId;
             o.fly = true; o.vy = -190 * animProf(o.sp).hop; o.vx = (Math.random() - 0.5) * 120; o.hopT = now;
             // the tagger pops too — a mirrored double-jump that reads as
             // a high-five over the catch
@@ -11754,6 +11756,9 @@ function frameBody(now) {
               : k === "chorus" ? (Math.random() < 0.5 ? "content" : "happy") // humming along
               : rooting || Math.random() < 0.5 ? "excited" : "happy";
             p.faceT = now + 800;
+            p.faceWhy = k === "staredown" ? "STAREDOWN" : k === "gift" ? "PRESENT"
+              : k === "chorus" ? "SING-ALONG" : k === "tag" ? "TAG" : "THE SHOW";
+            p.faceWhyId = p.faceId;
             if (Math.random() < 0.3) p.squashV += 1;
           }
           // a tag runner zipping by is infectious — the spectator breaks
@@ -11809,6 +11814,24 @@ function frameBody(now) {
             jelly = addSavedInt(jelly, 1); dirty = true;
             for (let k = 0; k < 4; k++) fx.push({ x: p.x + (Math.random() - 0.5) * 16, y: p.y - 30, vx: (Math.random() - 0.5) * 20, vy: -20 - Math.random() * 14, life: 0.6, c: "#ffd75e", spr: "mote" });
           }
+        }
+      }
+      // petal-snatch: a blossom or leaf tumbling past head-height is fair
+      // game — a quick hop and it's plucked clean out of the air. the
+      // drift is consumed so the moment can only ever happen once
+      if (!p.fly && p !== palHeld && !p.tag && !p.scene && !p.group && !p.chatMate &&
+          !p.propGoal && p.walkT === null && now > (p.petCd || 0) && now > p.faceT &&
+          !(now < (p.restUntil || 0)) && !(now < (p.settleUntil || 0)) && !(now < (p.hideUntil || 0))) {
+        const pd = drips.find((d) => (d.k === "petal" || d.k === "leaf") && d.life > 0.1 &&
+          Math.abs(d.x - p.x) < 26 && Math.abs(d.y - (p.y - 30)) < 38);
+        if (pd) {
+          p.petCd = now + 30000;
+          pd.life = 0; // snatched — the drift sweep retires it this frame
+          p.fly = true; p.vy = -140 * animProf(p.sp).hop; p.vx = 0; p.hopT = now;
+          p.faceId = Math.random() < 0.5 ? "star" : "excited"; p.faceT = now + 1100;
+          p.faceWhy = pd.k === "petal" ? "PETAL" : "LEAF"; p.faceWhyId = p.faceId;
+          p.squashV += 2;
+          for (let k = 0; k < 3; k++) fx.push({ x: p.x + (Math.random() - 0.5) * 14, y: p.y - 38, vx: (Math.random() - 0.5) * 18, vy: -18 - Math.random() * 12, life: 0.5, c: pd.c });
         }
       }
       // caught one! reaching the speck earns a star-eyed gasp, and the
@@ -12244,6 +12267,7 @@ function frameBody(now) {
               TREAT_PREF[psp.trait] === (treat.kind || 0) ? "plead"
               : troll < 0.3 ? "drool" : "happy";
             p.faceT = now + 900;
+            p.faceWhy = "TREAT?"; p.faceWhyId = p.faceId;
           }
         }
         // dance-along: the main pet's groove is contagious — pals on the
@@ -13045,6 +13069,7 @@ function frameBody(now) {
             else if ((qpsy.pace || 1) <= 0.85) jamQ.faceId = "grumpy";
             else jamQ.faceId = "pout";
             jamQ.faceT = now + 1100;
+            jamQ.faceWhy = "STEPPED ON"; jamQ.faceWhyId = jamQ.faceId;
             p.fly = true; p.vy = -150 * animProf(p.sp).hop; p.vx = dir * 165;
           } else {
             p.fly = true; p.vy = -215 * animProf(p.sp).hop; p.vx = dir * 175;
@@ -13296,7 +13321,7 @@ function frameBody(now) {
         if (plga.trail && pmoving && Math.random() < 0.5) fx.push({ x: p.x, y: p.y - 8, vx: (Math.random() - 0.5) * 16, vy: 36, life: 0.4, c: plga.trail });
         if (plga.drool && Math.random() < 0.15) fx.push({ x: p.x + 8, y: p.y - 16, vx: 0, vy: 26, life: 0.7, c: "#8ad4f0" });
         if (plga.chips && pmoving && Math.random() < 0.3) fx.push({ x: p.x + (Math.random() - 0.5) * 20, y: p.y - 4, vx: (Math.random() - 0.5) * 40, vy: -30, life: 0.5, c: "#c8b8a0" });
-        if (plga.notes && Math.random() < 0.1 && now > p.faceT) { p.faceId = "happy"; p.faceT = now + 800; } // humming to itself
+        if (plga.notes && Math.random() < 0.1 && now > p.faceT) { p.faceId = "happy"; p.faceT = now + 800; p.faceWhy = "MUSIC"; p.faceWhyId = "happy"; } // humming to itself
       }
     }
 
