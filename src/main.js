@@ -128,6 +128,15 @@ const WHY_ICON = {
   "EXCUSE ME": "dots", "BALL!": "flag", "SNACK RUN": "cookie",
   "MISSING YOU": "heart", "TUCKING YOU IN": "moon", "STEERING CLEAR": "drop",
   "COMING OVER": "heart", "FOLLOWING YOU": "dots",
+  "NOSY": "dots", "IT'S GONE": "dots", "SAW THAT": "dots",
+  "EARWIGGING": "dots", "STOOD UP": "dots", "SHY HELLO": "dots",
+  "WHO'S THIS": "dots", "BLESSED": "heart", "HI!": "heart",
+  "SAYING HI": "heart", "KEEPING COMPANY": "heart", "MESMERIZED": "heart",
+  "THE HUNT": "flag", "GOOD GAME": "flag", "GAVE UP": "flag",
+  "CRUMBS": "cookie", "TOO SLOW": "cookie", "SHARED": "cookie",
+  "JUST WOKE": "sun", "SHELTERING": "drop", "FALLING": "drop",
+  "FIREFLY": "star", "POCKETED": "star", "STARBURST": "star",
+  "DANCE": "note", "SPICY!": "bolt", "WIRED": "bolt",
 };
 // the pet's faces carry causes too — faces whose timer means exactly one
 // thing resolve through this map; multi-cause faces (happy, excited,
@@ -3494,7 +3503,7 @@ function dripTick() {
     // jelly-hungry species visibly munch the windfall
     if (SPECIES[active].kr) munchUntil = performance.now() + 500;
     for (const p of pals) {
-      if (SPECIES[p.sp].kr) { p.faceId = "munch"; p.faceT = performance.now() + 500; }
+      if (SPECIES[p.sp].kr) { p.faceId = "munch"; p.faceT = performance.now() + 500; p.faceWhy = "LUCKY!"; p.faceWhyId = "munch"; }
     }
   }
   return true;
@@ -3609,7 +3618,7 @@ function propArrive(g, now) {
         q.restUntil = 0; q.restCd = now + 22000;
         q.fly = true; q.vy = -190;
         q.vx = (Math.sign(q.x - petX) || (Math.random() < 0.5 ? -1 : 1)) * 150;
-        q.faceId = "shock"; q.faceT = now + 900;
+        q.faceId = "shock"; q.faceT = now + 900; q.faceWhy = "EVICTED"; q.faceWhyId = "shock"; 
       }
     }
     petX = cushion.x; // settles dead-center on the puff
@@ -3681,7 +3690,7 @@ function propArrive(g, now) {
     for (const p of pals) {
       if (Math.abs(p.x - music.x) < 320 && Math.abs(p.y - music.y) < 40 && !p.fly && p !== palHeld && now > (p.restUntil || 0) && !(now < (p.hideUntil || 0))) {
         if (!(now < (p.settleUntil || 0))) { p.fly = true; p.vy = -170 - Math.random() * 60; p.vx = (Math.random() - 0.5) * 80; p.hopT = now; }
-        p.faceId = "happy"; p.faceT = now + 1000;
+        p.faceId = "happy"; p.faceT = now + 1000; p.faceWhy = "THE TUNE"; p.faceWhyId = "happy"; 
       }
     }
     sfx.pop();
@@ -3746,7 +3755,7 @@ function propTap(kind, q) {
     // a fresh bowl perks up whoever's watching — a nearby pal starts drooling
     const bw = performance.now();
     for (const p of pals) {
-      if (Math.abs(p.x - q.x) < 260 && Math.abs(p.y - q.y) < 40 && bw > (p.faceT || 0)) { p.faceId = "drool"; p.faceT = bw + 1400; }
+      if (Math.abs(p.x - q.x) < 260 && Math.abs(p.y - q.y) < 40 && bw > (p.faceT || 0)) { p.faceId = "drool"; p.faceT = bw + 1400; p.faceWhy = "BOWL"; p.faceWhyId = "drool"; }
     }
     if (Math.abs(petX - q.x) < 300) droolUntil = bw + 1200;
   } else if (kind === "box") {
@@ -3772,7 +3781,7 @@ function propTap(kind, q) {
     for (const p of pals) {
       if (Math.abs(p.x - q.x) < 300 && Math.abs(p.y - q.y) < 40 && !p.fly && p !== palHeld && mnow > (p.restUntil || 0) && !(mnow < (p.hideUntil || 0))) {
         p.fly = true; p.vy = -160 - Math.random() * 60; p.vx = (Math.random() - 0.5) * 70; p.hopT = mnow;
-        p.faceId = "happy"; p.faceT = mnow + 900;
+        p.faceId = "happy"; p.faceT = mnow + 900; p.faceWhy = "THE TUNE"; p.faceWhyId = "happy";
       }
     }
   } else if (kind === "mirror") {
@@ -4836,7 +4845,7 @@ function legTick(sp, x, y, dt, moving, airborne, kick) {
           p.lookDir = Math.sign(x - p.x) || 1;
           p.lookUntil = pnow + 1400;
           if (Math.random() < 0.25) hearts.push({ x: p.x, y: p.y - 58, life: 0.9 });
-          if (Math.random() < 0.2 && pnow > p.faceT) { p.faceId = "love"; p.faceT = pnow + 1200; }
+          if (Math.random() < 0.2 && pnow > p.faceT) { p.faceId = "love"; p.faceT = pnow + 1200; p.faceWhy = "MESMERIZED"; p.faceWhyId = "love"; }
         }
       }
     }
@@ -4992,7 +5001,7 @@ function copyPeek(intense) {
         now > (p.restUntil || 0) && now > (p.hideUntil || 0)) { nd = d; np = p; }
   }
   if (np) {
-    np.faceId = "curious"; np.faceT = now + 900;
+    np.faceId = "curious"; np.faceT = now + 900; np.faceWhy = "NOSY"; np.faceWhyId = "curious";
     np.lookDir = Math.sign(curX - np.x) || 1; np.lookUntil = now + 900;
   }
   sfx.pop();
@@ -5038,7 +5047,7 @@ const ACC_RUNS = {
   bless: [ // halo: rises a touch, warm glow, nearby pals get happy
     [0, () => { flying = true; petVY = -140; for (let i = 0; i < 6; i++) fx.push({ x: petX + (Math.random() - 0.5) * 34, y: petY - 40 - Math.random() * 22, vx: 0, vy: -14, life: 0.9, c: "#ffe9a0" }); }],
     [600, () => hearts.push({ x: petX, y: petY - 62, life: 1.1 })],
-    [900, () => { for (const p of pals) { if (Math.abs(p.x - petX) < 220 && Math.abs(p.y - petY) < 60) { p.faceId = "love"; p.faceT = performance.now() + 1600; } } }],
+    [900, () => { for (const p of pals) { if (Math.abs(p.x - petX) < 220 && Math.abs(p.y - petY) < 60) { p.faceId = "love"; p.faceT = performance.now() + 1600; p.faceWhy = "BLESSED"; p.faceWhyId = "love"; } } }],
     [1500, () => {}],
   ],
   signal: [ // antenna: freezes stock-still, then — a transmission!
@@ -5759,7 +5768,7 @@ cv.addEventListener("pointerdown", (e) => {
                   !(nw < (q.chatUntil || 0)) && !q.scene && Math.abs(q.x - cur.x) > 60 &&
                   Math.abs(q.x - cur.x) < 240 && Math.abs(q.y - cur.y) < 40 && nw > (q.faceT || 0) &&
                   Math.random() < 0.5) {
-                q.faceId = "meh"; q.faceT = nw + 900;
+                q.faceId = "meh"; q.faceT = nw + 900; q.faceWhy = "IT'S GONE"; q.faceWhyId = "meh";
                 q.lookDir = Math.sign(cur.x - q.x) || 1; q.lookUntil = nw + 800;
               }
             }
@@ -9262,6 +9271,7 @@ function frameBody(now) {
             p.vy = -(150 + Math.random() * 90);
             p.faceId = "excited"; // joining a hunt is the best thing ever
             p.faceT = now + 1000;
+            p.faceWhy = "THE HUNT"; p.faceWhyId = "excited";
           }
         }
       }
@@ -10369,6 +10379,7 @@ function frameBody(now) {
         p.faceId = (PSYCH[(SPECIES[p.sp] || {}).ps] || {}).follow <= 0.8 && troll < 0.4 ? "plead"
           : troll < 0.35 ? "drool" : "happy";
         p.faceT = now + 900;
+        p.faceWhy = "TREAT?"; p.faceWhyId = p.faceId;
       }
       p.nextT = 0; // re-decide next frame so the race starts NOW
     }
@@ -10460,7 +10471,7 @@ function frameBody(now) {
         if (ball.vy > -70) ball.vy = -70; // a little chip upward
         p.squashV += 3;
         p.lookDir = Math.sign(ball.x - p.x) || 1; p.lookUntil = now + 500;
-        if (Math.random() < 0.4) { p.faceId = "happy"; p.faceT = now + 700; }
+        if (Math.random() < 0.4) { p.faceId = "happy"; p.faceT = now + 700; p.faceWhy = "FAST BALL"; p.faceWhyId = "happy"; }
         if (Math.random() < 0.5) sfx.pop();
       }
     }
@@ -10544,6 +10555,7 @@ function frameBody(now) {
         if (p === palHeld || p.fly || Math.abs(p.y - petY) > 24 || Math.abs(p.x - petX) > 110) continue;
         p.faceId = Math.random() < 0.3 ? "love" : "happy";
         p.faceT = now + 1200;
+        p.faceWhy = "CRUMBS"; p.faceWhyId = p.faceId;
         p.squashV += 4;
         if (Math.random() < 0.5) hearts.push({ x: p.x + 8, y: p.y - 58, life: 0.9 });
       }
@@ -11301,7 +11313,7 @@ function frameBody(now) {
     }
     else if (p.wasNapping) {
       p.wasNapping = false;
-      if (now > p.faceT) { p.faceId = "yawn"; p.faceT = now + 900; }
+      if (now > p.faceT) { p.faceId = "yawn"; p.faceT = now + 900; p.faceWhy = "JUST WOKE"; p.faceWhyId = "yawn"; }
       p.squashV += 3;
       // "oh, you're up" — an awake neighbor notices the stir and gives
       // the little one a warm once-over
@@ -11346,7 +11358,7 @@ function frameBody(now) {
       p.act = null; p.scene = null; p.group = null;
       p.wasHidden = true;
       if (now < drizzleUntil && now > (p.faceT || 0) && Math.random() < dt * 0.35) {
-        p.faceId = Math.random() < 0.5 ? "content" : "curious"; p.faceT = now + 1000;
+        p.faceId = Math.random() < 0.5 ? "content" : "curious"; p.faceT = now + 1000; p.faceWhy = "SHELTERING"; p.faceWhyId = p.faceId;
       }
       // roommates trade a glance now and then — sharing a box is a
       // social situation, even when it's just sheltering from weather
@@ -11492,7 +11504,7 @@ function frameBody(now) {
           if (Math.random() < dt * 0.7) p.squashV += 1.0;
           // riders are visibly delighted to be up there — a wave/song
           if (p.stackRise >= 1 && Math.random() < dt * 0.22) {
-            if (now > p.faceT) { p.faceId = "happy"; p.faceT = now + 700; }
+            if (now > p.faceT) { p.faceId = "happy"; p.faceT = now + 700; p.faceWhy = "PIGGYBACK"; p.faceWhyId = "happy"; }
           }
         }
       } else {
@@ -11514,7 +11526,7 @@ function frameBody(now) {
           p.fly = true; p.vy = 80; p.fallPk = 0;
           p.restUntil = 0; // the deck dropping out wakes a napper — no
           // sleeping-face freefall
-          if (now > (p.faceT || 0)) { p.faceId = "shock"; p.faceT = now + 1000; p.squashV += 1.5; }
+          if (now > (p.faceT || 0)) { p.faceId = "shock"; p.faceT = now + 1000; p.squashV += 1.5; p.faceWhy = "FALLING"; p.faceWhyId = "shock"; }
         }
       }
       const pEdgeGround = palEdge(p);
@@ -11554,7 +11566,7 @@ function frameBody(now) {
           if (p.boopT > 1.0 / (ppsy.startle || 1)) {
             p.boopT = 0;
             p.fly = true; p.vy = -150; p.vx = Math.sign(p.x - curX || 1) * 120;
-            p.faceId = "hmph"; p.faceT = now + 1100; p.walkT = null;
+            p.faceId = "hmph"; p.faceT = now + 1100; p.walkT = null; p.faceWhy = "POKED"; p.faceWhyId = "hmph";
             sfx.pop();
           }
         } else p.boopT = Math.max(0, (p.boopT || 0) - dt * 2);
@@ -11569,6 +11581,7 @@ function frameBody(now) {
             const pr3 = Math.random();
             p.faceId = pr3 < 0.3 ? "love" : pr3 < 0.55 ? "embar" : "happy";
             p.faceT = now + 1800;
+            p.faceWhy = "PETTED"; p.faceWhyId = p.faceId;
             p.squashV += 4;
             hearts.push({ x: p.x + 8, y: p.y - 56, life: 1 });
             // the pet clocked who got the rub — a flat sideways stare
@@ -11618,8 +11631,8 @@ function frameBody(now) {
             p.lookDir = Math.sign(q.x - p.x) || 1; p.lookUntil = now + 900;
             q.lookDir = -p.lookDir; q.lookUntil = now + 900;
             p.squashV += 3; q.squashV += 3;
-            p.faceId = "happy"; p.faceT = now + 900;
-            q.faceId = "happy"; q.faceT = now + 900;
+            p.faceId = "happy"; p.faceT = now + 900; p.faceWhy = "HI!"; p.faceWhyId = "happy";
+            q.faceId = "happy"; q.faceT = now + 900; q.faceWhy = "HI!"; q.faceWhyId = "happy";
             const q2 = q;
             setTimeout(() => { if (pals.includes(q2)) q2.squashV += 2; }, 430); // a beat later, it bounces back hello
             sfx.pop();
@@ -11632,7 +11645,7 @@ function frameBody(now) {
           p.sympCd = now + 2600;
           p.fly = true; p.vy = -130 - Math.random() * 60; p.vx = (Math.random() - 0.5) * 60;
           p.hopT = now;
-          if (Math.random() < 0.45) { p.faceId = "happy"; p.faceT = now + 700; }
+          if (Math.random() < 0.45) { p.faceId = "happy"; p.faceT = now + 700; p.faceWhy = "WHEE!"; p.faceWhyId = "happy"; }
         }
         // bump: the main pet walks straight through a pal — both squish
         // and the pal gets nudged into a tiny hop. soft collision, not war
@@ -11641,7 +11654,7 @@ function frameBody(now) {
           p.bumpCd = now + 8000;
           p.squashV += 4; squashV += 2;
           p.fly = true; p.vy = -140; p.vx = Math.sign(p.x - petX || 1) * 90;
-          p.faceId = Math.random() < 0.5 ? "happy" : "shock"; p.faceT = now + 800;
+          p.faceId = Math.random() < 0.5 ? "happy" : "shock"; p.faceT = now + 800; p.faceWhy = "BUMP!"; p.faceWhyId = p.faceId;
           hearts.push({ x: p.x, y: p.y - 58, life: 0.9 });
           sfx.pop();
         }
@@ -11687,7 +11700,7 @@ function frameBody(now) {
         p.walkT = null;
         p.follow = null;
         p.squashV += 2;
-        p.faceId = "yawn"; p.faceT = now + 1000;
+        p.faceId = "yawn"; p.faceT = now + 1000; p.faceWhy = "NIGHT NIGHT"; p.faceWhyId = "yawn";
         p.napGrace = now + 1200;
         if (pairBondLvl(p, lf) >= 1) hearts.push({ x: (p.x + lf.x) / 2, y: p.y - 56, life: 1 });
       }
@@ -11703,7 +11716,7 @@ function frameBody(now) {
           p.fly = true; p.vy = -150 * animProf(p.sp).hop;
           p.vx = p.follow.vx * 0.5;
           p.hopT = now;
-          if (now > p.faceT) { p.faceId = "excited"; p.faceT = now + 900; }
+          if (now > p.faceT) { p.faceId = "excited"; p.faceT = now + 900; p.faceWhy = "WHEE!"; p.faceWhyId = "excited"; }
         }
         // end of the line: the conga just ran out of track — instead of
         // wandering off, the caboose pulls into the station beside its
@@ -11711,7 +11724,7 @@ function frameBody(now) {
         else if (now > p.followT && pals.includes(p.follow) && !p.follow.fly &&
             Math.abs(p.follow.y - p.y) < 24 && Math.abs(p.follow.x - p.x) < 90 && now > p.faceT) {
           p.lookDir = Math.sign(p.follow.x - p.x) || 1; p.lookUntil = now + 1000;
-          p.faceId = "content"; p.faceT = now + 1100;
+          p.faceId = "content"; p.faceT = now + 1100; p.faceWhy = "PAL TIME"; p.faceWhyId = "content"; 
           p.squashV += 1.5;
         }
         p.follow = null;
@@ -11893,7 +11906,7 @@ function frameBody(now) {
                     now > (q3.restUntil || 0) && !(now < (q3.hideUntil || 0)) &&
                     Math.abs(q3.y - p.y) < 24 && Math.abs(q3.x - p.x) < 170);
                   if (cmf && Math.random() < 0.5) {
-                    cmf.faceId = "worry"; cmf.faceT = now + 1000;
+                    cmf.faceId = "worry"; cmf.faceT = now + 1000; cmf.faceWhy = "SAW THAT"; cmf.faceWhyId = "worry";
                     cmf.lookDir = Math.sign(p.x - cmf.x) || 1; cmf.lookUntil = now + 1000;
                   }
                 }
@@ -11943,6 +11956,7 @@ function frameBody(now) {
             p.faceId = pairBondLvl(p, pair) >= 2 && Math.random() < 0.4 ? "jealous"
               : Math.random() < 0.5 ? "curious" : "happy";
             p.faceT = now + 900;
+            p.faceWhy = "EARWIGGING"; p.faceWhyId = p.faceId;
           }
           if (p.walkT === null && !p.propGoal && !(now < (p.settleUntil || 0)) && Math.abs(pair.x - p.x) > 110 && Math.random() < 0.3) {
             p.walkT = Math.max(plo, Math.min(phi, pair.x + (p.x < pair.x ? 110 : -110)));
@@ -12008,7 +12022,7 @@ function frameBody(now) {
         const ff = drips.find((d) => d.k === "firefly" && Math.abs(d.y - p.y) < 160 && Math.abs(d.x - p.x) < 220);
         if (ff) {
           p.walkT = Math.max(plo, Math.min(phi, ff.x));
-          if (now > p.faceT) { p.faceId = "curious"; p.faceT = now + 1000; }
+          if (now > p.faceT) { p.faceId = "curious"; p.faceT = now + 1000; p.faceWhy = "FIREFLY"; p.faceWhyId = "curious"; }
           p.lookDir = Math.sign(ff.x - p.x) || 1; p.lookUntil = now + 900;
         }
       }
@@ -12104,12 +12118,12 @@ function frameBody(now) {
                 gainXp(tk.xp, p.x + 14, p.y - 92);
                 bondGain(SPECIES[p.sp].id, TREAT_PREF[psp.trait] === tkIdx ? 4 : 3); // a favorite earns extra love
                 // the snack's magic applies no matter who snatched it
-                if (tk.id === "chili") { hyperUntil = now + 60000; p.faceId = "gasp"; p.faceT = now + 1000; }
-                else if (tk.id === "coffee") { noSleepUntil = Date.now() + 300000; p.faceId = "excited"; p.faceT = now + 1400; }
+                if (tk.id === "chili") { hyperUntil = now + 60000; p.faceId = "gasp"; p.faceT = now + 1000; p.faceWhy = "SPICY!"; p.faceWhyId = "gasp"; }
+                else if (tk.id === "coffee") { noSleepUntil = Date.now() + 300000; p.faceId = "excited"; p.faceT = now + 1400; p.faceWhy = "WIRED"; p.faceWhyId = "excited"; }
                 else if (tk.id === "cake") p.squashV += 8;
                 // plain snacks get the munch face — spicy/wired reactions
                 // already claimed it (this overwrote them until now)
-                if (p.faceT <= now) { p.faceId = "munch"; p.faceT = now + 1500; }
+                if (p.faceT <= now) { p.faceId = "munch"; p.faceT = now + 1500; p.faceWhy = "SNACK"; p.faceWhyId = "munch"; }
                 p.stuffUntil = now + 2900; // puffed-cheek afterglow once the munch settles
                 p.squashV += 5;
                 if (TREAT_PREF[psp.trait] === tkIdx) hearts.push({ x: p.x - 6, y: p.y - 62, life: 1.2 });
@@ -12122,6 +12136,7 @@ function frameBody(now) {
                   Math.abs(o.x - p.x) < 90 && Math.abs(o.y - p.y) < 30 && pairBondLvl(p, o) >= 2);
                 if (sharer && Math.random() < 0.7) {
                   sharer.faceId = Math.random() < 0.5 ? "stuffed" : "content"; sharer.faceT = now + 1400;
+                  sharer.faceWhy = "SHARED"; sharer.faceWhyId = sharer.faceId;
                   sharer.squashV += 3;
                   hearts.push({ x: (p.x + sharer.x) / 2, y: p.y - 56, life: 1 });
                 }
@@ -12131,13 +12146,14 @@ function frameBody(now) {
                 // actually just lost, not a stale errand. mostly sulks,
                 // but good sports sometimes cheer the winner instead
                 if (Math.random() < 0.4) {
-                  p.faceId = "happy"; p.faceT = now + 1000;
+                  p.faceId = "happy"; p.faceT = now + 1000; p.faceWhy = "GOOD GAME"; p.faceWhyId = "happy";
                   p.fly = true; p.vy = -150; p.vx = (Math.random() - 0.5) * 70; p.hopT = now;
                 } else {
                   // sulky, genuinely crestfallen — or a competitive
                   // side-eye at whoever just beat them to it
                   p.faceId = Math.random() < 0.5 ? "hmph" : ((ppsy.startle || 1) >= 1.3 ? "jealous" : "sad");
                   p.faceT = now + 1100;
+                  p.faceWhy = "TOO SLOW"; p.faceWhyId = p.faceId;
                   p.squashV += 1.5;
                 }
               }
@@ -12147,12 +12163,12 @@ function frameBody(now) {
               if ((bowl.fill ?? 2) <= 0) {
                 // empty bowl — the pal just tilts its head and moves on
                 p.lookUntil = now + 1200;
-                p.faceId = "meh"; p.faceT = now + 1100;
+                p.faceId = "meh"; p.faceT = now + 1100; p.faceWhy = "BOWL"; p.faceWhyId = "meh"; 
               } else {
                 bowl.fill = Math.max(0, (bowl.fill ?? 2) - 1);
                 dirty = true;
                 p.lookUntil = now + 2400;
-                p.faceId = "munch"; p.faceT = now + 2200;
+                p.faceId = "munch"; p.faceT = now + 2200; p.faceWhy = "BOWL"; p.faceWhyId = "munch";
                 p.stuffUntil = now + 3400;
                 for (let k = 0; k < 4; k++) fx.push({ x: bowl.x + (Math.random() - 0.5) * 14, y: bowl.y - 10, vx: (Math.random() - 0.5) * 40, vy: -30 - Math.random() * 40, life: 0.5, c: "#d9a05b" });
                 if (Math.random() < 0.4) hearts.push({ x: p.x, y: p.y - 60, life: 1 });
@@ -12167,7 +12183,7 @@ function frameBody(now) {
                 p.restCd = p.restUntil + 25000 * (ppsy.sleep || 1) * (isBaby(psp) ? 0.45 : 1) * (nightMode ? 0.55 : 1);
                 p.walkT = null;
                 p.squashV += 3;
-                p.faceId = "yawn"; p.faceT = now + 1000;
+                p.faceId = "yawn"; p.faceT = now + 1000; p.faceWhy = "NIGHT NIGHT"; p.faceWhyId = "yawn";
                 p.napGrace = now + 1200;
                 // shoulder-lean: bonded nappers share the smile mid-dream
                 if (pairBondLvl(p, q) >= 2) { p.dreamT = q.dreamT = now + 2500; }
@@ -12182,7 +12198,7 @@ function frameBody(now) {
                 p.restCd = p.restUntil + 25000 * (ppsy.sleep || 1) * (isBaby(psp) ? 0.45 : 1) * (nightMode ? 0.55 : 1);
                 p.walkT = null;
                 p.squashV += 3;
-                p.faceId = "yawn"; p.faceT = now + 1000;
+                p.faceId = "yawn"; p.faceT = now + 1000; p.faceWhy = "NIGHT NIGHT"; p.faceWhyId = "yawn";
                 p.napGrace = now + 1200;
                 if (Math.random() < 0.4) hearts.push({ x: (p.x + petX) / 2, y: p.y - 58, life: 1 });
               }
@@ -12200,7 +12216,7 @@ function frameBody(now) {
               p.squashV += 3;
               // the tuck-in yawn: a beat of yawn face before the eyes
               // actually shut — sells falling asleep, not snapping off
-              p.faceId = "yawn"; p.faceT = now + 1000;
+              p.faceId = "yawn"; p.faceT = now + 1000; p.faceWhy = "NIGHT NIGHT"; p.faceWhyId = "yawn";
               p.napGrace = now + 1200;
               for (let k = 0; k < 4; k++) fx.push({ x: cushion.x + (k - 1.5) * 8, y: cushion.y - 4, vx: (k - 1.5) * 16, vy: -12, life: 0.4, c: "#f0d0e0" });
               }
@@ -12213,7 +12229,7 @@ function frameBody(now) {
               // joining a roommate's box is a shared secret — slip in
               // wearing a little smirk
               if (pals.some((o) => o !== p && now < (o.hideUntil || 0) && Math.abs(o.x - box.x) < 34)) {
-                p.faceId = "mischief"; p.faceT = now + 1800;
+                p.faceId = "mischief"; p.faceT = now + 1800; p.faceWhy = "BOX"; p.faceWhyId = "mischief";
               }
               for (let k = 0; k < 5; k++) fx.push({ x: box.x + (k - 2) * 6, y: box.y - 12, vx: (k - 2) * 13, vy: -26 - Math.random() * 18, life: 0.5, c: "#d8c49a" });
               // hide-and-seek: a free pal nearby sees the vanishing act
@@ -12226,7 +12242,7 @@ function frameBody(now) {
               if (sk) {
                 sk.seekFor = p; sk.seekUntil = now + 12000;
                 sk.walkT = Math.max(plo, Math.min(phi, box.x + (sk.x < box.x ? -34 : 34)));
-                if (now > (sk.faceT || 0)) { sk.faceId = "curious"; sk.faceT = now + 900; }
+                if (now > (sk.faceT || 0)) { sk.faceId = "curious"; sk.faceT = now + 900; sk.faceWhy = "HIDE & SEEK"; sk.faceWhyId = "curious"; }
               }
             } else if (pg.kind === "plant" && plant && Math.abs(plant.x - p.x) < 50) {
               // sniff sniff — a happy nuzzle or a pollen sneeze
@@ -12234,11 +12250,11 @@ function frameBody(now) {
               p.lookDir = Math.sign(plant.x - p.x) || 1;
               p.lookUntil = now + 1600;
               if (Math.random() < 0.25) {
-                p.faceId = "sneeze"; p.faceT = now + 900; // pollen got in — ACHOO
+                p.faceId = "sneeze"; p.faceT = now + 900; p.faceWhy = "ACHOO"; p.faceWhyId = "sneeze"; // pollen got in — ACHOO
                 p.squashV += 5;
                 for (let k = 0; k < 5; k++) fx.push({ x: plant.x + (Math.random() - 0.5) * 14, y: plant.y - 26, vx: (Math.random() - 0.5) * 80, vy: -40 - Math.random() * 40, life: 0.6, c: "#9adf8a" });
               } else {
-                p.faceId = "content"; p.faceT = now + 1800;
+                p.faceId = "content"; p.faceT = now + 1800; p.faceWhy = "PLANT"; p.faceWhyId = "content";
                 hearts.push({ x: p.x, y: p.y - 58, life: 1 });
                 plant.steamUntil = Date.now() + 4000;
                 // gardener's touch: a drip-trait pal waters the sprout
@@ -12267,7 +12283,7 @@ function frameBody(now) {
               if (!palQuiet) for (const q of pals) {
                 if (Math.abs(q.x - music.x) < 300 && Math.abs(q.y - music.y) < 40 && !q.fly && q !== palHeld && now > (q.restUntil || 0) && !(now < (q.hideUntil || 0))) {
                   if (!(now < (q.settleUntil || 0))) { q.fly = true; q.vy = -160 - Math.random() * 60; q.vx = (Math.random() - 0.5) * 70; q.hopT = now; }
-                  q.faceId = "happy"; q.faceT = now + 900;
+                  q.faceId = "happy"; q.faceT = now + 900; q.faceWhy = "THE TUNE"; q.faceWhyId = "happy"; 
                 }
               }
               sfx.pop();
@@ -12276,11 +12292,11 @@ function frameBody(now) {
               p.mirrorCd = now + 42000 + Math.random() * 22000;
               p.lookDir = Math.sign(mirror.x - p.x) || 1;
               if (ppsy.flee) {
-                p.faceId = "shock"; p.faceT = now + 900;
+                p.faceId = "shock"; p.faceT = now + 900; p.faceWhy = "MIRROR"; p.faceWhyId = "shock"; 
                 p.fly = true; p.vy = -160; p.vx = -p.lookDir * 150; p.hopT = now;
               } else {
                 p.lookUntil = now + 1900;
-                p.faceId = "smug"; p.faceT = now + 1700;
+                p.faceId = "smug"; p.faceT = now + 1700; p.faceWhy = "MIRROR"; p.faceWhyId = "smug";
                 for (let k = 0; k < 6; k++) fx.push({ x: mirror.x + (Math.random() - 0.5) * 16, y: mirror.y - 32 + Math.random() * 22, vx: (Math.random() - 0.5) * 26, vy: -16 - Math.random() * 20, life: 0.5, c: "#ffffff" });
                 if (Math.random() < 0.3) hearts.push({ x: p.x, y: p.y - 58, life: 1 });
                 // a glint pal can't resist polishing what it sees — the
@@ -12295,7 +12311,7 @@ function frameBody(now) {
               p.matCd = now + 32000 + Math.random() * 20000;
               p.x = mat.x;
               p.fly = true; p.vy = -240 * animProf(p.sp).hop; p.vx = (Math.random() - 0.5) * 80; p.hopT = now;
-              p.faceId = "happy"; p.faceT = now + 1100;
+              p.faceId = "happy"; p.faceT = now + 1100; p.faceWhy = "MAT"; p.faceWhyId = "happy"; 
               p.squashV += 4;
               matPoof = now + 700;
               sfx.boing();
@@ -12305,13 +12321,13 @@ function frameBody(now) {
               p.lookDir = Math.sign(jar.x - p.x) || 1;
               if ((jar.fill ?? 2) <= 0) {
                 p.lookUntil = now + 1100;
-                p.faceId = "meh"; p.faceT = now + 1100;
+                p.faceId = "meh"; p.faceT = now + 1100; p.faceWhy = "JAR"; p.faceWhyId = "meh"; 
               } else {
                 jar.fill--;
                 jar.raidUntil = Date.now() + 1500;
                 dirty = true;
                 p.lookUntil = now + 1800;
-                p.faceId = "munch"; p.faceT = now + 1600;
+                p.faceId = "munch"; p.faceT = now + 1600; p.faceWhy = "JAR"; p.faceWhyId = "munch";
                 for (let k = 0; k < 4; k++) fx.push({ x: jar.x + (Math.random() - 0.5) * 14, y: jar.y - 18, vx: (Math.random() - 0.5) * 44, vy: -22 - Math.random() * 26, life: 0.5, c: "#d9a05b" });
                 if (Math.random() < 0.35) hearts.push({ x: p.x, y: p.y - 60, life: 1 });
               }
@@ -12322,7 +12338,7 @@ function frameBody(now) {
               for (let k = 0; k < 7; k++) fx.push({ x: p.x + (Math.random() - 0.5) * 20, y: p.y - 12 - Math.random() * 18, vx: (Math.random() - 0.5) * 46, vy: -24 - Math.random() * 32, life: 0.6, c: "#ffd75e", spr: "mote" });
               p.carry = { n: 2, since: now };
               p.squashV += 3;
-              p.faceId = "happy"; p.faceT = now + 900;
+              p.faceId = "happy"; p.faceT = now + 900; p.faceWhy = "LUCKY!"; p.faceWhyId = "happy"; 
               sfx.pop();
               if (!petHome && Math.abs(petY - p.y) < 40) {
                 p.propGoal = { kind: "deliver", at: now };
@@ -12342,7 +12358,7 @@ function frameBody(now) {
                 dirty = true;
                 p.carry = null;
                 bondGain(psp.id, 2);
-                p.faceId = "happy"; p.faceT = now + 1500;
+                p.faceId = "happy"; p.faceT = now + 1500; p.faceWhy = "DELIVERY"; p.faceWhyId = "happy"; 
                 p.squashV += 4;
                 lookDir = Math.sign(p.x - petX) || 1;
                 lookUntil = now + 1300;
@@ -12359,7 +12375,7 @@ function frameBody(now) {
               // staying, not doing; breaks if the pet wanders off
               p.settleUntil = now + 12000 + Math.random() * 10000;
               p.settleCd = p.settleUntil + 30000;
-              p.faceId = "content"; p.faceT = now + 2600;
+              p.faceId = "content"; p.faceT = now + 2600; p.faceWhy = "KEEPING COMPANY"; p.faceWhyId = "content";
               p.squashV += 2;
               p.lookDir = Math.sign(petX - p.x) || 1;
               p.lookUntil = now + 900;
@@ -12374,6 +12390,7 @@ function frameBody(now) {
                 p.lookUntil = q.lookUntil = now + 1400;
                 p.faceId = q.faceId = Math.random() < 0.4 ? "love" : "laugh";
                 p.faceT = q.faceT = now + 1400;
+                p.faceWhy = q.faceWhy = "SAYING HI"; p.faceWhyId = q.faceWhyId = p.faceId;
                 p.squashV += 4; q.squashV += 4;
                 hearts.push({ x: (p.x + q.x) / 2, y: p.y - 60, life: 1.2 });
                 hearts.push({ x: p.x, y: p.y - 56, life: 0.9 });
@@ -12383,7 +12400,7 @@ function frameBody(now) {
               } else {
                 p.lookDir = Math.random() < 0.5 ? -1 : 1;
                 p.lookUntil = now + 700;
-                p.faceId = "meh"; p.faceT = now + 900;
+                p.faceId = "meh"; p.faceT = now + 900; p.faceWhy = "STOOD UP"; p.faceWhyId = "meh"; 
               }
             }
           }
@@ -12443,7 +12460,9 @@ function frameBody(now) {
             // distance-driven gait: each footfall dips the blob a touch —
             // babies toddle, so each step wobbles harder and one in a blue
             // moon the little one actually trips over its own nothing
-            p.gait = (p.gait || 0) + stepV * dt * 0.14;
+            // per-pal stride rhythm: every slime walks to its own beat —
+            // a lazy one pads slower, a bouncy one patters quicker
+            p.gait = (p.gait || 0) + stepV * dt * (p.gaitK || (p.gaitK = 0.115 + (((p.ph || 0) * 7919) % 1) * 0.06));
             const pgs = Math.floor(p.gait / Math.PI);
             if (pgs !== (p.gaitStep || 0)) {
               p.gaitStep = pgs;
@@ -12504,6 +12523,7 @@ function frameBody(now) {
           p.hopT = now;
           p.faceId = Math.random() < 0.5 ? "excited" : "happy";
           p.faceT = now + 800;
+          p.faceWhy = "DANCE"; p.faceWhyId = p.faceId;
           p.nextT = now + 1100;
         }
         else {
@@ -12548,7 +12568,7 @@ function frameBody(now) {
             jelly = addSavedInt(jelly, 1);
             dirty = true;
             p.carry = null;
-            p.faceId = "smug"; p.faceT = now + 900; // pockets half — zero shame
+            p.faceId = "smug"; p.faceT = now + 900; p.faceWhy = "POCKETED"; p.faceWhyId = "smug"; // pockets half — zero shame
           }
         }
         // fetch errand: a bonded pal (BUDDY+) occasionally spots a lost
@@ -12619,6 +12639,7 @@ function frameBody(now) {
             p.lookDir = buddy.lookDir = dir;
             p.lookUntil = buddy.lookUntil = now + 1200;
             p.faceId = buddy.faceId = "content";
+          p.faceWhy = buddy.faceWhy = "PAL TIME"; p.faceWhyId = buddy.faceWhyId = "content";
             p.faceT = buddy.faceT = now + 1600;
           }
         }
@@ -12937,7 +12958,7 @@ function frameBody(now) {
           p.accAct = null; // mounting interrupts the doodad's bit
           p.stackT = now + 4000 + Math.random() * 5000;
           p.stackRise = 0;
-          p.faceId = "happy"; p.faceT = now + 1300;
+          p.faceId = "happy"; p.faceT = now + 1300; p.faceWhy = "PIGGYBACK"; p.faceWhyId = "happy"; 
           q.squashV += 5;
           hearts.push({ x: (p.x + q.x) / 2, y: q.y - 92, life: 1 });
           sfx.pop();
@@ -13011,7 +13032,7 @@ function frameBody(now) {
         if (rv && Math.random() < 0.5) {
           p.lookDir = Math.sign(rv.x - p.x) || 1; p.lookUntil = now + 700;
           rv.lookDir = -p.lookDir; rv.lookUntil = now + 700;
-          if (now > rv.faceT) { rv.faceId = "content"; rv.faceT = now + 1000; }
+          if (now > rv.faceT) { rv.faceId = "content"; rv.faceT = now + 1000; rv.faceWhy = "RAINBOW"; rv.faceWhyId = "content"; }
           if (Math.random() < 0.4) hearts.push({ x: (p.x + rv.x) / 2, y: p.y - 56, life: 1 });
         }
       } else if (now < drizzleUntil && p.drizzleRx !== drizzleUntil && Math.random() < 0.18) {
@@ -13061,11 +13082,11 @@ function frameBody(now) {
       if (mate) {
         ball.vx = Math.sign(mate.x - ball.x) * (170 + Math.random() * 90);
         ball.vy = -60 - Math.random() * 50;
-        if (now > p.faceT) { p.faceId = "serious"; p.faceT = now + 800; } // striker face
+        if (now > p.faceT) { p.faceId = "serious"; p.faceT = now + 800; p.faceWhy = "FAST BALL"; p.faceWhyId = "serious"; } // striker face
       } else {
         ball.vx = (Math.sign(ball.x - p.x) || (Math.random() < 0.5 ? -1 : 1)) * (90 + Math.random() * 90);
         ball.vy = -80 - Math.random() * 60;
-        if (now > p.faceT) { p.faceId = "happy"; p.faceT = now + 900; }
+        if (now > p.faceT) { p.faceId = "happy"; p.faceT = now + 900; p.faceWhy = "FAST BALL"; p.faceWhyId = "happy"; }
       }
       p.lookDir = Math.sign(ball.vx) || 1; p.lookUntil = now + 700;
       p.squashV += 2.5;
@@ -13096,7 +13117,7 @@ function frameBody(now) {
         now > (p.shakeCd || 0) && Math.random() < dt * 0.08) {
       p.shakeCd = now + 8000 + Math.random() * 9000;
       p.squashV += 4;
-      if (now > p.faceT) { p.faceId = "meh"; p.faceT = now + 700; }
+      if (now > p.faceT) { p.faceId = "meh"; p.faceT = now + 700; p.faceWhy = "RAIN"; p.faceWhyId = "meh"; }
       for (let k = 0; k < 3; k++) drips.push({ x: p.x + (k - 1) * 10, y: p.y - 30, vx: (k - 1) * 30, vy: -40, life: 0.5, c: "#9ec8e8" });
     }
     // puddle steps: hurrying across a still-damp floor kicks spray —
@@ -13164,7 +13185,7 @@ function frameBody(now) {
           p.fly || p.tag || p.scene || p.group) {
         // gave up: the hider never came out — a little shrug and off it goes
         if (pals.includes(hf) && now > (p.seekUntil || 0) && now < (hf.hideUntil || 0) && now > (p.faceT || 0)) {
-          p.faceId = "meh"; p.faceT = now + 900;
+          p.faceId = "meh"; p.faceT = now + 900; p.faceWhy = "GAVE UP"; p.faceWhyId = "meh"; 
           p.lookDir = Math.sign(hf.x - p.x) || 1; p.lookUntil = now + 600;
         }
         p.seekFor = null; p.sawHide = false;
@@ -13175,6 +13196,7 @@ function frameBody(now) {
         if (Math.abs(hf.x - p.x) < 90 && hf !== palHeld) {
           p.faceId = "excited"; p.faceT = now + 1000; p.squashV += 2.5;
           hf.faceId = Math.random() < 0.5 ? "gasp" : "happy"; hf.faceT = now + 1100;
+          p.faceWhy = hf.faceWhy = "FOUND YOU"; p.faceWhyId = "excited"; hf.faceWhyId = hf.faceId;
           p.lookDir = Math.sign(hf.x - p.x) || 1; p.lookUntil = now + 900;
           hf.lookDir = -p.lookDir; hf.lookUntil = now + 900;
           hearts.push({ x: (p.x + hf.x) / 2, y: p.y - 56, life: 1 });
@@ -13203,7 +13225,7 @@ function frameBody(now) {
         p.hideUntil = now + 2600 + Math.random() * 2400;
         p.boxCd = now + 40000 + Math.random() * 25000;
         p.squashV += 3;
-        if (now > p.faceT) { p.faceId = "mischief"; p.faceT = now + 1500; }
+        if (now > p.faceT) { p.faceId = "mischief"; p.faceT = now + 1500; p.faceWhy = "HIDE & SEEK"; p.faceWhyId = "mischief"; }
       }
     }
     // hi hello: a pal strolling past a friend can't resist a greeting —
@@ -13218,13 +13240,13 @@ function frameBody(now) {
         if (pairBondLvl(p, bf) >= 4) {
           p.fly = true; p.vy = -130 * animProf(p.sp).hop; p.vx = 0; p.hopT = now;
           bf.fly = true; bf.vy = -130 * animProf(bf.sp).hop; bf.vx = 0; bf.hopT = now;
-          if (now > p.faceT) { p.faceId = "happy"; p.faceT = now + 900; }
-          if (now > bf.faceT) { bf.faceId = "happy"; bf.faceT = now + 900; }
+          if (now > p.faceT) { p.faceId = "happy"; p.faceT = now + 900; p.faceWhy = "HI!"; p.faceWhyId = "happy"; }
+          if (now > bf.faceT) { bf.faceId = "happy"; bf.faceT = now + 900; bf.faceWhy = "HI!"; bf.faceWhyId = "happy"; }
           hearts.push({ x: (p.x + bf.x) / 2, y: p.y - 56, life: 1 });
           pairBondGain(p, bf, 1);
         } else {
-          if (now > p.faceT) { p.faceId = "wink"; p.faceT = now + 800; }
-          if (now > bf.faceT) { bf.faceId = "wink"; bf.faceT = now + 800; }
+          if (now > p.faceT) { p.faceId = "wink"; p.faceT = now + 800; p.faceWhy = "HI!"; p.faceWhyId = "wink"; }
+          if (now > bf.faceT) { bf.faceId = "wink"; bf.faceT = now + 800; bf.faceWhy = "HI!"; bf.faceWhyId = "wink"; }
           p.lookDir = Math.sign(bf.x - p.x) || 1; p.lookUntil = now + 700;
           bf.lookDir = -p.lookDir; bf.lookUntil = now + 700;
         }
@@ -13236,7 +13258,7 @@ function frameBody(now) {
           pairBondLvl(p, o) === 0 && Math.abs(o.x - p.x) < 30 && Math.abs(o.y - p.y) < 20 && Math.random() < 0.3);
         if (shy) {
           p.hiCd = now + 30000;
-          if (now > p.faceT) { p.faceId = "embar"; p.faceT = now + 800; }
+          if (now > p.faceT) { p.faceId = "embar"; p.faceT = now + 800; p.faceWhy = "SHY HELLO"; p.faceWhyId = "embar"; }
           p.lookDir = Math.sign(shy.x - p.x) || 1; p.lookUntil = now + 700;
         }
       }
@@ -13312,6 +13334,15 @@ function frameBody(now) {
     }
     p.squashV += (-95 * p.squash - 6.5 * p.squashV) * dt;
     p.squash += p.squashV * dt;
+    // soft-body shear: the same top-drags-feet smear the pet gets — the
+    // crown trails horizontal motion so a scoot reads as goo, not a sprite
+    const pvx = p.fly ? p.vx : (p.walkT !== null ? (p.walkDir || Math.sign(p.walkT - p.x) || 1) * (p.walkV || 0) : 0);
+    p.jigV = (p.jigV || 0) + (pvx * 0.0011 - (p.jigX || 0) * 70 - (p.jigV || 0) * 6.5) * dt;
+    p.jigX = Math.max(-0.4, Math.min(0.4, (p.jigX || 0) + p.jigV * dt));
+    // idle jelly shimmer: a parked blob is never a statue — a slow per-pal
+    // wobble ripples through the body even between errands
+    if (p.walkT === null && !p.fly && !nappingP && !(now < (p.hideUntil || 0)))
+      p.squashV += Math.sin(t * 1.7 + (p.ph || 0)) * 0.5 * dt;
     if (!nappingP) legTick(psp, p.x, p.y, dt, p.walkT !== null, p.fly, (v) => { p.squashV += v; });
 
     // legendary auras radiate to nearby pals: pulsar's gravity slowly
@@ -13325,7 +13356,7 @@ function frameBody(now) {
       }
       if (lgMain.starburst && Math.abs(adx) < 220 && Math.random() < dt * 0.5) {
         fx.push({ x: p.x + Math.random() * 30 - 15, y: p.y - Math.random() * 50, vx: 0, vy: -24, life: 0.7, c: "#ffe9a8" });
-        if (Math.random() < 0.25 && now > p.faceT) { p.faceId = "happy"; p.faceT = now + 800; }
+        if (Math.random() < 0.25 && now > p.faceT) { p.faceId = "happy"; p.faceT = now + 800; p.faceWhy = "STARBURST"; p.faceWhyId = "happy"; }
       }
     }
 
@@ -13369,6 +13400,7 @@ function frameBody(now) {
         stats.plays = addSavedInt(stats.plays, 1);
         p.faceId = q.faceId = "happy";
         p.faceT = q.faceT = now + 900;
+        p.faceWhy = q.faceWhy = "PLAY"; p.faceWhyId = q.faceWhyId = "happy";
         // face each other for the beat — without this the bump read as
         // two sprites popping hearts while staring off into space
         p.lookDir = Math.sign(q.x - p.x) || 1;
@@ -13379,6 +13411,7 @@ function frameBody(now) {
         if (SPECIES[p.sp].id === SPECIES[q.sp].id) {
           p.faceId = q.faceId = "love";
           p.faceT = q.faceT = now + 1400;
+          p.faceWhy = q.faceWhy = "NUZZLED"; p.faceWhyId = q.faceWhyId = "love";
           hearts.push({ x: (p.x + q.x) / 2, y: p.y - 62, life: 1 });
           hearts.push({ x: (p.x + q.x) / 2 + 10, y: p.y - 74, life: 1.1 });
           p.squashV += 3; q.squashV += 3;
@@ -13386,7 +13419,7 @@ function frameBody(now) {
           q.walkT = (p.x + q.x) / 2 + 18;
           p.walkWhy = q.walkWhy = "NUZZLED";
           // a nuzzle sometimes leaves one of them flustered
-          if (Math.random() < 0.3) { const e2 = Math.random() < 0.5 ? p : q; e2.faceId = "embar"; e2.faceT = now + 1600; }
+          if (Math.random() < 0.3) { const e2 = Math.random() < 0.5 ? p : q; e2.faceId = "embar"; e2.faceT = now + 1600; e2.faceWhy = "NUZZLED"; e2.faceWhyId = "embar"; }
           sfx.heart();
           continue;
         }
@@ -13396,7 +13429,7 @@ function frameBody(now) {
         if (!p.met[q.sp] && !q.met[p.sp] && Math.random() < 0.7) {
           p.met[q.sp] = q.met[p.sp] = 1;
           const cur = Math.random() < 0.5 ? p : q;
-          cur.faceId = "curious"; cur.faceT = now + 1300;
+          cur.faceId = "curious"; cur.faceT = now + 1300; cur.faceWhy = "WHO'S THIS"; cur.faceWhyId = "curious";
           cur.lookDir = Math.sign((cur === p ? q.x : p.x) - cur.x) || 1;
           cur.lookUntil = now + 1200;
         }
@@ -13562,8 +13595,12 @@ function frameBody(now) {
     // the pal is hiding inside the box (the box rustles instead)
     if (!(now < (p.hideUntil || 0))) {
     const psc = (1.3 + level * 0.4) * sizeMul * DISPLAY_SIZE_FACTOR * (isBaby(psp) ? 0.55 : 0.92);
-    const pbs = Math.sin(t * 2.6 + p.ph) * 0.028;
-    const pmsq = p.squash / (1 + Math.abs(p.squash) * 0.5) * (reduceMotion ? 0.4 : 1) * animProf(p.sp).squash;
+    const pbs = Math.sin(t * 2.6 + p.ph) * 0.028 * (0.8 + (((p.ph || 0) * 3.7) % 1) * 0.5);
+    // speed-scaled stride wobble: the faster the scoot, the deeper the
+    // squash-and-stretch — slow steps barely wobble, a full run ripples
+    const pSpd = Math.min(1, (p.walkV || 0) / 52);
+    const gaitSq = !p.fly && p.walkT !== null ? Math.sin((p.gait || 0) * 2) * 0.13 * pSpd : 0;
+    const pmsq = p.squash / (1 + Math.abs(p.squash) * 0.5) * (reduceMotion ? 0.4 : 1) * animProf(p.sp).squash + gaitSq;
     const psx = psc * (1 + pmsq * 0.25 + pbs);
     const psy2 = psc * (1 - pmsq * 0.18 - pbs * 0.7);
     const groundY = p.fly ? p.y : (p.plat ? p.plat.y : p.y);
@@ -13582,7 +13619,7 @@ function frameBody(now) {
     ctx.save();
     const phov = psp.mv === "hover" && !p.fly ? 10 + Math.sin(t * 2.2 + p.ph) * 6 : 0;
     // gait bob: same footfall bounce the main pet gets, driven by p.gait
-    const pBob = !p.fly && !p.stackOn && p.walkT !== null ? Math.abs(Math.sin(p.gait || 0)) * 2 : 0;
+    const pBob = !p.fly && !p.stackOn && p.walkT !== null ? Math.abs(Math.sin(p.gait || 0)) * (1.4 + 2.8 * pSpd) : 0;
     let pf = "idle";
     if (now < (p.restUntil || 0)) pf = now < (p.dreamT || 0)
       ? DREAM_FACES[(p.restUntil / 997 | 0) & 3]
@@ -13614,6 +13651,9 @@ function frameBody(now) {
       const plGoal = !p.fly && p.walkT !== null ? Math.sign(p.walkT - p.x) * 0.05 * animProf(p.sp).lean : 0;
       p.leanSm = (p.leanSm || 0) + (plGoal - (p.leanSm || 0)) * Math.min(1, dt * 9);
       ctx.rotate(p.leanSm);
+      // goo shear: the crown lags the feet while it moves — the walk reads
+      // as a blob scooting, not a rigid sprite sliding
+      if (!reduceMotion) ctx.transform(1, 0, p.jigX || 0, 1, 0, 0);
     }
     // a rolling pal tumbles through the air — full turn over the arc
     if (p.act && p.act.k === "roll" && p.fly) ctx.rotate(p.act.dir * Math.min(1, (now - p.act.t0) / 640) * 6.28);
