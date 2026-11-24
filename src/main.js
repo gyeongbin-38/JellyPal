@@ -137,6 +137,7 @@ const WHY_ICON = {
   "JUST WOKE": "sun", "SHELTERING": "drop", "FALLING": "drop",
   "FIREFLY": "star", "POCKETED": "star", "STARBURST": "star",
   "DANCE": "note", "SPICY!": "bolt", "WIRED": "bolt",
+  "AGENT": "bolt", "NEEDS YOU": "flag",
 };
 // the pet's faces carry causes too — faces whose timer means exactly one
 // thing resolve through this map; multi-cause faces (happy, excited,
@@ -153,6 +154,9 @@ let petWhy = null, petWhyF = null, petWhyAt = 0; // one queued cause stamp
 let petFaceWhy = {};                             // per-face live causes for status card
 let petWhyIc = null, petWhyUntil = 0;            // the icon it resolved to
 let petEchoCd = 0; // pet-glance-at-pal-outburst cooldown
+let sayText = "", sayUntil = 0;                  // pet speech bubble — ambient one-liners
+let nextSayRoll = 0, sayKey = "";                // chatter cadence + last context remarked on
+let agentPollAt = 0, agentSeq = 0;               // JARVIS-style drop-file polling
 function petStamp(why, f) { petWhy = why; petWhyF = f; petWhyAt = performance.now(); if (f && why) petFaceWhy[f] = why; }
 
 // rarity: 0 common, 1 rare, 2 epic, 3 legendary
@@ -5324,6 +5328,37 @@ function focusKind() {
   return "other";
 }
 
+// ---------- pet chatter: one-line remarks about what you're doing ----------
+// a short line floats over the pet every couple of minutes while it idles —
+// keyed to the focused app kind, the weather, and the hour. same-context
+// repeats wait for the context to change, so it never nags
+const SAY_LINES = {
+  editor:  ["LOCKING IN", "DEEP WORK", "FLOW STATE", "SHIP IT", "COMPILE + CHILL"],
+  media:   ["MOVIE NIGHT?", "GOOD PICK", "POPCORN TIME", "I'M WATCHING TOO"],
+  game:    ["GO GO GO", "HIGH SCORE?", "I'M CHEERING", "CLUTCH IT"],
+  morning: ["MORNING!", "RISE + SHINE", "COFFEE TIME"],
+  late:    ["STILL UP?", "BURNING OIL", "SLEEP SOON?", "NIGHT OWL"],
+  rain:    ["RAINY VIBES", "COZY WEATHER", "PITTER PATTER"],
+  snow:    ["SNOW DAY!", "SO PRETTY", "BUNDLE UP"],
+  chill:   ["JUST VIBING", "NICE DESK", "BOOP ME?", "KEEPING WATCH"],
+};
+function say(text, ms) {
+  const s = String(text || "").toUpperCase().replace(/[^A-Z0-9 !?.,:'+&*-]/g, "").slice(0, 34);
+  if (!s) return;
+  sayText = s;
+  sayUntil = performance.now() + (ms || 2800);
+}
+function sayBucket() {
+  const n = performance.now(), h = new Date().getHours();
+  if (wxSnowy() || (n < drizzleUntil && drizzleKind === "snow")) return "snow";
+  if (wxRainy() || (n < drizzleUntil && drizzleKind !== "snow")) return "rain";
+  const fk = focusKind();
+  if (fk === "editor" || fk === "media" || fk === "game") return fk;
+  if (h >= 23 || h < 5) return "late";
+  if (h >= 6 && h < 10) return "morning";
+  return "chill";
+}
+
 // ---------- mouse ----------
 function canvasPos(e) {
   const r = cv.getBoundingClientRect();
@@ -7113,6 +7148,24 @@ function whyBubble(c, x, y, kind, a) {
   for (let ry = 0; ry < gh; ry++)
     for (let rx = 0; rx < gw; rx++)
       if (g.rows[ry][rx] === "1") c.fillRect(gx + rx, gy + ry, 1, 1);
+  c.restore();
+}
+
+// say-bubble: a one-line speech balloon for the pet's chatter — same cream
+// pixel style as the why-bubble, sized to the text, tail pointing down.
+// (x,y) anchors the tail tip; the box sits above it
+function sayBubble(c, x, y, text, a) {
+  const tw = textW(text, 1), bw = tw + 10, bh = 13;
+  c.save();
+  c.globalAlpha = Math.min(1, a * 4) * 0.96;
+  c.fillStyle = "rgba(40,30,20,0.35)";
+  c.fillRect(x - bw / 2 + 1, y - bh + 1, bw, bh);
+  c.fillRect(x - 1, y + 1, 4, 3);
+  c.fillStyle = "#fdf6e8";
+  c.fillRect(x - bw / 2 + 1, y - bh, bw - 2, bh);
+  c.fillRect(x - bw / 2, y - bh + 1, bw, bh - 2);
+  c.fillRect(x, y, 2, 2);
+  drawText(c, text, x - tw / 2, y - bh + 3, 1, "#5c4632");
   c.restore();
 }
 
@@ -9977,6 +10030,37 @@ function frameBody(now) {
         q.faceWhy = "RAINBOW"; q.faceWhyId = "star";
       }
     }
+  }
+  // ambient chatter: a short line above the pet every couple of minutes
+  // while it's just hanging out — keyed to the app you're in, the sky,
+  // and the hour. re-comments on the same context only once it changes
+  if (!petHome && now >= boxHide && !held && !flying && !petBusy && state === "idle" &&
+      !settingsOpen && !ranchOpen && !gemShop && !albumOpen && !cardTarget && !nurseryOpen &&
+      !redeemMode && !treatAim && now > nextSayRoll) {
+    nextSayRoll = now + 90000 + Math.random() * 110000;
+    const bk = sayBucket();
+    if (bk !== sayKey || Math.random() < 0.25) {
+      sayKey = bk;
+      const ls = SAY_LINES[bk];
+      say(ls[(Math.random() * ls.length) | 0]);
+    }
+  }
+  // JARVIS-style agent hook: a drop file at <app-data>/agent.json. any
+  // local agent writes {"seq":N,"kind":"done|approve|fail|say","msg":"..."}
+  // and the pet reacts on screen — celebrate, plead for attention, wince
+  if (now > agentPollAt && saveReady) {
+    agentPollAt = now + 3000;
+    invokeAsync("agent_notice").then((raw) => {
+      if (typeof raw !== "string" || !raw) return;
+      let n = null;
+      try { n = JSON.parse(raw); } catch (e) { return; }
+      if (!n || typeof n.seq !== "number" || n.seq <= agentSeq) return;
+      agentSeq = n.seq;
+      if (n.kind === "done") { starUntil = now + 1600; petStamp("AGENT", "star"); squashV += 1.2; say(n.msg || "TASK DONE!"); }
+      else if (n.kind === "approve") { excitedUntil = now + 1600; petStamp("NEEDS YOU", "excited"); squashV += 0.8; say(n.msg || "NEED YOU!"); }
+      else if (n.kind === "fail") { worryUntil = now + 1600; petStamp("AGENT", "worry"); say(n.msg || "UH OH..."); }
+      else if (n.kind === "say") say(n.msg, 3600);
+    }).catch(() => {});
   }
   // rain on the head: the moment a rain spell opens, a free pal near the
   // box makes a dash for the only roof it knows — the cardboard fort
@@ -13769,6 +13853,12 @@ function frameBody(now) {
   if (!petHome && now >= boxHide && now < petWhyUntil) {
     whyBubble(ctx, petX, petY - bob - hoverBob - SH * sy - 14 + Math.sin(t * 4) * 1.2,
       petWhyIc, (petWhyUntil - now) / 1400);
+  }
+  // the pet's say-bubble: one-line ambient remarks (app you're in, the
+  // weather, agent notices) float a notch above the icon bubble
+  if (!petHome && now >= boxHide && now < sayUntil) {
+    sayBubble(ctx, petX, petY - bob - hoverBob - SH * sy - 26 + Math.sin(t * 4) * 1.2,
+      sayText, (sayUntil - now) / 800);
   }
 
   // status-card target: gold ring under the tracked slime + a bouncing

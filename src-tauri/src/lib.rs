@@ -3187,6 +3187,20 @@ async fn get_weather() -> Option<i64> {
     m.pointer("/current_weather/weathercode")?.as_i64()
 }
 
+// JARVIS-style agent hook: a local agent drops a small JSON notice at
+// <app-data>/agent.json — {"seq":N,"kind":"done|approve|fail|say","msg":"..."}.
+// The frontend polls this every few seconds and reacts on screen. Reads are
+// capped so a runaway writer can't stall the frame loop.
+#[tauri::command]
+fn agent_notice(app: tauri::AppHandle) -> Option<String> {
+    let p = data_dir(&app).ok()?.join("agent.json");
+    let s = std::fs::read_to_string(p).ok()?;
+    if s.len() > 4096 {
+        return None;
+    }
+    Some(s)
+}
+
 // True when built with `--features store` — the frontend reads this once
 // to switch into the sandboxed companion-card UI (no redeem, no overlay
 // toggles) and to hide controls that cannot work under the App Sandbox.
@@ -4346,6 +4360,7 @@ pub fn run() {
             check_update,
             get_monitors,
             get_weather,
+            agent_notice,
             set_autostart,
             is_store_build,
             autostart_available,
