@@ -124,6 +124,10 @@ const WHY_ICON = {
   "PEEK": "dots", "STRETCH": "sun", "DOODAD": "star", "WATCHING": "dots",
   "BOOM!": "bolt", "ALL CLEAR": "sun", "STILL RAINING": "drop",
   "SPARK": "bolt", "PETAL": "star", "LEAF": "star",
+  "STROLLING": "sun", "LEFT OUT": "drop", "HIDE & SEEK": "flag",
+  "EXCUSE ME": "dots", "BALL!": "flag", "SNACK RUN": "cookie",
+  "MISSING YOU": "heart", "TUCKING YOU IN": "moon", "STEERING CLEAR": "drop",
+  "COMING OVER": "heart", "FOLLOWING YOU": "dots",
 };
 // the pet's faces carry causes too — faces whose timer means exactly one
 // thing resolve through this map; multi-cause faces (happy, excited,
@@ -2019,6 +2023,7 @@ let heldSince = 0;
 
 let walkTarget = null;
 let walkGoal = null;   // what the stroll is for — a prop, a treat, nothing
+let petWalkWhy = null; // cause string for goal-less moves — the card's STATUS row reads it
 let blinkStepT = 0;
 let walkSpd = 55;
 let petSpd = 0;            // smoothed walk speed — accelerates instead of instant velocity
@@ -4572,6 +4577,30 @@ const PROP_WHY = { settle: "PAL TIME", treat: "TREAT?", deliver: "DELIVERY", fin
 // darting about or daydreaming isn't "happy for no reason", it's PLAYING
 const ACT_WHY = { stretch: "STRETCH", roll: "WHEE!", dart: "WHEE!", dream: "SLEEPY",
   peek: "PEEK", sniff: "FORAGING", groom: "GROOMED", puddle: "SLEEPY" };
+// errand-kind → status phrase for the card's STATUS row — walking to a
+// bowl isn't "wandering", it's GETTING A BITE. walkWhy stamps lean on
+// the same vocabulary so an unguided move's cause reads on the card too
+const PROP_STATUS = { settle: "KEEPING COMPANY", treat: "SNACK RUN", deliver: "DELIVERING",
+  find: "FORAGING", cuddle: "JOINING THE NAP", petCuddle: "JOINING THE NAP", boop: "SAYING HI",
+  bowl: "GETTING A BITE", cushion: "OFF TO NAP", box: "TO THE BOX", plant: "SPROUT CHECK",
+  music: "MUSIC TIME", mirror: "MIRROR CHECK", mat: "BOUNCE BREAK", jar: "COOKIE RAID",
+  egg: "EGG WATCH", nuzzle: "NUZZLE TIME", inspect: "NEW TOY CHECK" };
+// solo-act kind → status phrase — a darting pal is DARTING, not idle
+const ACT_STATUS = { stretch: "STRETCHING", roll: "ROLLING", dart: "DARTING",
+  dream: "DAYDREAMING", peek: "PEEKING", sniff: "SNIFFING", groom: "GROOMING", puddle: "PUDDLING" };
+// one shared reason chain — the face-change bubble and the status card
+// each kept their own copy and could drift; now both ask palWhy. the
+// walkWhy tail covers moves that carry no errand object at all
+function palWhy(p) {
+  return (p.faceWhyId === p.faceId && p.faceWhy) ||
+    (p.tag ? "TAG" : p.chatMate ? "GOSSIP" :
+     p.scene ? (SC_WHY[p.scene.k] || "PLAY") :
+     p.group ? (GR_WHY[p.group.kind] || "GROUP FUN") :
+     p.propGoal ? (PROP_WHY[p.propGoal.kind] || "ERRAND") :
+     p.accAct ? "DOODAD" :
+     p.act ? (ACT_WHY[p.act.k] || "PLAY") :
+     p.follow ? "FOLLOWING" : p.carry ? "DELIVERY" : p.walkWhy || null);
+}
 // a fresh face gets its cause stamped; an older face keeps its own why
 function stampWhy(p, why) {
   if (p.faceId && p.faceWhyId !== p.faceId) { p.faceWhy = why; p.faceWhyId = p.faceId; }
@@ -4708,6 +4737,7 @@ function tickGroup(now, dt, quiet) {
       e.members.forEach((p, i) => {
         const off = (i - (e.members.length - 1) / 2) * 46;
         p.walkT = e.cx + off;
+        p.walkWhy = gwhy;
         p.lookDir = Math.sign(e.cx - p.x) || p.lookDir;
       });
       if (Math.random() < dt * 3) {
@@ -4765,6 +4795,7 @@ function tickGroup(now, dt, quiet) {
       e.members.forEach((p, i) => {
         const off = (i - (e.members.length - 1) / 2) * 50;
         if (p.walkT === null) p.walkT = e.cx + off;
+        p.walkWhy = gwhy;
         p.lookDir = Math.sign(e.cx - p.x) || p.lookDir;
       });
       if (Math.random() < dt * 4) {
@@ -7840,14 +7871,7 @@ function cardMood(t2, now) {
     // every expression has a reason — stamped whys win; for the rest,
     // the state it's in names the cause. a mood reads as
     // "CURIOUS · NEW TOY", not just a face out of nowhere
-    const why = (t2.faceWhy && t2.faceWhyId === t2.faceId) ? t2.faceWhy
-      : t2.tag ? "TAG" : t2.chatMate ? "GOSSIP"
-      : t2.scene ? (SC_WHY[t2.scene.k] || "PLAY")
-      : t2.group ? (GR_WHY[t2.group.kind] || "GROUP FUN")
-      : t2.propGoal ? (PROP_WHY[t2.propGoal.kind] || "ERRAND")
-      : t2.accAct ? "DOODAD"
-      : t2.act ? (ACT_WHY[t2.act.k] || "PLAY")
-      : t2.follow ? "FOLLOWING" : t2.carry ? "DELIVERY" : null;
+    const why = palWhy(t2);
     return why ? word + " · " + why : word;
   }
   return "CONTENT";
@@ -7866,7 +7890,8 @@ function cardStatus(t2, now) {
     if (huntT0) return "STALKING";
     if (now < begUntil) return "BEGGING";
     if (treatAim && curX > -9000) return "EYEBALLING";
-    if (walkTarget !== null || hopTarget !== null) return "WANDERING";
+    if (walkTarget !== null || hopTarget !== null)
+      return (walkGoal && (PROP_STATUS[walkGoal.kind] || "ON AN ERRAND")) || petWalkWhy || "WANDERING";
     return "IDLE";
   }
   if (t2 === palHeld) return "BEING HELD";
@@ -7876,11 +7901,23 @@ function cardStatus(t2, now) {
   if (t2.stackOn) return `RIDING ${spName(SPECIES[t2.stackOn.sp])}`;
   if (t2.tag) return t2.tag.it ? "PLAYING TAG" : "FLEEING!";
   if (t2.sigT && now < t2.sigT) return "SHOWING OFF";
-  if (t2.propGoal && t2.propGoal.kind === "find") return "FORAGING";
-  if (t2.propGoal && t2.propGoal.kind === "deliver") return "DELIVERING";
+  // every engaged state names itself — a pal in a scene, a huddle, a
+  // gossip pair, a solo routine, or a conga line is never just "idle"
+  if (t2.scene) return SC_WHY[t2.scene.k] || "PLAYING";
+  if (t2.group) return GR_WHY[t2.group.kind] || "GROUP FUN";
+  if (t2.chatMate) return "GOSSIPING";
+  if (t2.seekFor) return "PLAYING HIDE & SEEK";
+  if (t2.rehideUntil) return "HIDING AGAIN";
+  if (t2.accAct) return "PLAYING";
+  if (t2.act) return ACT_STATUS[t2.act.k] || "PLAYING";
+  if (t2.follow) return "FOLLOWING";
+  if (t2.propGoal) return PROP_STATUS[t2.propGoal.kind] || "ON AN ERRAND";
   if (now < (t2.settleUntil || 0)) return t2.sitMate ? "PAL TIME" : "CHILLING";
+  if (t2.carry) return "DELIVERING";
   if (t2.fly) return "AIRBORNE";
-  if (t2.walkT !== null) return "WANDERING";
+  // a walk with no errand object still carries its cause — stamped where
+  // the target was chosen (a bump apart, a summons, a lonely drift)
+  if (t2.walkT !== null) return t2.walkWhy || "WANDERING";
   return "IDLE";
 }
 function drawCard(now) {
@@ -9235,6 +9272,7 @@ function frameBody(now) {
         hopTarget === null && !psy.flee && Math.random() < dt * 0.5 * (psy.follow || 1)) {
       walkTarget = Math.max(lo, Math.min(hi, curX));
       walkSpd = 55 * (psy.spd || 1) * (isBaby(sp) ? 0.8 : 1) * (now < hyperUntil ? 1.5 : 1);
+      petWalkWhy = "MISSING YOU";
       begUntil = now + 4000;
       ignoreT = 0;
     }
@@ -9245,6 +9283,7 @@ function frameBody(now) {
         walkTarget === null && hopTarget === null && Math.random() < dt * 0.8) {
       walkTarget = Math.max(lo, Math.min(hi, curX));
       walkSpd = 50 * (psy.spd || 1) * (isBaby(sp) ? 0.8 : 1);
+      petWalkWhy = "TUCKING YOU IN";
       blanketT0 = now;
     }
     // arriving: drop the quilt just under the cursor, sit a beat, done
@@ -9570,11 +9609,13 @@ function frameBody(now) {
         // shy: edge away from the cursor instead of toward it
         walkTarget = Math.max(lo, Math.min(hi, petX + Math.sign(petX - curX || 1) * 140));
         walkSpd = baseSpd * 1.2;
+        petWalkWhy = "STEERING CLEAR";
       } else {
         // rare+ proactively approaches the cursor; legendary runs;
         // commons amble over slowly when you're really close
         walkTarget = Math.max(lo, Math.min(hi, curX));
         walkSpd = [35, 60, 100, 220][sp.r] * (psy.spd || 1);
+        petWalkWhy = "COMING OVER";
       }
     } else if (now >= nextWander && !accAct && !petBusy) {
       const roll = Math.random();
@@ -9616,10 +9657,10 @@ function frameBody(now) {
             if (d > 40 && d <= 300 && d < bd) { bd = d; hopX = ex; }
           }
         }
-        if (hopX !== null) hopTarget = hopX;
-        else { walkTarget = tx; walkSpd = baseSpd; }
+        if (hopX !== null) { hopTarget = hopX; petWalkWhy = "STROLLING"; }
+        else { walkTarget = tx; walkSpd = baseSpd; petWalkWhy = "STROLLING"; }
       }
-      else if (roll < 0.44) hopTarget = tx;
+      else if (roll < 0.44) { hopTarget = tx; petWalkWhy = "STROLLING"; }
       else if (roll < 0.56 + sitB) { sitUntil = now + 2000 + Math.random() * 2000; lookFlipT = now; }
       else if (roll < 0.66) stretchUntil = now + 700;
       else if (roll < 0.78 + danceB) { danceT0 = now; sfx.heart(); }
@@ -9659,6 +9700,7 @@ function frameBody(now) {
       else if (roll < 0.98 && ball && !ballHeld && Math.abs(ball.y - sup.y) < 16) {
         // ball interest: stroll over and give it a shove
         walkTarget = Math.max(lo, Math.min(hi, ball.x + (petX < ball.x ? -22 : 22)));
+        petWalkWhy = "BALL!";
         walkSpd = baseSpd;
       }
       else if (roll < 0.988 && bowl && Math.abs(bowl.y - sup.y) < 16 && now > bowlCd && Math.abs(bowl.x - petX) > 70) {
@@ -10467,6 +10509,7 @@ function frameBody(now) {
       // below: aim past the edge on the snack's side so it drops off
       walkTarget = treatBelow ? (treat.x < petX ? tlo - 40 : thi + 40)
                               : treatTarget;
+      petWalkWhy = "SNACK RUN";
       // bites lunges at snacks — a chomp-trait slime charges harder
       walkSpd = (LEG[sp.id] && LEG[sp.id].lunge ? 300 : 170) * (psy.spd || 1);
       if (LEG[sp.id] && LEG[sp.id].lunge && Math.random() < dt * 10) {
@@ -10697,6 +10740,7 @@ function frameBody(now) {
             const pl = p.plat || { x: 0, w: winW };
             const pe = palEdge(p);
             p.walkT = clampPlatformX(petX + (Math.random() * 140 - 70), pl, pe);
+            p.walkWhy = "THE SHOW";
           }
           starUntil = now + 1300;
           petStamp("THE SHOW", "star");
@@ -11205,14 +11249,7 @@ function frameBody(now) {
       // face changed — expressions read as reactions, not mood-ring flicker.
       // no explicit stamp? the state it's in still names the cause, same
       // chain the card uses — gossip, an errand, a scene, a game of tag
-      const iw = (p.faceWhyId === p.faceId && p.faceWhy) ||
-        (p.tag ? "TAG" : p.chatMate ? "GOSSIP" :
-         p.scene ? (SC_WHY[p.scene.k] || "PLAY") :
-         p.group ? (GR_WHY[p.group.kind] || "GROUP FUN") :
-         p.propGoal ? (PROP_WHY[p.propGoal.kind] || "ERRAND") :
-         p.accAct ? "DOODAD" :
-         p.act ? (ACT_WHY[p.act.k] || "PLAY") :
-         p.follow ? "FOLLOWING" : p.carry ? "DELIVERY" : null);
+      const iw = palWhy(p);
       if (FACE_EMO[p.faceId] && iw && WHY_ICON[iw]) {
         p.whyIc = WHY_ICON[iw]; p.whyUntil = now + 1400;
       } else p.whyUntil = 0; // an icon-less face clears a stale bubble
@@ -11361,6 +11398,9 @@ function frameBody(now) {
       p.propGoal = null;
       p.walkT = null;
     }
+    // parked or rerouted pals shed stale walk speed — a target set later
+    // ramps in from a standstill instead of resuming mid-stride
+    if (p.walkT === null) p.walkV = Math.max(0, (p.walkV || 0) - dt * 600);
     if (p === palHeld) {
       // dragged by the cursor: skip AI/physics, face the drag direction
       p.fly = false;
@@ -11676,7 +11716,10 @@ function frameBody(now) {
         }
         p.follow = null;
       }
-      if (p.follow && !p.fly && !nappingP && !p.chatMate && !p.scene && !p.group) p.walkT = p.follow.x - (p.follow.lookDir || 1) * 46;
+      if (p.follow && !p.fly && !nappingP && !p.chatMate && !p.scene && !p.group) {
+        p.walkT = p.follow.x - (p.follow.lookDir || 1) * 46;
+        p.walkWhy = "FOLLOWING";
+      }
       // TAG: a bump can start a chase — "it" hunts the fleer across the
       // platform while the fleer keeps darting away. ends on a catch
       // (both burst laughing + the caught one pops a hop) or on timeout
@@ -11730,6 +11773,7 @@ function frameBody(now) {
                       g.chatMate || now < (g.restUntil || 0) || now < (g.hideUntil || 0) || now < (g.settleUntil || 0) ||
                       Math.abs(g.y - nIt.y) > 30 || Math.abs(g.x - mx) > 300 || Math.random() > 0.45) continue;
                   g.walkT = Math.max(plo, Math.min(phi, mx + (g.x < mx ? -1 : 1) * (64 + Math.random() * 34)));
+                  g.walkWhy = "WATCHING";
                   if (now > g.faceT) { g.faceId = "excited"; g.faceT = now + 900; }
                 }
               }
@@ -11740,6 +11784,7 @@ function frameBody(now) {
         }
         else if (p.tag.it) {
           p.walkT = Math.max(plo, Math.min(phi, o.x));
+          p.walkWhy = "TAG";
           // the hunter keeps its game face through the whole chase
           if (now > p.faceT) { p.faceId = "serious"; p.faceT = now + 500; }
           // pounce-hop when the gap's wide — both slimes walk at the same
@@ -11773,6 +11818,7 @@ function frameBody(now) {
           const away = Math.sign(p.x - o.x || (Math.random() - 0.5) || 1);
           if (p.walkT === null || Math.abs(p.walkT - p.x) < 10)
             p.walkT = Math.max(plo, Math.min(phi, p.x + away * 100));
+          p.walkWhy = "TAG";
           if (Math.random() < dt * 0.55) { p.walkT = null; p.squashV += 2; }
         }
       }
@@ -11839,7 +11885,7 @@ function frameBody(now) {
                   // "...and they just walked off together??" — the
                   // abandoned gossip drifts off with a bashful face
                   p.faceId = "embar"; p.faceT = now + 1000;
-                  if (!(now < (p.settleUntil || 0))) p.walkT = Math.max(plo, Math.min(phi, p.x + (Math.random() < 0.5 ? -90 : 90)));
+                  if (!(now < (p.settleUntil || 0))) { p.walkT = Math.max(plo, Math.min(phi, p.x + (Math.random() < 0.5 ? -90 : 90))); p.walkWhy = "LEFT OUT"; }
                   // a nearby pal saw the whole thing — the sympathy
                   // glance that says "yeah, that was cold"
                   const cmf = pals.find((q3) => q3 !== p && q3 !== q && q3 !== w && q3 !== palHeld &&
@@ -12016,6 +12062,7 @@ function frameBody(now) {
             curiousUntil = Math.max(curiousUntil, now + 1500);
             petStamp("WATCHING", "curious");
             walkTarget = Math.max(lo, Math.min(hi, p.x + (petX < p.x ? -46 : 46)));
+            petWalkWhy = "WATCHING";
             lookDir = Math.sign(p.x - petX) || 1; lookUntil = now + 1200;
           }
         }
@@ -12041,7 +12088,7 @@ function frameBody(now) {
         }
         const dx = p.walkT - p.x;
         if (Math.abs(dx) < 6) {
-          p.walkT = null; p.walkV = 0; p.squashV += 2.5;
+          p.walkT = null; p.walkV = 0; p.walkWhy = null; p.squashV += 2.5;
           // prop errand: reaching the bowl/cushion triggers the ritual —
           // the proximity re-check drops goals that went stale mid-walk
           if (p.propGoal) {
@@ -12364,6 +12411,11 @@ function frameBody(now) {
           } else if (pmv === "scurry") { // skitter bursts
             if ((now + i * 211) % 700 < 260) p.x += Math.sign(dx) * 150 * (ppsy.spd || 1) * dt;
           } else {
+            // U-turns shed speed — a reversed target reads as a bank,
+            // not a snap through zero
+            const wdir = Math.sign(dx) || 1;
+            if (p.walkDir && p.walkDir !== wdir) p.walkV = Math.min(p.walkV || 0, 14);
+            p.walkDir = wdir;
             // ramp into the stroll — instant full speed reads as a slide
             p.walkV = Math.min((p.walkV || 0) + dt * 300, 52 * (ppsy.spd || 1) * (isBaby(psp) ? 0.75 : 1));
             // fall in step: a close friend walking the same way nearby
@@ -12383,6 +12435,10 @@ function frameBody(now) {
             // the pal visibly hesitates to react, then walks on; holding
             // the slow for the whole face read as a trudge, not a pause
             if (now < p.faceT && FACE_EMO[p.faceId] && now - (p.faceSetAt || 0) < 500) stepV *= 0.3;
+            // ease into the stop — the last ~24px glide down to a creep
+            // instead of a full-speed dead halt, so arrivals read as
+            // settling in rather than hitting a wall
+            stepV = Math.min(stepV, Math.max(9, Math.abs(dx) * 2.2));
             p.x += Math.sign(dx) * stepV * dt;
             // distance-driven gait: each footfall dips the blob a touch —
             // babies toddle, so each step wobbles harder and one in a blue
@@ -12581,9 +12637,9 @@ function frameBody(now) {
           }
           // no bestie around — the band still owes a decision, so it
           // folds back into the plain stroll it replaced
-          else p.walkT = Math.max(plo, Math.min(phi, p.x + (Math.random() - 0.5) * 220));
+          else { p.walkT = Math.max(plo, Math.min(phi, p.x + (Math.random() - 0.5) * 220)); p.walkWhy = "STROLLING"; }
         }
-        else if (r < 0.44) p.walkT = Math.max(plo, Math.min(phi, p.x + (Math.random() - 0.5) * 220));
+        else if (r < 0.44) { p.walkT = Math.max(plo, Math.min(phi, p.x + (Math.random() - 0.5) * 220)); p.walkWhy = "STROLLING"; }
         // solo act: a little self-play routine — stretch, roll over, sniff
         // the floor, daydream, groom, melt into a puddle, dart about. the
         // pick follows personality so each pal idles in its own voice
@@ -12677,12 +12733,13 @@ function frameBody(now) {
             const d = Math.abs(q.x - p.x) + Math.abs(q.y - p.y) * 2;
             if (d < bd) { bd = d; best = q; }
           }
-          if (best && bd > 70) p.walkT = Math.max(plo, Math.min(phi, best.x + (Math.random() - 0.5) * 70));
+          if (best && bd > 70) { p.walkT = Math.max(plo, Math.min(phi, best.x + (Math.random() - 0.5) * 70)); p.walkWhy = "PAL TIME"; }
         }
         else if (Math.abs(p.y - petY) < (SPECIES[active].trait === "royal" ? 60 : 20) &&
                  Math.abs(petX - p.x) > (SPECIES[active].trait === "royal" ? 40 : 60)) {
           // drift toward the main pet — rex's court gathers wider
           p.walkT = Math.max(plo, Math.min(phi, petX + (Math.random() - 0.5) * 60));
+          p.walkWhy = "PAL TIME";
         }
         p.nextT = now + (2400 + Math.random() * 3600) * (ppsy.pace || 1);
         }
@@ -12771,7 +12828,7 @@ function frameBody(now) {
             if (p.walkT === null || Math.abs(p.walkT - p.x) < 9) {
               p.act.ph++;
               if (p.act.ph > 3) p.act = null;
-              else { p.act.dir = -p.act.dir; p.walkT = Math.max(plo, Math.min(phi, p.x + p.act.dir * 46)); }
+              else { p.act.dir = -p.act.dir; p.walkT = Math.max(plo, Math.min(phi, p.x + p.act.dir * 46)); p.walkWhy = "WHEE!"; }
             }
             if (p.act && Math.random() < dt * 14) fx.push({ x: p.x - p.act.dir * 10, y: p.y - 4, vx: -p.act.dir * 20, vy: -8, life: 0.35, c: "#cfc4ae" });
           } else if (pk === "peek") {
@@ -13128,8 +13185,10 @@ function frameBody(now) {
           if (box && Math.random() < 0.3) {
             hf.rehideUntil = now + 6000;
             hf.walkT = Math.max(plo, Math.min(phi, box.x));
+            hf.walkWhy = "HIDE & SEEK";
             p.seekFor = hf; p.sawHide = false; p.seekUntil = now + 16000;
             p.walkT = Math.max(plo, Math.min(phi, box.x + (p.x < box.x ? -34 : 34)));
+            p.walkWhy = "HIDE & SEEK";
           }
         }
       }
@@ -13226,6 +13285,7 @@ function frameBody(now) {
             const pe2 = palEdge(p), pc2 = pp2.x + pp2.w / 2, pn2 = pp2.w < pe2 * 2;
             const lo2 = pn2 ? pc2 : pp2.x + pe2, hi2 = pn2 ? pc2 : pp2.x + pp2.w - pe2;
             p.walkT = Math.max(lo2, Math.min(hi2, p.x - dir * (80 + Math.random() * 40)));
+            p.walkWhy = "EXCUSE ME";
           } else if (now > (jamQ.restUntil || 0) && (ppsy.pace || 1) >= 0.9 && Math.random() < 0.65) {
             // stepped on: squashed flat + a reaction set by the stepped
             // pal's own personality — shy slimes reel, feisty ones fume
@@ -13294,6 +13354,7 @@ function frameBody(now) {
       // shy pals scamper far away after a bump; others just hop back
       const pd = ppsy.flee ? 160 : 70;
       p.walkT = p.x + (p.x < petX ? -pd : pd);
+      p.walkWhy = "BUMP!";
     }
     // pal-vs-pal play
     for (const q of pals) {
@@ -13323,6 +13384,7 @@ function frameBody(now) {
           p.squashV += 3; q.squashV += 3;
           p.walkT = (p.x + q.x) / 2 - 18;
           q.walkT = (p.x + q.x) / 2 + 18;
+          p.walkWhy = q.walkWhy = "NUZZLED";
           // a nuzzle sometimes leaves one of them flustered
           if (Math.random() < 0.3) { const e2 = Math.random() < 0.5 ? p : q; e2.faceId = "embar"; e2.faceT = now + 1600; }
           sfx.heart();
@@ -13398,6 +13460,7 @@ function frameBody(now) {
         const pdd = ppsy.flee ? 140 : 60, qdd = qpsy.flee ? 140 : 60;
         p.walkT = p.x + (p.x < q.x ? -pdd : pdd);
         q.walkT = q.x + (q.x < p.x ? -qdd : qdd);
+        p.walkWhy = q.walkWhy = "BUMP!";
         sfx.pop();
       }
     }

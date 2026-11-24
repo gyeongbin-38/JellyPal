@@ -983,6 +983,50 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
     "a competitive slime caught in tag sulks (hmph)", ev("pals[1].faceId"));
   ev("pals[0].tag = null; pals[1].tag = null;");
 
+  // --- action rationale: every move names its cause on the status card ---
+  ev(`(function(){
+      const p = pals[0];
+      p.fly = false; p.walkV = 0; p.walkDir = 0; p.propGoal = null; p.follow = null;
+      p.restUntil = 0; p.hideUntil = 0; p.chatUntil = 0; p.web = 0; p.tag = null;
+      p.stackOn = null; p.scene = null; p.group = null; p.act = null; p.accAct = null;
+      p.settleUntil = 0; p.chatMate = null; p.carry = null; p.faceT = 0; p.faceId = null;
+      p.sp = SPECIES.findIndex((s) => s.id === 'cliff'); // plain walk gait
+      if (!owned.includes('cliff')) owned.push('cliff'); // unowned species gets culled next frame
+      p.plat = plats[0]; p.y = plats[0].y; p.x = plats[0].x + 80; // floor, in-bounds
+      const q = pals[1]; if (q) {
+        q.plat = plats[0]; q.y = plats[0].y; q.x = plats[0].x + plats[0].w - 80;
+        q.walkT = null; q.propGoal = null; q.fly = false; q.restUntil = ${t} + 60000; }
+      p.walkT = p.x + 160; p.walkWhy = "BUMP!"; })();`);
+  frame(t += 16.7);
+  check(ev(`cardStatus(pals[0],${t})`) === "BUMP!",
+    "status card names an unguided walk's cause",
+    ev(`JSON.stringify({st:cardStatus(pals[0],${t}),rest:pals[0].restUntil,now:${t},tag:!!pals[0].tag,wt:pals[0].walkT,n:pals.length})`));
+  ev("pals[0].propGoal = { kind: 'bowl' };");
+  check(ev(`cardStatus(pals[0],${t})`) === "GETTING A BITE",
+    "status card names the errand, not just WANDERING", ev(`cardStatus(pals[0],${t})`));
+  check(ev("palWhy(pals[0])") === "BOWL",
+    "palWhy resolves the errand kind", ev("palWhy(pals[0])"));
+  ev("pals[0].propGoal = null; pals[0].walkWhy = 'STROLLING';");
+  check(ev("palWhy(pals[0])") === "STROLLING",
+    "palWhy falls through to walkWhy", ev("palWhy(pals[0])"));
+
+  // brake curve: at dx≈10 a full-speed pal glides ~0.4px/frame, not 0.9
+  ev(`(function(){ const p = pals[0];
+      p.walkT = p.x + 10; p.walkV = 52; p.walkDir = 1; p.propGoal = null; p.walkWhy = "STROLLING"; })();`);
+  const bx0 = ev("pals[0].x");
+  frame(t += 16.7);
+  const mv0 = ev("pals[0].x") - bx0;
+  check(mv0 > 0 && mv0 < 0.6,
+    "pal eases into the stop (brake curve)", `${mv0.toFixed(3)}px`);
+
+  // U-turn: a reversed target sheds walk speed instead of snapping
+  ev(`(function(){ const p = pals[0];
+      p.walkT = p.x + 150; p.walkV = 50; p.walkDir = -1; p.propGoal = null; p.walkWhy = "STROLLING"; })();`);
+  frame(t += 16.7);
+  check(ev("pals[0].walkV < 30"),
+    "U-turn sheds walk speed", ev("Math.round(pals[0].walkV)"));
+  ev(`(function(){ const p = pals[0]; p.walkT = null; p.walkV = 0; p.walkWhy = null; })();`);
+
   // swallowed frame exceptions abort the rest of frameBody silently —
   // any FRAME crash logged during the whole run is a real regression
   check(!crashMsgs.some((m) => m.startsWith("FRAME ")),
