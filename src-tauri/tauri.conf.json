@@ -39,8 +39,8 @@
       "dmg"
     ],
     "icon": [
-      "C:/dev/icon.ico",
-      "C:/dev/icon.ico"
+      "icons/icon.ico",
+      "icons/icon.icns"
     ],
     "category": "Entertainment",
     "shortDescription": "Desktop slime companion",
