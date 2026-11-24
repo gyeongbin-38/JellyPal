@@ -33,21 +33,25 @@ jobs:
           args: --bundles app
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      # The app is unsigned, so Apple Silicon flags it "damaged" once the
-      # browser quarantine bit lands. Rebuild the dmg ourselves with a
-      # fixer script + README inside so the cure sits next to the app.
+      # Tauri leaves the bundle with only a linker signature, which fails
+      # bundle verification. Seal the app before packaging it for download.
       - name: Repack dmg with quarantine fixer
         run: |
           VER=$(node -p "require('./src-tauri/tauri.conf.json').version")
           ROOT="$RUNNER_TEMP/dmgroot"
           OUT="src-tauri/target/release/bundle/dmg"
+          B="src-tauri/target/release/bundle/macos"
           mkdir -p "$ROOT" "$OUT"
-          tar -xzf "src-tauri/target/release/bundle/macos/Jellypal.app.tar.gz" -C "$ROOT"
+          codesign --force --sign - --identifier com.jellypal.desktop "$B/Jellypal.app"
+          codesign --verify --deep --strict "$B/Jellypal.app"
+          tar -czf "$B/Jellypal.app.tar.gz" -C "$B" Jellypal.app
+          ditto "$B/Jellypal.app" "$ROOT/Jellypal.app"
+          codesign --verify --deep --strict "$ROOT/Jellypal.app"
           ln -s /Applications "$ROOT/Applications"
           cat > "$ROOT/Fix-Jellypal.command" <<'EOF'
           #!/bin/sh
-          # Jellypal is unsigned — macOS quarantines browser downloads and
-          # reports the app "damaged". This strips the quarantine flag.
+          # Jellypal is not Developer ID signed or notarized. Browser
+          # downloads may be blocked until the quarantine flag is removed.
           APP="/Applications/Jellypal.app"
           [ -d "$APP" ] || APP="$HOME/Applications/Jellypal.app"
           if [ -d "$APP" ]; then
@@ -57,7 +61,8 @@ jobs:
           else
             echo "Drag Jellypal.app to Applications first, then run me again."
           fi
-          read -n1 -s -r -p "Press any key to close"
+          printf "Press Enter to close"
+          read _
           EOF
           chmod +x "$ROOT/Fix-Jellypal.command"
           cat > "$ROOT/README FIRST.txt" <<'EOF'
@@ -65,7 +70,7 @@ jobs:
 
           1. Drag Jellypal.app onto the Applications shortcut.
           2. macOS may say the app is "damaged" — it isn't; the app is
-             unsigned and Apple Silicon refuses quarantined unsigned apps.
+             not Developer ID signed or notarized.
              Either double-click "Fix-Jellypal.command" (right-click ->
              Open if needed), or run this once in Terminal:
 

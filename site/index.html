@@ -262,7 +262,7 @@
       <div class="cta">
         <a class="jp-button jp-button--primary" href="dl/Jellypal_0.4.2_x64-setup.exe">Download for Windows</a>
         <a class="jp-button jp-button--quiet" href="dl/jellypal-0.4.2-win.zip">portable zip</a>
-        <a class="jp-button jp-button--quiet" href="dl/Jellypal_0.3.1_aarch64.dmg">macOS (Apple Silicon) · v0.3.1</a>
+        <a class="jp-button jp-button--quiet" href="https://github.com/gyeongbin-38/JellyPal/releases/download/v0.4.3/Jellypal_0.4.3_aarch64.dmg">macOS (Apple Silicon) · v0.4.3</a>
       </div>
       <div class="jp-meta" role="list" aria-label="Download details">
         <span class="jp-chip" role="listitem">Windows 10/11</span>
@@ -377,11 +377,11 @@
         Jellypal) and macOS never warns — no quarantine, no Terminal, and zero permission
         prompts: Jellypal needs none.</div></div>
       <div class="jp-info-card"><div class="jp-info-card__title">Verify your download</div>
-        <div class="jp-info-card__body">SHA-256, checkable with <code>certutil -hashfile</code>:<br>
+        <div class="jp-info-card__body">SHA-256, check with <code>certutil -hashfile</code> on Windows or <code>shasum -a 256</code> on macOS:<br>
         <code class="hash">setup.exe&nbsp; bd18f979be49067133678a2081543b2a35670cc4c5fcc0b15e0ff98f2dfd5b52</code><br>
         <code class="hash">win.zip&nbsp;&nbsp;&nbsp; 35566e83ddf2263b579beb89c9af0b21d163b6de089e07befd449dd1dff79f2b</code><br>
-        <code class="hash">mac.dmg&nbsp;&nbsp;&nbsp; e90a8ed3a648c80431fa8b226ca67694c9c9b8b5f3980f89daabf4ad98426538</code><br>
-        <code class="hash">mac.tgz&nbsp;&nbsp;&nbsp; 4250f2e9f104c36f5f88405b3c43390f243852ac6d45f371de882512cdbab725</code></div></div>
+        <code class="hash">mac.dmg&nbsp;&nbsp;&nbsp; a9c66e657083e213a1e83f78df1463af08bd30eb77ec862a4de316d5009466ca</code><br>
+        <code class="hash">mac.tgz&nbsp;&nbsp;&nbsp; 05a3de58c14a49a65882b2260755bc40138fa92b880185080909474948467331</code></div></div>
     </div>
   </section>
 
@@ -406,18 +406,18 @@
     <div class="cta" style="justify-content:center">
       <a class="jp-button jp-button--primary" href="dl/Jellypal_0.4.2_x64-setup.exe">Download for Windows</a>
       <a class="jp-button jp-button--quiet" href="dl/jellypal-0.4.2-win.zip">portable zip</a>
-      <a class="jp-button jp-button--quiet" href="dl/Jellypal_0.3.1_aarch64.dmg">macOS dmg · v0.3.1</a>
+      <a class="jp-button jp-button--quiet" href="https://github.com/gyeongbin-38/JellyPal/releases/download/v0.4.3/Jellypal_0.4.3_aarch64.dmg">macOS dmg · v0.4.3</a>
     </div>
     <div class="trust">Free to start · 1.7 MB · no account, no ads, no tracking.<br>
     If Windows says <b>"unrecognized app"</b>, choose <b>More info → Run anyway</b> — that's normal for a small unsigned app.<br>
     <b>Mac, zero warnings:</b> paste this in Terminal —
-    <code style="user-select:all">curl -L https://jellypal.fun/dl/jellypal-0.3.1-mac.tar.gz | tar xz -C /Applications &amp;&amp; open /Applications/Jellypal.app</code><br>
+    <code style="user-select:all">curl -fL https://github.com/gyeongbin-38/JellyPal/releases/download/v0.4.3/jellypal-0.4.3-mac.tar.gz | tar xz -C /Applications &amp;&amp; open /Applications/Jellypal.app</code><br>
     — if the <b>dmg won't open</b> ("damaged"), run <code style="user-select:all">xattr -d com.apple.quarantine ~/Downloads/Jellypal_*.dmg</code> first, then open the <b>Fix-Jellypal.command</b> inside it. It's not damaged — it's unsigned.</div>
   </section>
   </main>
 
   <footer>
-    <div>made with 🫠 for small computers — v0.4.2 · early release</div>
+    <div>made with 🫠 for small computers — Windows v0.4.2 · macOS v0.4.3 · early release</div>
     <div>
       <a href="https://github.com/gyeongbin-38/JellyPal">github</a> ·
       <a href="https://github.com/gyeongbin-38/JellyPal/releases">release notes</a> ·

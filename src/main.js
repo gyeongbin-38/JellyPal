@@ -1,5 +1,11 @@
 const { listen } = window.__TAURI__.event;
 const { invoke } = window.__TAURI__.core;
+const IS_MAC = /Macintosh|Mac OS X/.test(navigator.userAgent);
+const DISPLAY_SIZE_FACTOR = IS_MAC ? 1.2 : 1;
+const HOME_SLOT_Y = IS_MAC ? 36 : 6;
+function inHomeSlot(x, y) {
+  return Math.abs(x - winW / 2) <= 66 && y >= HOME_SLOT_Y - 4 && y <= HOME_SLOT_Y + 46;
+}
 function invokeAsync(command, args) {
   try { return Promise.resolve(invoke(command, args)); }
   catch (error) { return Promise.reject(error); }
@@ -496,7 +502,7 @@ const FLAVOR = {
   hyb: "BORN RIGHT ON THIS DESKTOP|ONE OF A KIND",
 };
 
-const APP_VER = "0.4.2"; // keep in sync with tauri.conf.json version
+const APP_VER = "0.4.3"; // keep in sync with tauri.conf.json version
 
 // species -> personality assignment (hybrids inherit one parent's)
 const PSY_ASSIGN = {
@@ -2757,6 +2763,7 @@ const spotIdx = () => {
 let pomoHeartNext = 0;
 let focusExe = "";
 let sizeMul = 1;
+let macSizeBaseline = false;
 let seen = false;
 const bootT = Date.now();
 const SIZE_STEPS = [0.8, 1, 1.2];
@@ -2875,7 +2882,7 @@ function openExternalUrl(url) {
 }
 // update probe: a tiny text file hosting the newest version string
 // (e.g. "0.2.1") — any static host works; leave empty to disable
-const UPDATE_URL = "https://jellypal.fun/version.txt";
+const UPDATE_URL = IS_MAC ? "https://jellypal.fun/version-mac.txt" : "https://jellypal.fun/version.txt";
 let newVer = ""; // set when the probe reports a newer version
 let resetArm = 0; // settings RESET arms for 3s — second tap wipes the save
 let resetBusy = false;
@@ -3280,6 +3287,13 @@ invokeAsync("load_state").then((txt) => {
   if (POMO_BREAKS.includes(s.pomoBreakMin)) pomoBreakMin = s.pomoBreakMin;
   if (pomo) { pomoPhase = "focus"; pomoLen = pomoFocusMin * 60000; pomoUntil = Date.now() + pomoLen; }
   if (SIZE_STEPS.includes(s.sizeMul)) sizeMul = s.sizeMul;
+  macSizeBaseline = s.macSizeBaseline === true;
+  if (IS_MAC && !macSizeBaseline) {
+    // Old 1.2X is the new Mac 1.0X; keep that visual size on upgrade.
+    if (sizeMul === 1.2) sizeMul = 1;
+    macSizeBaseline = true;
+    dirty = true;
+  }
   reduceMotion = s.reduceMotion === true;
   saverMode = s.saverMode === 2 ? 2 : s.saverMode === 0 ? 0 : 1; // missing/malformed falls back to AUTO
   treatKind = sanitizeSavedInt(s.treatKind, 0, TREATS.length - 1);
@@ -3428,7 +3442,7 @@ function persist() {
       json: JSON.stringify({
       ver: 2, xp, x: petX, jelly, owned, active: SPECIES[active].id,
       pityRare, pityLeg, hybSeq, accOwned, accEquip, breedReadyAt,
-      muted, vol, sizeMul, seen, savedAt: Date.now(),
+      muted, vol, sizeMul, macSizeBaseline, seen, savedAt: Date.now(),
       reduceMotion, treatKind, stats, volStep, pomo, dexMile, saverMode,
       lastDaily, dailyStreak, lastWeekly, pomoFocusMin, pomoBreakMin,
       redeemed, redeemedBound, uid, claimed: claimedNonces, iapTx: iapTxIds,
@@ -4186,7 +4200,7 @@ function legFlair(sp, now) {
   }
 }
 function palScale(p) {
-  return (1.3 + level * 0.4) * sizeMul * (isBaby(SPECIES[p.sp]) ? 0.55 : 0.92);
+  return (1.3 + level * 0.4) * sizeMul * DISPLAY_SIZE_FACTOR * (isBaby(SPECIES[p.sp]) ? 0.55 : 0.92);
 }
 // a pal's on-screen half-width in px — flat/puddle bodies run wider than
 // the 30px edge margin the clamps used to assume, so wide species slid
@@ -4868,7 +4882,7 @@ function cancelPalDrag() {
 }
 
 function blobSize() {
-  const scale = (1.3 + level * 0.4) * sizeMul * (isBaby(SPECIES[active]) ? 0.55 : 1);
+  const scale = (1.3 + level * 0.4) * sizeMul * DISPLAY_SIZE_FACTOR * (isBaby(SPECIES[active]) ? 0.55 : 1);
   return { w: SW * scale, h: SH * scale, scale };
 }
 
@@ -6117,7 +6131,7 @@ cv.addEventListener("pointerup", (e) => {
     invokeQuiet("set_dragging", { on: false });
     // dropped into the HOME slot: the prop goes back in the toybox.
     // no velocity guard — props ride the cursor, they can't be flung
-    if (q && my <= 50 && Math.abs(mx - winW / 2) <= 66) {
+    if (q && inHomeSlot(mx, my)) {
       for (let i = 0; i < 8; i++) fx.push({ x: mx + Math.random() * 20 - 10, y: my - Math.random() * 10, vx: Math.random() * 50 - 25, vy: -Math.random() * 40, life: 0.5, c: "#e8dcc8" });
       if (kind === "bowl") bowl = null; else if (kind === "cushion") cushion = null;
       else if (kind === "box") box = null; else if (kind === "plant") plant = null;
@@ -6163,7 +6177,7 @@ cv.addEventListener("pointerup", (e) => {
     const [mx, my] = canvasPos(e);
     // dropped into the top slot: back in the toybox — gentle release only,
     // so a hard fling sailing through the strip doesn't pocket it
-    if (ball && my <= 50 && Math.abs(mx - winW / 2) <= 66 && Math.hypot(ballVX, ballVY) < 250) {
+    if (ball && inHomeSlot(mx, my) && Math.hypot(ballVX, ballVY) < 250) {
       for (let i = 0; i < 8; i++) fx.push({ x: mx + Math.random() * 20 - 10, y: my - Math.random() * 10, vx: Math.random() * 50 - 25, vy: -Math.random() * 40, life: 0.5, c: "#e8dcc8" });
       ball = null;
       bangs.push({ x: mx, y: 62, life: 1.2, t: "PUT AWAY" });
@@ -6195,7 +6209,7 @@ cv.addEventListener("pointerup", (e) => {
     const [mx, my] = canvasPos(e);
     // dropped into the HOME slot at the top of the screen: back to the ranch.
     // requires a gentle release — a fling passing through the strip doesn't count
-    if (my <= 50 && Math.abs(mx - winW / 2) <= 66 && Math.hypot(palVX, palVY) < 250) { sendPalHome(p); return; }
+    if (inHomeSlot(mx, my) && Math.hypot(palVX, palVY) < 250) { sendPalHome(p); return; }
     if (Math.hypot(mx - palDownX, my - palDownY) < 6 && e.timeStamp - palDownT < 300) {
       const tt = performance.now();
       if (tt - (p.tapT || 0) < 420) {
@@ -6259,7 +6273,7 @@ cv.addEventListener("pointerup", (e) => {
   // dropped into the HOME slot: the main pet goes back to its ranch
   // room — bring it out again from its cell's + button. gentle release only,
   // so an upward throw can't accidentally park it
-  if (my <= 50 && Math.abs(mx - winW / 2) <= 66 && Math.hypot(dragVX, dragVY) < 250) { sendPetHome(); return; }
+  if (inHomeSlot(mx, my) && Math.hypot(dragVX, dragVY) < 250) { sendPetHome(); return; }
   const moved = Math.hypot(mx - downX, my - downY);
   // released while the silk line was held: a tap twirls it on the thread,
   // a real drag tears it free
@@ -13484,7 +13498,7 @@ function frameBody(now) {
     // active pet's baby factor and would shrink every pal. skipped while
     // the pal is hiding inside the box (the box rustles instead)
     if (!(now < (p.hideUntil || 0))) {
-    const psc = (1.3 + level * 0.4) * sizeMul * (isBaby(psp) ? 0.55 : 0.92);
+    const psc = (1.3 + level * 0.4) * sizeMul * DISPLAY_SIZE_FACTOR * (isBaby(psp) ? 0.55 : 0.92);
     const pbs = Math.sin(t * 2.6 + p.ph) * 0.028;
     const pmsq = p.squash / (1 + Math.abs(p.squash) * 0.5) * (reduceMotion ? 0.4 : 1) * animProf(p.sp).squash;
     const psx = psc * (1 + pmsq * 0.25 + pbs);
@@ -13641,7 +13655,7 @@ function frameBody(now) {
   if (cardTarget && ((cardTarget === "pet" && !petHome && now >= boxHide) ||
       (pals.includes(cardTarget) && now >= (cardTarget.hideUntil || 0)))) {
     const tp = cardTarget === "pet" ? SPECIES[active] : SPECIES[cardTarget.sp];
-    const csc = cardTarget === "pet" ? blobSize().scale : (1.3 + level * 0.4) * sizeMul * (isBaby(tp) ? 0.55 : 0.92);
+    const csc = cardTarget === "pet" ? blobSize().scale : (1.3 + level * 0.4) * sizeMul * DISPLAY_SIZE_FACTOR * (isBaby(tp) ? 0.55 : 0.92);
     const tx = cardTarget === "pet" ? petX : cardTarget.x;
     const phov = cardTarget !== "pet" && tp.mv === "hover" && !cardTarget.fly ? 10 + Math.sin(t * 2.2 + cardTarget.ph) * 6 : 0;
     const feetY = cardTarget === "pet" ? petY - bob - hoverBob : cardTarget.y - phov;
@@ -13955,16 +13969,16 @@ function frameBody(now) {
   // props share the slot — dropping furniture there puts it away
   if (palHeld || held || propHeld || ballHeld) {
     const hx = Math.round(winW / 2 - 66);
-    const over = curX > hx && curX < hx + 132 && curY >= 2 && curY <= 52;
+    const over = inHomeSlot(curX, curY);
     ctx.globalAlpha = over ? 0.98 : 0.85;
     ctx.fillStyle = over ? "#cfe8b8" : "#f3e6cd";
-    ctx.fillRect(hx, 6, 132, 42);
+    ctx.fillRect(hx, HOME_SLOT_Y, 132, 42);
     ctx.strokeStyle = over ? "#4c9e50" : "#8a6b4a";
     ctx.lineWidth = 2;
-    ctx.strokeRect(hx + 1, 7, 130, 40);
+    ctx.strokeRect(hx + 1, HOME_SLOT_Y + 1, 130, 40);
     // tiny house glyph
-    drawSpr(ctx, "house", hx + 24, 28, 3, over ? "#4c9e50" : "#8a6b4a");
-    drawText(ctx, propHeld || ballHeld ? "PUT AWAY" : "SEND HOME", hx + 44, 25, 1, over ? "#2f7a36" : "#5c4632", null, true);
+    drawSpr(ctx, "house", hx + 24, HOME_SLOT_Y + 22, 3, over ? "#4c9e50" : "#8a6b4a");
+    drawText(ctx, propHeld || ballHeld ? "PUT AWAY" : "SEND HOME", hx + 44, HOME_SLOT_Y + 19, 1, over ? "#2f7a36" : "#5c4632", null, true);
     ctx.globalAlpha = 1;
   }
 
