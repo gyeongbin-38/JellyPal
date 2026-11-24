@@ -495,7 +495,7 @@ const FLAVOR = {
   hyb: "BORN RIGHT ON THIS DESKTOP|ONE OF A KIND",
 };
 
-const APP_VER = "0.4.1"; // keep in sync with tauri.conf.json version
+const APP_VER = "0.4.2"; // keep in sync with tauri.conf.json version
 
 // species -> personality assignment (hybrids inherit one parent's)
 const PSY_ASSIGN = {
@@ -5584,12 +5584,12 @@ cv.addEventListener("pointerdown", (e) => {
           else ball = { x: Math.max(30, Math.min(winW - 30, petX + (petX < winW / 2 ? 70 : -70))), y: 60, vx: 0, vy: 0, r: 9, rot: 0 };
         } else {
           const cur = { bowl, cushion, box, plant, music, mirror, mat, jar }[kind];
+          const nw = performance.now();
           if (cur) {
             for (let i = 0; i < 8; i++) fx.push({ x: cur.x + Math.random() * 20 - 10, y: cur.y - Math.random() * 10, vx: Math.random() * 50 - 25, vy: -Math.random() * 40, life: 0.5, c: "#e8dcc8" });
             // evict squatters first: a napping pal used to keep snoozing
             // mid-air where the cushion was, and a box-hider stayed
             // invisible for seconds after the box vanished
-            const nw = performance.now();
             for (const q of pals) {
               if (Math.abs(q.x - cur.x) < 60 && Math.abs(q.y - cur.y) < 40) {
                 if (nw < (q.restUntil || 0) || nw < (q.hideUntil || 0) || (q.propGoal && q.propGoal.kind === kind)) {
