@@ -5578,17 +5578,20 @@ function focusKind() {
 // keyed to the focused app kind, the weather, and the hour. same-context
 // repeats wait for the context to change, so it never nags
 const SAY_LINES = {
-  editor:  ["LOCKING IN", "DEEP WORK", "FLOW STATE", "SHIP IT", "COMPILE + CHILL"],
-  media:   ["MOVIE NIGHT?", "GOOD PICK", "POPCORN TIME", "I'M WATCHING TOO"],
-  game:    ["GO GO GO", "HIGH SCORE?", "I'M CHEERING", "CLUTCH IT"],
-  morning: ["MORNING!", "RISE + SHINE", "COFFEE TIME"],
-  late:    ["STILL UP?", "BURNING OIL", "SLEEP SOON?", "NIGHT OWL"],
-  rain:    ["RAINY VIBES", "COZY WEATHER", "PITTER PATTER"],
-  snow:    ["SNOW DAY!", "SO PRETTY", "BUNDLE UP"],
-  chill:   ["JUST VIBING", "NICE DESK", "BOOP ME?", "KEEPING WATCH"],
+  editor:  ["LOCKING IN", "DEEP WORK", "FLOW STATE", "SHIP IT", "COMPILE + CHILL", "집중 모드", "화이팅~"],
+  media:   ["MOVIE NIGHT?", "GOOD PICK", "POPCORN TIME", "I'M WATCHING TOO", "같이 봐요"],
+  game:    ["GO GO GO", "HIGH SCORE?", "I'M CHEERING", "CLUTCH IT", "가보자고"],
+  morning: ["MORNING!", "RISE + SHINE", "COFFEE TIME", "좋은 아침"],
+  late:    ["STILL UP?", "BURNING OIL", "SLEEP SOON?", "NIGHT OWL", "얼른 자요"],
+  rain:    ["RAINY VIBES", "COZY WEATHER", "PITTER PATTER", "비 오네"],
+  snow:    ["SNOW DAY!", "SO PRETTY", "BUNDLE UP", "눈이다"],
+  chill:   ["JUST VIBING", "NICE DESK", "BOOP ME?", "KEEPING WATCH", "심심해", "놀아줘"],
 };
 function say(text, ms) {
-  const s = String(text || "").toUpperCase().replace(/[^A-Z0-9 !?.,:'+&*-]/g, "").slice(0, 34);
+  let s = String(text || "").toUpperCase()
+    .replace(/[^가-힣ㄱ-ㆎA-Z0-9 !?.,:'+&*~-]/g, "").slice(0, 34);
+  // hangul cells are ~2x wide — cap by rendered width, not char count
+  while (s && textW(s, 1) > 204) s = s.slice(0, -1);
   if (!s) return;
   sayText = s;
   sayUntil = performance.now() + (ms || 2800);
@@ -6858,6 +6861,37 @@ const FONT = {
   ",": [".....",".....",".....",".....","..##.","..##.",".##.."],
 };
 
+// ---------- wide-glyph raster cache ----------
+// FONT covers ASCII only. Hangul syllables + jamo rasterize on demand into
+// ~2-cell-wide tinted canvases (posterized to 1-bit to match the bitmap
+// letters), so mixed Korean text flows through the same drawText/textW path.
+const HAN_FONT = `"Malgun Gothic","Apple SD Gothic Neo","Segoe UI",sans-serif`;
+const hanCache = new Map(); // "ch|s|color" -> canvas (11s x 7s)
+function isWide(ch) {
+  const cp = ch.codePointAt(0);
+  return (cp >= 0xac00 && cp <= 0xd7a3) || (cp >= 0x3130 && cp <= 0x318f) || (cp >= 0x1100 && cp <= 0x11ff);
+}
+function hanGlyph(ch, s, color) {
+  const key = ch + "|" + s + "|" + color;
+  let g = hanCache.get(key);
+  if (!g) {
+    const w = 11 * s, h = 7 * s;
+    g = document.createElement("canvas");
+    g.width = w; g.height = h;
+    const gc = g.getContext("2d");
+    gc.font = `bold ${7 * s}px ${HAN_FONT}`;
+    gc.textAlign = "center";
+    gc.textBaseline = "middle";
+    gc.fillStyle = color;
+    gc.fillText(ch, w / 2, h / 2 + (s === 1 ? 0.5 : 0));
+    const d = gc.getImageData(0, 0, w, h), px = d.data;
+    for (let i = 3; i < px.length; i += 4) px[i] = px[i] > 110 ? 255 : 0;
+    gc.putImageData(d, 0, 0);
+    if (hanCache.size > 1500) hanCache.clear();
+    hanCache.set(key, g);
+  }
+  return g;
+}
 function drawText(c, text, x, y, s, color, shadow, bold) {
   // integer-snap glyph origins — centered strings otherwise land on
   // half-pixels and rasterize with ragged stroke widths
@@ -6868,6 +6902,11 @@ function drawText(c, text, x, y, s, color, shadow, bold) {
   c.fillStyle = color;
   let cx = x;
   for (const ch of String(text).toUpperCase()) {
+    if (isWide(ch)) {
+      c.drawImage(hanGlyph(ch, s, color), cx, y);
+      cx += 11 * s;
+      continue;
+    }
     const g = FONT[ch] || FONT["?"];
     for (let r = 0; r < 7; r++) {
       for (let col = 0; col < 5; col++) {
@@ -6878,7 +6917,11 @@ function drawText(c, text, x, y, s, color, shadow, bold) {
   }
   return cx;
 }
-function textW(text, s) { return String(text).length * 6 * s - s; }
+function textW(text, s) {
+  let w = -s;
+  for (const ch of String(text).toUpperCase()) w += (isWide(ch) ? 11 : 6) * s;
+  return Math.max(0, w);
+}
 
 // ---------- doodad sprites: every decorative glyph/icon is a bitmap ----------
 // rendered once into tiny offscreen canvases, then blitted like the slimes.
@@ -7362,7 +7405,13 @@ let shopMode = false;
 // player-given names + shiny (gold-tint) variants, both persisted
 let customNames = {};
 let shinyOwned = {};
-let nameEdit = null;    // { i, buf } — ranch cell name being typed
+let nameEdit = null;    // { i, buf, inp } — ranch cell name being typed; inp = hidden
+                        // input that carries IME composition (Korean names need it —
+                        // a bare canvas never receives composited syllables)
+function endNameEdit() {
+  if (nameEdit && nameEdit.inp) nameEdit.inp.remove();
+  nameEdit = null;
+}
 let awayReport = null;  // offline-earnings panel { mins, gems, until }
 function sanitizeCustomNames(value) {
   const clean = {};
@@ -7373,7 +7422,7 @@ function sanitizeCustomNames(value) {
     // reach localeCompare/drawText and take down the ranch frame loop.
     if (!ownedSpecies.has(id) || typeof raw !== "string") continue;
     const name = raw.trim().replace(/\s+/g, " ").toUpperCase().slice(0, 10);
-    if (name && /^[A-Z0-9 ]+$/.test(name)) clean[id] = name;
+    if (name && /^[가-힣ㄱ-ㆎA-Z0-9 ]+$/.test(name)) clean[id] = name;
   }
   return clean;
 }
@@ -9046,7 +9095,7 @@ function toggleRanch(force) {
 rc.addEventListener("pointerdown", (e) => {
   lastUiTap = Date.now();
   if (e.button !== 0) return;
-  nameEdit = null; // any ranch click abandons an in-progress rename
+  endNameEdit(); // any ranch click abandons an in-progress rename
   const r = rc.getBoundingClientRect();
   const mx = e.clientX - r.left;
   const my = e.clientY - r.top;
@@ -9275,6 +9324,15 @@ rc.addEventListener("pointerdown", (e) => {
       // name row click: rename this slime (type, Enter commits, Esc cancels)
       if (mx >= x + 24 && mx <= x + 80 && my >= y + 78 && my <= y + 90) {
         nameEdit = { i, buf: customNames[SPECIES[i].id] || "" };
+        // hidden input catches IME composition — Korean names can't reach a
+        // bare canvas otherwise. buf mirrors its value via input events.
+        const inp = document.createElement("input");
+        inp.value = nameEdit.buf;
+        inp.style.cssText = "position:fixed;left:-999px;top:-999px;width:1px;height:1px;opacity:0";
+        inp.addEventListener("input", () => { if (nameEdit) nameEdit.buf = String(inp.value).slice(0, 10); });
+        document.body.appendChild(inp);
+        nameEdit.inp = inp;
+        if (inp.focus) inp.focus();
         sfx.pop();
         return;
       }
@@ -9526,16 +9584,18 @@ addEventListener("keydown", (e) => {
   }
   // rename mode: type on the ranch cell's name row, Enter commits, Esc cancels
   if (nameEdit) {
-    if (e.key === "Escape") { nameEdit = null; return; }
+    if (e.isComposing) return; // mid-IME keystrokes belong to the input
+    if (e.key === "Escape") { endNameEdit(); return; }
     if (e.key === "Enter") {
       const id = SPECIES[nameEdit.i].id;
       if (nameEdit.buf.trim()) customNames[id] = nameEdit.buf.trim().slice(0, 10);
       else delete customNames[id];
-      nameEdit = null;
+      endNameEdit();
       dirty = true;
       sfx.pop();
       return;
     }
+    if (nameEdit.inp) return; // hidden input drives buf via input events
     if (e.key === "Backspace") { nameEdit.buf = nameEdit.buf.slice(0, -1); return; }
     if (/^[a-zA-Z0-9 ]$/.test(e.key) && nameEdit.buf.length < 10) nameEdit.buf += e.key.toUpperCase();
     return;

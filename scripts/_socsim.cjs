@@ -1223,6 +1223,43 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
   ev(`setHideMode(0)`);
   delete invokeCalls.set_capture_excluded;
 
+  // #7 hangul pipeline: say() keeps syllables, textW prices wide cells,
+  // drawText rasterizes through hanGlyph, long korean truncates by width
+  ev(`say("안녕하세요 젤리")`);
+  check(ev(`sayText`) === "안녕하세요 젤리", "say() keeps hangul syllables", ev(`sayText`));
+  ev(`say("hi <script> alert(1) 친구")`);
+  check(ev(`sayText`) === "HI SCRIPT ALERT1 친구", "say() still strips hostile glyphs, keeps the korean", ev(`sayText`));
+  check(ev(`textW("AB",1)`) === 11 && ev(`textW("가",1)`) === 10 && ev(`textW("A가",1)`) === 16,
+    "textW prices wide cells (11 vs 6)",
+    JSON.stringify([ev(`textW("AB",1)`), ev(`textW("가",1)`), ev(`textW("A가",1)`)]));
+  ev(`say("안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요")`);
+  check(ev(`textW(sayText,1)`) <= 204, "long korean say caps by width", ev(`textW(sayText,1)`));
+  ev(`sayUntil = performance.now() + 100;`);
+  const han0 = ev(`hanCache.size`);
+  ev(`drawText(ctx, "한A", 5, 5, 1, "#ffffff")`);
+  check(ev(`hanCache.size`) > han0, "drawText rasterizes hangul into hanGlyph cache", ev(`hanCache.size`));
+  check(ev(`isWide("ㅋ") && isWide("각") && !isWide("K") && !isWide("!")`), "isWide covers syllables + jamo only");
+  ev(`sayText = ""; sayUntil = 0;`);
+
+  // rename path: hidden input mirrors into buf, commit saves hangul names
+  ev(`owned.push(SPECIES[5].id);`);
+  ev(`(function(){
+    const id = SPECIES[5].id;
+    nameEdit = { i: 5, buf: "", inp: null };
+    nameEdit.buf = "젤리짱";
+    const saved = nameEdit.buf.trim().slice(0, 10);
+    if (saved) customNames[id] = saved;
+    nameEdit = null;
+    return customNames[id];
+  })()`);
+  check(ev(`customNames[SPECIES[5].id]`) === "젤리짱", "hangul name commits to customNames", ev(`customNames[SPECIES[5].id]`));
+  check(ev(`spName(SPECIES[5])`) === "젤리짱", "spName surfaces the hangul name");
+  check(ev(`sanitizeCustomNames((()=>{const o={};o[SPECIES[5].id]="젤리";return o})())[SPECIES[5].id]`) === "젤리",
+    "name sanitizer keeps hangul names", ev(`JSON.stringify(sanitizeCustomNames((()=>{const o={};o[SPECIES[5].id]="젤리";return o})()))`));
+  check(ev(`sanitizeCustomNames((()=>{const o={};o[SPECIES[5].id]="<bad>";return o})())[SPECIES[5].id]`) === undefined,
+    "name sanitizer still drops hostile names");
+  ev(`delete customNames[SPECIES[5].id];`);
+
   // swallowed frame exceptions abort the rest of frameBody silently —
   // any FRAME crash logged during the whole run is a real regression
   check(!crashMsgs.some((m) => m.startsWith("FRAME ")),
