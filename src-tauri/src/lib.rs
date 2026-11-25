@@ -3215,6 +3215,24 @@ fn focus_app(name: String) -> bool {
     focus_named_window(&needle)
 }
 
+// Orchestrator status board: the frontend mirrors a small live-state blob
+// into <app-data>/status.json on the same cadence as agent_notice polls, so
+// MCP servers and other local agents can read pet state without touching
+// the sealed save. The payload must parse as a JSON object and is capped —
+// it's a status board, not a write channel.
+#[tauri::command]
+fn agent_status_write(app: tauri::AppHandle, json: String) -> Result<(), String> {
+    if json.len() > 4096 {
+        return Err("status payload too large".into());
+    }
+    let v: serde_json::Value = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+    if !v.is_object() {
+        return Err("status payload must be a JSON object".into());
+    }
+    let dir = data_dir(&app)?;
+    std::fs::write(dir.join("status.json"), &json).map_err(|e| e.to_string())
+}
+
 #[cfg(windows)]
 struct FocusHit {
     needle: String,
@@ -4457,6 +4475,7 @@ pub fn run() {
             get_monitors,
             get_weather,
             agent_notice,
+            agent_status_write,
             focus_app,
             set_capture_excluded,
             set_autostart,

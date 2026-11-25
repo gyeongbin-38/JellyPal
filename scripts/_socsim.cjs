@@ -1083,6 +1083,23 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
   delete invokeCalls.focus_app;
   delete invokeMocks.agent_notice;
 
+  // MCP surface: a "focus" notice fires focus_app directly (no tap needed),
+  // and each poll mirrors live state into agent_status_write
+  invokeMocks.agent_notice = () => Promise.resolve(JSON.stringify({ seq: 11, kind: "focus", app: "Paseo" }));
+  ev("agentPollAt = 0;");
+  delete invokeCalls.focus_app;
+  frame(t += 16.7);
+  await new Promise((r) => setImmediate(r));
+  frame(t += 16.7);
+  check(invokeCalls.focus_app && invokeCalls.focus_app.name === "Paseo",
+    "focus notice invokes focus_app without a tap", JSON.stringify(invokeCalls.focus_app));
+  check(ev(`agentSeq`) === 11, "focus notice consumes the seq", ev(`agentSeq`));
+  delete invokeCalls.focus_app;
+  delete invokeMocks.agent_notice;
+  const st = invokeCalls.agent_status_write && invokeCalls.agent_status_write.json;
+  check(st && (() => { const s = JSON.parse(st); return s.v === "0.4.4" && typeof s.state === "string" && typeof s.jelly === "number" && typeof s.face === "string" && typeof s.t === "number"; })(),
+    "status board mirrors live state to status.json", st || "none");
+
   // an expired face's cause stamp dies with it — a lingering stamp used to
   // ghost-pop the old reason icon on the frame after expiry, and to
   // resurrect it on any later unstamped return to that same face

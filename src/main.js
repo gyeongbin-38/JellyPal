@@ -10845,10 +10845,20 @@ function frameBody(now) {
     }
   }
   // JARVIS-style agent hook: a drop file at <app-data>/agent.json. any
-  // local agent writes {"seq":N,"kind":"done|approve|fail|say","msg":"..."}
+  // local agent writes {"seq":N,"kind":"done|approve|fail|say|focus","msg":"..."}
   // and the pet reacts on screen — celebrate, plead for attention, wince
   if (now > agentPollAt && saveReady) {
     agentPollAt = now + 3000;
+    // MCP/orchestrator status board — the same cadence as the notice poll,
+    // so agents can read live pet state via <app-data>/status.json
+    invokeQuiet("agent_status_write", {
+      json: JSON.stringify({
+        v: APP_VER, t: Date.now(), seq: agentSeq, state,
+        face: faceName(now), energy, jelly, level, pals: pals.length,
+        home: !!petHome, pomo: pomo ? pomoPhase : null,
+        hide: hideMode, fs: !!fsActive,
+      }),
+    });
     invokeAsync("agent_notice").then((raw) => {
       if (typeof raw !== "string" || !raw) return;
       let n = null;
@@ -10860,6 +10870,7 @@ function frameBody(now) {
       else if (n.kind === "approve") { agentNeedAt = now; excitedUntil = now + 1600; petStamp("NEEDS YOU", "excited"); squashV += 0.8; say(n.msg || "NEED YOU!"); }
       else if (n.kind === "fail") { worryUntil = now + 1600; petStamp("AGENT", "worry"); say(n.msg || "UH OH..."); }
       else if (n.kind === "say") say(n.msg, 3600);
+      else if (n.kind === "focus" && typeof n.app === "string") invokeQuiet("focus_app", { name: n.app });
     }).catch(() => {});
   }
   // rain on the head: the moment a rain spell opens, a free pal near the
