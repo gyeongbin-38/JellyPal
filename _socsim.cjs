@@ -1066,6 +1066,23 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
     "stale agent seq never re-fires", ev(`JSON.stringify({say:sayText,w:worryUntil})`));
   delete invokeMocks.agent_notice;
 
+  // an expired face's cause stamp dies with it — a lingering stamp used to
+  // ghost-pop the old reason icon on the frame after expiry, and to
+  // resurrect it on any later unstamped return to that same face
+  ev(`(function(){
+    pals.length = 0;
+    pals.push({ sp: 0, x: 500, y: 1080, ph: 0, walkT: null, faceId: "happy", faceT: ${t} + 60,
+      faceWhy: "THE SHOW", faceWhyId: "happy", facePrevU: "happy", whyIc: "star", whyUntil: ${t} + 60 });
+  })()`);
+  for (let i = 0; i < 10; i++) { t += 16.7; frame(t); }
+  check(ev(`pals[0].faceWhy === null && palWhy(pals[0]) !== "THE SHOW"`),
+    "expired face drops its cause stamp (no ghost reason)",
+    ev(`JSON.stringify({fw:pals[0].faceWhy,iw:palWhy(pals[0])})`));
+  check(ev(`!(pals[0].whyIc === "star" && pals[0].whyUntil > ${t})`),
+    "no stale icon re-pop after the face ends",
+    ev(`JSON.stringify({ic:pals[0].whyIc,u:pals[0].whyUntil})`));
+  ev("pals.length = 0");
+
   // swallowed frame exceptions abort the rest of frameBody silently —
   // any FRAME crash logged during the whole run is a real regression
   check(!crashMsgs.some((m) => m.startsWith("FRAME ")),

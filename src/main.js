@@ -4050,8 +4050,10 @@ function sendPetHome() {
   propSpin = 0;
   webbing = false;
   webHeld = false;
-  sigT0 = 0; sigId = null;
-  danceT0 = 0;
+  cushionNap = 0; cushionNapW = 0; sitUntil = 0; // a card send-home can
+  boxHide = 0;                                 // fire mid-nap/mid-hide —
+  sigT0 = 0; sigId = null;                     // the parked timers must die
+  danceT0 = 0;                                 // or the pet returns frozen
   huntT0 = 0; huntPounce = false; huntScore = 0;
   circScore = 0; circAng = null;
   boopT = 0;
@@ -5518,6 +5520,10 @@ function recall() {
     p.accAct = null;
     p.act = null;
     p.follow = null;
+    // a summoned pal must also leave its group event — group members get a
+    // fresh walkT back to the huddle every tick, so without this a recalled
+    // pal lands and immediately marches off to rejoin the gathering
+    p.group = null;
     if (p.scene) {
       const sc = p.scene;
       if (sc.a && sc.a.scene === sc) sc.a.scene = null;
@@ -6256,6 +6262,20 @@ cv.addEventListener("pointerup", (e) => {
     // no velocity guard — props ride the cursor, they can't be flung
     if (q && inHomeSlot(mx, my)) {
       for (let i = 0; i < 8; i++) fx.push({ x: mx + Math.random() * 20 - 10, y: my - Math.random() * 10, vx: Math.random() * 50 - 25, vy: -Math.random() * 40, life: 0.5, c: "#e8dcc8" });
+      // evict occupants the same way the toybox strip does — a put-away
+      // cushion under a napping pet used to leave it dozing on thin air,
+      // and a boxed pal stayed invisible where the box had been
+      const nw2 = performance.now();
+      for (const q2 of pals) {
+        if (Math.abs(q2.x - q.x) < 60 && Math.abs(q2.y - q.y) < 40) {
+          if (nw2 < (q2.restUntil || 0) || nw2 < (q2.hideUntil || 0) || (q2.propGoal && q2.propGoal.kind === kind)) {
+            q2.restUntil = 0; q2.hideUntil = 0; q2.propGoal = null;
+            q2.faceId = "shock"; q2.faceT = nw2 + 700; q2.faceWhy = "EVICTED"; q2.faceWhyId = "shock";
+          }
+        }
+      }
+      if (kind === "cushion" && nw2 < cushionNap) { cushionNap = 0; cushionNapW = 0; sitUntil = 0; }
+      if (kind === "box" && nw2 < boxHide) boxHide = 0;
       if (kind === "bowl") bowl = null; else if (kind === "cushion") cushion = null;
       else if (kind === "box") box = null; else if (kind === "plant") plant = null;
       else if (kind === "music") music = null; else if (kind === "mirror") mirror = null;
