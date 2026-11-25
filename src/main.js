@@ -102,6 +102,7 @@ const WHY_ICON = {
   "EGG POPPING": "egg", "HATCHED!": "egg",
   "NEW PAL": "gift", "JUST ARRIVED": "gift", "PRESENT": "gift", "GOODBYE": "gift",
   "RAIN": "drop", "PUDDLE": "drop", "SLIPPED!": "drop", "SNOW": "drop",
+  "RAINDROP": "drop", "MELTED": "drop",
   "LATE NIGHT": "moon", "NIGHT NIGHT": "moon",
   "MORNING!": "sun", "WAKE UP": "sun", "FRESH AIR": "sun", "CHILLING": "sun",
   "SNACK": "cookie", "STUFFED": "cookie", "TREAT?": "cookie",
@@ -2110,6 +2111,8 @@ let petEavesCd = 0;   // last time the pet leaned in on a pal gossip session
 let drizzleKind = "rain"; // "rain" or "snow" — winters get flakes instead
 let snowAcc = 0;      // snow dusting on the floor, builds then melts
 const drips = [];     // raindrops live outside fx — weather, not creature fx
+const wxDrops = [];   // sky drops: heavy droplets/flakes that land on decks
+                      // and sit there — click for +1 jelly, or a pal fetches it
 let treat = null;
 let treatKind = 0;
 let hyperUntil = 0;     // chili rush (perf clock)
@@ -4702,7 +4705,7 @@ const GR_WHY = { wave: "THE WAVE", chorus: "SING-ALONG", huddle: "HUDDLE", gathe
 const PROP_WHY = { settle: "PAL TIME", treat: "TREAT?", deliver: "DELIVERY", find: "FORAGING",
   cuddle: "COMFORT", petCuddle: "COMFORT", boop: "BESTIE", bowl: "BOWL", cushion: "CUSHION",
   box: "BOX", plant: "PLANT", music: "MUSIC", mirror: "MIRROR", mat: "MAT", jar: "JAR",
-  egg: "EGG POPPING", nuzzle: "NUZZLED", inspect: "NEW TOY" };
+  egg: "EGG POPPING", nuzzle: "NUZZLED", inspect: "NEW TOY", wxdrop: "THE HUNT" };
 // solo-act kind → cause name, same job PROP_WHY does for errands — a pal
 // darting about or daydreaming isn't "happy for no reason", it's PLAYING
 const ACT_WHY = { stretch: "STRETCH", roll: "WHEE!", dart: "WHEE!", dream: "SLEEPY",
@@ -4714,7 +4717,7 @@ const PROP_STATUS = { settle: "KEEPING COMPANY", treat: "SNACK RUN", deliver: "D
   find: "FORAGING", cuddle: "JOINING THE NAP", petCuddle: "JOINING THE NAP", boop: "SAYING HI",
   bowl: "GETTING A BITE", cushion: "OFF TO NAP", box: "TO THE BOX", plant: "SPROUT CHECK",
   music: "MUSIC TIME", mirror: "MIRROR CHECK", mat: "BOUNCE BREAK", jar: "COOKIE RAID",
-  egg: "EGG WATCH", nuzzle: "NUZZLE TIME", inspect: "NEW TOY CHECK" };
+  egg: "EGG WATCH", nuzzle: "NUZZLE TIME", inspect: "NEW TOY CHECK", wxdrop: "DROP HUNT" };
 // solo-act kind → status phrase — a darting pal is DARTING, not idle
 const ACT_STATUS = { stretch: "STRETCHING", roll: "ROLLING", dart: "DARTING",
   dream: "DAYDREAMING", peek: "PEEKING", sniff: "SNIFFING", groom: "GROOMING", puddle: "PUDDLING" };
@@ -6013,6 +6016,21 @@ cv.addEventListener("pointerdown", (e) => {
   // up instead of yanking the cushion out from under it
   const _grabPal = palAt(mx, my);
   const _petHit = hitTest(mx, my);
+  // a resting sky drop is a one-click prize — slimes under the cursor
+  // still win, everything else yields to the sparkle
+  if (!_grabPal && !_petHit) {
+    const di = wxDrops.findIndex((d) => Math.hypot(mx - d.x, my - (d.y - 6)) < 13);
+    if (di >= 0) {
+      const d = wxDrops.splice(di, 1)[0];
+      jelly = addSavedInt(jelly, 1);
+      dirty = true;
+      for (let k = 0; k < 6; k++) fx.push({ x: d.x + (Math.random() - 0.5) * 12, y: d.y - 6 - Math.random() * 8, vx: (Math.random() - 0.5) * 50, vy: -24 - Math.random() * 30, life: 0.5, c: d.k === "snow" ? "#eef4ff" : "#6fc6e8" });
+      bangs.push({ x: d.x, y: d.y - 26, life: 1.4, t: "+1" });
+      sfx.pop();
+      touch();
+      return;
+    }
+  }
   if (!propHeld && !_grabPal && !_petHit) {
     for (const [kind, q, rad, oy] of [["bowl", bowl, 30, 13], ["cushion", cushion, 34, 14], ["box", box, 36, 14], ["plant", plant, 28, 17], ["music", music, 30, 12], ["mirror", mirror, 26, 18], ["mat", mat, 32, 14], ["jar", jar, 24, 15]]) {
       if (q && Math.hypot(mx - q.x, my - (q.y - oy)) < rad) {
@@ -9029,6 +9047,7 @@ function sendClickable() {
   if (mat) rects.push([mat.x - 34, mat.y - 33, 68, 49]);
   if (jar) rects.push([jar.x - 23, jar.y - 36, 46, 52]);
   if (egg) rects.push([egg.x - 16, egg.y - 36, 32, 52]);      // egg is a promise, not a wall
+  for (const d of wxDrops) rects.push([d.x - 9, d.y - 18, 18, 18]); // resting sky drops are collectible
   if (fabOpen && toyboxOpen) rects.push(toyboxStripRect()); // chooser strip
   if (fabOpen && questOpen) rects.push(questPanelRect());   // quest panel (info only, still eats clicks)
   if (awayReport) rects.push([Math.round(winW / 2 - 95), 54, 190, 78]);
@@ -10158,6 +10177,18 @@ function frameBody(now) {
       // the rain waters the plant — the pot perks visibly while it drinks
       if (plant && Math.random() < dt * 0.1) plant.steamUntil = Date.now() + 3000;
     }
+    // sky drops: once in a while a fat droplet or a fat flake lands and
+    // sits on a deck instead of streaking past — a little prize for
+    // whoever notices it first (the cursor, or a foraging pal)
+    if (Math.random() < dt * 0.11 && wxDrops.length < 3) {
+      const pl = plats[(Math.random() * plats.length) | 0];
+      if (pl && pl.w >= 40 && !wxDrops.some((d) => d.plat === pl)) {
+        wxDrops.push({
+          x: pl.x + 12 + Math.random() * (pl.w - 24), y: pl.y, plat: pl,
+          k: snow ? "snow" : "rain", at: now, melt: 0,
+        });
+      }
+    }
     // thunder — a rare flash mid-spell, once a minute at most. snow is quiet.
     if (!snow && now > thunderAt + 60000 && Math.random() < dt * 0.04) {
       thunderAt = now;
@@ -10249,6 +10280,18 @@ function frameBody(now) {
     }
   }
   wasDrizzle = now < drizzleUntil;
+  // sky drops age out: the deck under one closed, the spell it fell
+  // from ended (it melts), or it simply sat unclaimed for 40s
+  for (let i = wxDrops.length - 1; i >= 0; i--) {
+    const d = wxDrops[i];
+    if (d.plat && !plats.includes(d.plat)) { wxDrops.splice(i, 1); continue; }
+    if (now >= drizzleUntil && !d.melt) d.melt = now;
+    if (now - d.at > 40000 || (d.melt && now > d.melt + 5000)) {
+      // evaporates where it sat — a sigh of stray droplets, not a pop
+      for (let k = 0; k < 4; k++) drips.push({ x: d.x + (Math.random() - 0.5) * 10, y: d.y - 4, vx: (Math.random() - 0.5) * 30, vy: -20 - Math.random() * 24, life: 0.5, c: d.k === "snow" ? "#eef4ff" : "#9ec8e8", k: d.k === "snow" ? "snow" : undefined });
+      wxDrops.splice(i, 1);
+    }
+  }
   // seasonal drift: spring petals and autumn leaves ride the air even
   // on clear days — the desktop always has a little sky of its own
   if (!reduceMotion && !petHome && now >= boxHide && drips.length < 46) {
@@ -12628,6 +12671,30 @@ function frameBody(now) {
                 dirty = true;
                 p.carry = null;
               }
+            } else if (pg.kind === "wxdrop") {
+              // sky drop reached: hoist it overhead — one jelly inside —
+              // then run it home like any other fetch
+              const di = wxDrops.indexOf(pg.drop);
+              if (di >= 0 && Math.abs(pg.drop.y - p.y) < 30 && Math.abs(pg.drop.x - p.x) < 26) {
+                wxDrops.splice(di, 1);
+                for (let k = 0; k < 6; k++) fx.push({ x: p.x + (Math.random() - 0.5) * 18, y: p.y - 10 - Math.random() * 16, vx: (Math.random() - 0.5) * 40, vy: -20 - Math.random() * 26, life: 0.55, c: pg.drop.k === "snow" ? "#e8f4ff" : "#9ec8e8", spr: "mote" });
+                p.carry = { n: 1, since: now };
+                p.squashV += 3;
+                p.faceId = "happy"; p.faceT = now + 900;
+                p.faceWhy = pg.drop.k === "snow" ? "SNOWFLAKE" : "RAINDROP"; p.faceWhyId = "happy";
+                sfx.pop();
+                if (!petHome && Math.abs(petY - p.y) < 40) {
+                  p.propGoal = { kind: "deliver", at: now };
+                  p.walkT = Math.max(plo, Math.min(phi, petX + (p.x < petX ? -30 : 30)));
+                } else {
+                  jelly = addSavedInt(jelly, 1); dirty = true; p.carry = null;
+                }
+              } else {
+                // melted, clicked, or the deck it sat on vanished —
+                // a confused sniff at the empty spot
+                p.lookUntil = now + 1000;
+                p.faceId = "meh"; p.faceT = now + 900; p.faceWhy = "MELTED"; p.faceWhyId = "meh";
+              }
             } else if (pg.kind === "deliver" && p.carry) {
               // a gift it never asked for but absolutely deserves — the
               // jelly goes in the wallet, the pet turns to look, and the
@@ -12849,6 +12916,21 @@ function frameBody(now) {
             dirty = true;
             p.carry = null;
             p.faceId = "smug"; p.faceT = now + 900; p.faceWhy = "POCKETED"; p.faceWhyId = "smug"; // pockets half — zero shame
+          }
+        }
+        // sky drop in reach: a fat droplet/flake sitting on this deck is
+        // a surer prize than a hypothetical sparkle hunt — nearest free
+        // pal walks over and hoists it home
+        else if (r < 0.10 && wxDrops.length && !petHome && !isBaby(psp) &&
+                 !p.tag && !p.fly && Math.abs(petY - p.y) < 40) {
+          const d = wxDrops.find((d2) => Math.abs(d2.y - p.y) < 30 && Math.abs(d2.x - p.x) < 300 && !d2.melt &&
+            // claimed drops stay claimed only while the claimer still
+            // walks — a grabbed/napped pal's stake lapses on its own
+            (!d2.claim || !pals.includes(d2.claim) || !d2.claim.propGoal || d2.claim.propGoal.drop !== d2));
+          if (d) {
+            p.walkT = Math.max(plo, Math.min(phi, d.x));
+            p.propGoal = { kind: "wxdrop", at: now, drop: d };
+            d.claim = p;
           }
         }
         // fetch errand: a bonded pal (BUDDY+) occasionally spots a lost
@@ -13951,6 +14033,10 @@ function frameBody(now) {
       accMV = null;
     }
     if (isBaby(psp)) drawPaci(ctx, 0, -SH * psy2 * 0.42, Math.max(1, psy2 * 0.85));
+    // a pal caught out in the rain holds its own tiny umbrella — the
+    // pet got one first and the little guys noticed
+    if (wxRainy() && !p.fly && now >= (p.hideUntil || 0))
+      drawSpr(ctx, "umbra", 11 * psy2, -SH * psy2 * 0.72, Math.max(2, psy2 * 1.4));
     // fetch loot rides on its head — a bobbing little jelly it found
     if (p.carry) {
       bubbleIcon(ctx, 0, -SH * psy2 - 14 + Math.sin(t * 5 + p.ph) * 1.5);
@@ -14129,6 +14215,23 @@ function frameBody(now) {
     else if (d.k === "firefly") ctx.fillRect(d.x, d.y, 2, 2);
     else if (d.k === "star") { ctx.fillRect(d.x, d.y, 5, 2); ctx.globalAlpha *= 0.4; ctx.fillRect(d.x - d.vx * 0.018, d.y - d.vy * 0.018, 4, 1); }
     else ctx.fillRect(d.x, d.y, 2, 6);
+  }
+  ctx.globalAlpha = 1;
+  // sky drops resting on decks — a bobbing sparkle that fades as it
+  // melts; the faint white glint marks it as a thing you can pick up
+  for (const d of wxDrops) {
+    const bob = Math.sin(t * 3 + d.x * 0.13) * 1.2;
+    ctx.globalAlpha = d.melt ? Math.min(1, (d.melt + 5000 - now) / 5000) : 0.65 + 0.35 * Math.sin(t * 5 + d.x);
+    if (d.k === "snow") drawSpr(ctx, "flake", d.x, d.y - 7 + bob, 1.6);
+    else {
+      ctx.fillStyle = "#6fc6e8";
+      ctx.fillRect(d.x - 2, d.y - 7 + bob, 4, 4);
+      ctx.fillRect(d.x - 1, d.y - 9 + bob, 2, 2);
+      ctx.fillStyle = "#dff3ff";
+      ctx.fillRect(d.x - 1, d.y - 6 + bob, 1, 1);
+    }
+    if (!d.melt && Math.random() < dt * 0.7)
+      fx.push({ x: d.x + (Math.random() - 0.5) * 12, y: d.y - 10 + bob, vx: (Math.random() - 0.5) * 8, vy: -14, life: 0.6, c: "#ffe9a8", spr: "mote" });
   }
   ctx.globalAlpha = 1;
   // snow dusting — a soft white line along the floor that melts after

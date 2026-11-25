@@ -1106,6 +1106,41 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
   check(ev(`(() => { const i = sprImg("quest"); return i && i.width === 10 && i.height === 10; })()`),
     "quest slip sprite renders at 10x10", ev(`JSON.stringify((() => { const i = sprImg("quest"); return i ? [i.width, i.height] : null; })())`));
 
+  // sky drops: a pinned rain spell spawns collectibles on decks, a pal
+  // fetches one home for +1, a dead platform's drop vanishes, and the
+  // spell ending melts whatever is left
+  ev(`wxDrops.length = 0; pals.length = 0; petHome = false; boxHide = 0; setSkyMode("rain");`);
+  for (let i = 0; i < 2000; i++) { t += 33; frame(t); }
+  check(ev(`wxDrops.length > 0 && wxDrops.every((d) => d.plat && plats.includes(d.plat))`),
+    "rain spell leaves collectible drops on live decks", ev(`JSON.stringify(wxDrops)`));
+  ev(`(() => {
+    const d = wxDrops[0]; globalThis._d = d;
+    owned.push(SPECIES[1].id); spawnPal(1);
+    const q = pals[pals.length - 1];
+    q.x = d.x - 40; q.y = d.y; q.plat = d.plat; q.fly = false;
+    q.walkT = d.x; q.propGoal = { kind: "wxdrop", at: performance.now(), drop: d };
+    petHome = false; state = "idle"; walkTarget = null; flying = false; held = false;
+    petX = d.x + 60; petY = d.y;
+  })()`);
+  for (let i = 0; i < 200 && ev(`wxDrops.includes(globalThis._d)`); i++) { ev(`petY = globalThis._d.y`); t += 33; frame(t); }
+  check(ev(`pals[pals.length - 1].carry && pals[pals.length - 1].carry.n === 1`),
+    "a pal reaching a sky drop hoists it (carry n=1)", ev(`JSON.stringify({carry:pals[pals.length-1].carry,left:wxDrops.length,pg:pals[pals.length-1].propGoal})`));
+  ev(`globalThis._jpre = jelly;`);
+  for (let i = 0; i < 300 && ev(`!!pals[pals.length - 1].carry`); i++) { ev(`petX = pals[pals.length - 1].x + 30; petY = pals[pals.length - 1].y`); t += 33; frame(t); }
+  check(ev(`jelly === globalThis._jpre + 1 && !pals[pals.length - 1].carry`),
+    "the drop delivers as +1 jelly to the pet", ev(`JSON.stringify({j:jelly,pre:globalThis._jpre,carry:pals[pals.length-1].carry})`));
+  ev(`wxDrops.push({ x: 50, y: 300, k: "rain", at: performance.now(), melt: 0, plat: { x: 0, y: 300, w: 200 } });`);
+  for (let i = 0; i < 10; i++) { t += 33; frame(t); }
+  check(ev(`!wxDrops.some((d) => d.plat && !plats.includes(d.plat))`),
+    "a drop on a dead platform evaporates", ev(`JSON.stringify(wxDrops)`));
+  ev(`setSkyMode("clear"); globalThis._ndrop = wxDrops.length;`);
+  for (let i = 0; i < 60; i++) { t += 33; frame(t); }
+  check(ev(`wxDrops.length === globalThis._ndrop && wxDrops.every((d) => d.melt > 0)`),
+    "sky CLEAR starts every drop melting", ev(`JSON.stringify({n:wxDrops.length,melt:wxDrops.map((d)=>!!d.melt)})`));
+  for (let i = 0; i < 200; i++) { t += 33; frame(t); }
+  check(ev(`wxDrops.length === 0`), "melted drops fully evaporate", ev(`wxDrops.length`));
+  ev(`setSkyMode("auto");`);
+
   // swallowed frame exceptions abort the rest of frameBody silently —
   // any FRAME crash logged during the whole run is a real regression
   check(!crashMsgs.some((m) => m.startsWith("FRAME ")),
