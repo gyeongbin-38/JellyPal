@@ -1114,7 +1114,7 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
   check(ev(`wxDrops.length > 0 && wxDrops.every((d) => d.plat && plats.includes(d.plat))`),
     "rain spell leaves collectible drops on live decks", ev(`JSON.stringify(wxDrops)`));
   ev(`(() => {
-    const d = wxDrops[0]; globalThis._d = d;
+    const d = wxDrops[0]; globalThis._d = d; d.at = 1e15; // pin past the 40s melt window
     owned.push(SPECIES[1].id); spawnPal(1);
     const q = pals[pals.length - 1];
     q.x = d.x - 40; q.y = d.y; q.plat = d.plat; q.fly = false;
@@ -1158,6 +1158,31 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
   check(ev(`nameDye.sprout = "aurora"; dyeColor("sprout", 1).indexOf("hsl") === 0`),
     "aurora resolves to a live hue instead of a flat swatch", ev(`dyeColor("sprout", 1)`));
   ev(`nameDye = {}; dyesOwned = [];`);
+
+  // ranch room decor: the shelf lists only paid items, prop toggles are
+  // slot-unique with swap-in eviction, and sanitizers gate themes/props
+  // to owned species holding owned decor
+  check(ev(`ROOM_SHOP.every((d) => d.id !== "plain") && ROOM_SHOP.length === ROOM_STYLES.length - 1 + ROOM_PROPS.length`),
+    "decor shelf lists every paid style and prop but never plain", ev(`ROOM_SHOP.length`));
+  ev(`decorOwned = ["window","poster","plant","books","lamp","fire","rug"]; roomTheme = {}; roomProps = {};`);
+  check(ev(`toggleRoomProp("sprout","plant"); JSON.stringify(roomProps.sprout)`),
+    "placing a prop claims its slot", JSON.stringify(["plant"]));
+  check(ev(`toggleRoomProp("sprout","books"); JSON.stringify(roomProps.sprout)`),
+    "a same-slot pick evicts the previous piece", JSON.stringify(["books"]));
+  check(ev(`toggleRoomProp("sprout","fire"); toggleRoomProp("sprout","window"); JSON.stringify(roomProps.sprout.slice().sort())`),
+    "different slots stack side by side", JSON.stringify(["books","fire","window"]));
+  check(ev(`toggleRoomProp("sprout","books"); toggleRoomProp("sprout","fire"); toggleRoomProp("sprout","window"); roomProps.sprout === undefined`),
+    "toggling the last piece out deletes the room entry", ev(`JSON.stringify(roomProps)`));
+  check(ev(`JSON.stringify(sanitizeRoomProps({ sprout: ["plant","books","ghost"], ghost: ["fire"], tide: ["fire"] })) === JSON.stringify({ sprout: ["plant"], tide: ["fire"] })`),
+    "prop sanitizer keeps owned species + owned decor, one per slot",
+    ev(`JSON.stringify(sanitizeRoomProps({ sprout: ["plant","books","ghost"], ghost: ["fire"], tide: ["fire"] }))`));
+  ev(`decorOwned.push("night","cabin");`);
+  check(ev(`JSON.stringify(sanitizeRoomTheme({ sprout: "night", ghost: "night", tide: "royal" })) === JSON.stringify({ sprout: "night" })`),
+    "theme sanitizer drops unowned species and styles you never bought",
+    ev(`JSON.stringify(sanitizeRoomTheme({ sprout: "night", ghost: "night", tide: "royal" }))`));
+  check(ev(`shopMode = true; shopTab = "ROOM"; const n = pageList().length; shopMode = false; shopTab = "ACC"; n === ROOM_SHOP.length`),
+    "room tab swaps the shop's paged list", ev(`ROOM_SHOP.length`));
+  ev(`decorOwned = []; roomTheme = {}; roomProps = {};`);
 
   // swallowed frame exceptions abort the rest of frameBody silently —
   // any FRAME crash logged during the whole run is a real regression

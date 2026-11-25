@@ -3448,6 +3448,9 @@ invokeAsync("load_state").then((txt) => {
       if (spIds.has(k) && NAME_DYES.some((d) => d.id === v) && dyesOwned.includes(v)) nameDye[k] = v;
     }
   }
+  decorOwned = sanitizeDecorOwned(s.decorOwned);
+  roomTheme = sanitizeRoomTheme(s.roomTheme);
+  roomProps = sanitizeRoomProps(s.roomProps);
   breedReadyAt = sanitizeSavedDeadline(s.breedReadyAt, BREED_CD);
   // offline earnings: 1 gem per 10 minutes away, capped at 20
   const savedAt = sanitizeSavedTimestamp(s.savedAt);
@@ -3678,7 +3681,8 @@ function persist() {
     request = invokeAsync("save_state", {
       json: JSON.stringify({
       ver: 2, xp, x: petX, jelly, owned, active: SPECIES[active].id,
-      pityRare, pityLeg, hybSeq, accOwned, accEquip, dyesOwned, nameDye, breedReadyAt,
+      pityRare, pityLeg, hybSeq, accOwned, accEquip, dyesOwned, nameDye,
+      decorOwned, roomTheme, roomProps, breedReadyAt,
       muted, vol, sizeMul, macSizeBaseline, seen, savedAt: Date.now(),
       reduceMotion, treatKind, stats, volStep, pomo, dexMile, saverMode,
       lastDaily, dailyStreak, lastWeekly, pomoFocusMin, pomoBreakMin,
@@ -7288,7 +7292,9 @@ const gridIdx = () => {
 };
 // the paged list driving both grid and shop cells; seasonal accessories
 // only appear while their event window is open (owned ones stay equippable)
-const pageList = () => (shopMode ? ACCS.map((a, i) => i).filter((i) => !ACCS[i].season || seasonOpen(ACCS[i])) : gridIdx());
+const pageList = () => (shopMode
+  ? (shopTab === "ROOM" ? ROOM_SHOP.map((d, i) => i) : ACCS.map((a, i) => i).filter((i) => !ACCS[i].season || seasonOpen(ACCS[i])))
+  : gridIdx());
 const pageCount = () => Math.max(1, Math.ceil(pageList().length / PAGE_N));
 const pageItems = () => pageList().slice(ranchPage * PAGE_N, ranchPage * PAGE_N + PAGE_N);
 const nurseryH = () => 0;   // nursery is a separate window now, never inline
@@ -7353,6 +7359,88 @@ const ROOM_THEME = {
   bubble: "#dcf0f4", climb: "#e8dcc8", chomp: "#f0dcd8",
   web: "#ece4f4", gravity: "#dcd4ee", royal: "#f4e4c8",
 };
+// purchasable room styles: full wall+floor+pattern sets that replace the
+// trait tint in a slime's ranch cell. "plain" is the free default and is
+// never stored — assigning it deletes the theme entry. `pat` names a
+// wallpaper painter; `dark` flips pattern ink to light lines.
+const ROOM_STYLES = [
+  { id: "plain",  name: "PLAIN",  cost: 0,   wall: null,      floor: "#c9a06c", base: "#8a6b4a" },
+  { id: "cabin",  name: "CABIN",  cost: 250, wall: "#e8d0a8", floor: "#a06844", base: "#6e4526", pat: "plank" },
+  { id: "meadow", name: "MEADOW", cost: 250, wall: "#d8ecbc", floor: "#8ab060", base: "#5e7e3e", pat: "dots" },
+  { id: "tide",   name: "TIDE",   cost: 350, wall: "#c8e4f2", floor: "#e8d8a8", base: "#7aa0b8", pat: "waves" },
+  { id: "candy",  name: "CANDY",  cost: 350, wall: "#f8d8e8", floor: "#f0b8d0", base: "#c08098", pat: "dots" },
+  { id: "night",  name: "NIGHT",  cost: 400, wall: "#2c2c4c", floor: "#3c3460", base: "#1c1c34", pat: "stars", dark: true },
+  { id: "royal",  name: "ROYAL",  cost: 500, wall: "#e8d0f0", floor: "#b088c8", base: "#7858a0", pat: "stripe", prem: true },
+];
+// placeable furniture: `slot` pins each prop to a fixed anchor so picks
+// never overlap — wall items hang left/right of the head room, floor
+// items sit on the boards, "rug" lays under the slime. enabling a prop
+// evicts whatever held its slot.
+const ROOM_PROPS = [
+  { id: "window",   name: "WINDOW",   cost: 150, slot: "wallL" },
+  { id: "poster",   name: "POSTER",   cost: 100, slot: "wallR" },
+  { id: "plant",    name: "POT",      cost: 100, slot: "floorL" },
+  { id: "books",    name: "BOOKS",    cost: 120, slot: "floorL" },
+  { id: "fishbowl", name: "BOWL",     cost: 160, slot: "floorL" },
+  { id: "lamp",     name: "LAMP",     cost: 120, slot: "floorR" },
+  { id: "fire",     name: "CAMPFIRE", cost: 200, slot: "floorR", anim: true },
+  { id: "rug",      name: "RUG",      cost: 80,  slot: "floorC" },
+];
+// the decor shelf: styles first, then furniture — plain never sells
+const ROOM_SHOP = [...ROOM_STYLES.slice(1), ...ROOM_PROPS];
+// shop tab cycler reuses the footer sort slot while the shop is open
+const SHOPTAB_R = () => [284, footY(), 84, 18];
+let shopTab = "ACC";          // "ACC" | "ROOM" — which shelf the shop shows
+let decorOwned = [];          // purchased style/prop ids, one pool
+let roomTheme = {};           // spId -> ROOM_STYLES id (absent = trait tint)
+let roomProps = {};           // spId -> [ROOM_PROPS ids] (slot-unique)
+let decorPick = null;         // species index with the room-decor panel open
+function sanitizeDecorOwned(value) {
+  const cat = new Set([...ROOM_STYLES, ...ROOM_PROPS].map((d) => d.id));
+  const clean = [];
+  if (Array.isArray(value)) for (const id of value) {
+    if (typeof id === "string" && cat.has(id) && id !== "plain" && !clean.includes(id)) clean.push(id);
+  }
+  return clean;
+}
+function sanitizeRoomTheme(value) {
+  const clean = {};
+  const ownedSpecies = new Set(owned), ownedDecor = new Set(decorOwned);
+  for (const [id, theme] of boundedSavedEntries(value)) {
+    if (ownedSpecies.has(id) && ROOM_STYLES.some((s) => s.id === theme) && theme !== "plain" && ownedDecor.has(theme)) clean[id] = theme;
+  }
+  return clean;
+}
+function sanitizeRoomProps(value) {
+  const clean = {};
+  const ownedSpecies = new Set(owned), ownedDecor = new Set(decorOwned);
+  for (const [id, list] of boundedSavedEntries(value)) {
+    if (!ownedSpecies.has(id) || !Array.isArray(list)) continue;
+    const kept = [], slots = new Set();
+    for (const pid of list.slice(0, 8)) {
+      const prop = ROOM_PROPS.find((q) => q.id === pid);
+      if (!prop || !ownedDecor.has(pid) || slots.has(prop.slot)) continue;
+      slots.add(prop.slot);
+      kept.push(pid);
+    }
+    if (kept.length) clean[id] = kept;
+  }
+  return clean;
+}
+// toggle a prop in a room; the slot swap keeps placements unique
+function toggleRoomProp(spId, pid) {
+  const prop = ROOM_PROPS.find((q) => q.id === pid);
+  if (!prop) return;
+  const list = roomProps[spId] || (roomProps[spId] = []);
+  const at = list.indexOf(pid);
+  if (at >= 0) { list.splice(at, 1); }
+  else {
+    const held = list.findIndex((q) => ROOM_PROPS.find((r) => r.id === q).slot === prop.slot);
+    if (held >= 0) list.splice(held, 1);
+    list.push(pid);
+  }
+  if (!list.length) delete roomProps[spId];
+}
 
 function fitRanch() {
   // fixed-size paged window: header + optional nursery + 3 rows + footer
@@ -7533,6 +7621,90 @@ function drawInfo(c, W, H, t) {
   drawText(c, "CLICK TO CLOSE", px + pw / 2 - textW("CLICK TO CLOSE", 1) / 2, py + ph - 16, 1, "#a8845c");
 }
 
+// wallpaper pattern painter for a room cell's wall rect. `ink` is picked
+// from the style (light lines on dark walls); `seed` (species index)
+// keeps star/dot placement stable per room instead of shimmering.
+function paintRoomWall(c, style, x, y, w, h, seed) {
+  const ink = style.dark ? "rgba(255,244,214,0.55)" : "rgba(90,64,40,0.28)";
+  c.fillStyle = ink;
+  if (style.pat === "plank") {
+    for (let yy = y + 8; yy < y + h; yy += 9) c.fillRect(x, yy, w, 1);
+    for (let yy = y + 8, k = 0; yy < y + h; yy += 9, k++)
+      for (let xx = x + ((k * 13) % 24) + 6; xx < x + w; xx += 24) c.fillRect(xx, yy - 7, 1, 7);
+  } else if (style.pat === "dots") {
+    for (let yy = y + 7; yy < y + h; yy += 14)
+      for (let xx = x + 7 + ((yy / 14 | 0) % 2) * 7; xx < x + w; xx += 14) c.fillRect(xx, yy, 2, 2);
+  } else if (style.pat === "waves") {
+    for (let yy = y + 10; yy < y + h; yy += 16)
+      for (let xx = x + 3; xx < x + w - 4; xx += 8) c.fillRect(xx + ((yy / 16 | 0) % 2) * 4, yy + ((xx / 8 | 0) % 2), 5, 1);
+  } else if (style.pat === "stars") {
+    let s = seed * 2654435761 >>> 0;
+    for (let k = 0; k < 7; k++) {
+      s = (s * 1103515245 + 12345) >>> 0;
+      const sx = x + 4 + (s % Math.max(1, w - 8)), sy = y + 4 + ((s >> 8) % Math.max(1, h - 8));
+      c.fillRect(sx, sy, 2, 2);
+      c.fillRect(sx - 1, sy + 1, 1, 1);
+      c.fillRect(sx + 2, sy + 1, 1, 1);
+    }
+  } else if (style.pat === "stripe") {
+    for (let xx = x + 4; xx < x + w; xx += 12) c.fillRect(xx, y, 3, h);
+  }
+}
+// one room furniture piece. floor props anchor at bottom-center (x, floorY);
+// wall props anchor at top-left (x, y) inside their hang zone.
+function drawRoomProp(c, id, x, y, t) {
+  if (id === "window") {
+    c.fillStyle = "#8a5f3a"; c.fillRect(x, y, 22, 18);
+    c.fillStyle = "#bfe0f0"; c.fillRect(x + 2, y + 2, 18, 14);
+    c.fillStyle = "#8a5f3a"; c.fillRect(x + 10, y + 2, 2, 14); c.fillRect(x + 2, y + 8, 18, 2);
+    c.fillStyle = "#fff8e8"; c.fillRect(x + 4, y + 4, 3, 3);
+  } else if (id === "poster") {
+    c.fillStyle = "#5c4632"; c.fillRect(x, y, 16, 20);
+    c.fillStyle = "#f0d8b0"; c.fillRect(x + 1, y + 1, 14, 18);
+    c.fillStyle = "#7ab87a"; c.fillRect(x + 4, y + 8, 8, 7);
+    c.fillStyle = "#4a8048"; c.fillRect(x + 4, y + 7, 2, 2); c.fillRect(x + 10, y + 7, 2, 2);
+    c.fillStyle = "#3c2c1c"; c.fillRect(x + 5, y + 10, 2, 2); c.fillRect(x + 9, y + 10, 2, 2);
+    c.fillStyle = "#d95a5a"; c.fillRect(x + 7, y + 2, 2, 2);
+  } else if (id === "plant") {
+    c.fillStyle = "#b86a4a"; c.fillRect(x - 5, y - 8, 10, 8);
+    c.fillStyle = "#8a4c34"; c.fillRect(x - 5, y - 8, 10, 2);
+    c.fillStyle = "#4a8048";
+    c.fillRect(x - 1, y - 16, 2, 8);
+    c.fillRect(x - 5, y - 14, 3, 3); c.fillRect(x + 2, y - 14, 3, 3); c.fillRect(x - 2, y - 18, 4, 3);
+  } else if (id === "books") {
+    c.fillStyle = "#6e4526"; c.fillRect(x - 7, y - 2, 14, 2);
+    const cols = ["#d95a5a", "#5a8ad9", "#5ab87a"];
+    for (let k = 0; k < 3; k++) { c.fillStyle = cols[k]; c.fillRect(x - 6 + k * 5, y - 10, 4, 8); c.fillStyle = "#f0e4c8"; c.fillRect(x - 6 + k * 5, y - 8, 4, 1); }
+  } else if (id === "fishbowl") {
+    c.fillStyle = "rgba(180,220,240,0.85)"; c.fillRect(x - 6, y - 10, 12, 9);
+    c.fillStyle = "#9ac4dc"; c.fillRect(x - 6, y - 10, 12, 2);
+    c.fillStyle = "#e8963c";
+    const fx = Math.sin(t * 1.4) > 0 ? -3 : 0;
+    c.fillRect(x + fx, y - 6, 3, 2);
+    c.fillStyle = "#fff"; c.fillRect(x - 4, y - 9, 1, 1);
+    c.fillStyle = "#8a6b4a"; c.fillRect(x - 7, y - 1, 14, 1);
+  } else if (id === "lamp") {
+    c.fillStyle = "#6e4526"; c.fillRect(x - 1, y - 14, 2, 12); c.fillRect(x - 4, y - 2, 8, 2);
+    c.fillStyle = "#eec23f"; c.fillRect(x - 4, y - 19, 8, 5);
+    c.fillStyle = "rgba(238,194,63,0.30)"; c.fillRect(x - 6, y - 21, 12, 9);
+    c.fillStyle = "#fff2b8"; c.fillRect(x - 3, y - 18, 6, 3);
+  } else if (id === "fire") {
+    c.fillStyle = "#6e4526"; c.fillRect(x - 6, y - 3, 12, 3);
+    c.fillStyle = "#5a3418"; c.fillRect(x - 4, y - 4, 8, 2);
+    const fl = Math.sin(t * 9) > 0 ? 1 : 0;
+    c.fillStyle = "#e86a2c";
+    c.fillRect(x - 3, y - 8 - fl, 6, 4);
+    c.fillRect(x - 1, y - 11 - fl, 2, 3);
+    c.fillStyle = "#ffc23f";
+    c.fillRect(x - 1, y - 7 - fl, 2, 2);
+    c.fillStyle = "rgba(232,106,44,0.25)"; c.fillRect(x - 5, y - 12, 10, 9);
+  } else if (id === "rug") {
+    c.fillStyle = "#b85a5a"; c.fillRect(x - 18, y, 36, 4);
+    c.fillStyle = "#8a3c3c"; c.fillRect(x - 18, y, 36, 1); c.fillRect(x - 18, y + 3, 36, 1);
+    c.fillStyle = "#e8b83f"; c.fillRect(x - 14, y + 1, 2, 2); c.fillRect(x + 12, y + 1, 2, 2);
+  }
+}
+
 function drawRanch(ms) {
   const t = ms / 1000;
   // nursery appearing/vanishing changes the panel height on the fly
@@ -7646,16 +7818,29 @@ function drawRanch(ms) {
     const sp = SPECIES[i];
     const has = owned.includes(sp.id);
     const picked = breedMode && breedSel.includes(i);
-    // mini room: trait-tinted wall + floor + baseboard; border = rarity color
-    rctx.fillStyle = ROOM_THEME[sp.trait] || "#f3e6cd";
+    // mini room: owned slimes get their bought style + placed props over
+    // the trait tint; silhouette cells always stay plain
+    const style = has ? ROOM_STYLES.find((s) => s.id === roomTheme[sp.id]) : null;
+    rctx.fillStyle = (style && style.wall) || ROOM_THEME[sp.trait] || "#f3e6cd";
     rctx.fillRect(x, y, 100, 92);
     rctx.strokeStyle = picked ? "#e05a6e" : i === active ? "#e08a5a" : RARITY_COLOR[sp.r];
     rctx.lineWidth = picked || i === active || sp.r >= 2 ? 3 : 2;
     rctx.strokeRect(x + 1, y + 1, 98, 90);
-    rctx.fillStyle = "#c9a06c";
+    rctx.fillStyle = style ? style.floor : "#c9a06c";
     rctx.fillRect(x + 2, y + 76, 96, 14);
-    rctx.fillStyle = "#8a6b4a";
+    rctx.fillStyle = style ? style.base : "#8a6b4a";
     rctx.fillRect(x + 2, y + 74, 96, 2);
+    if (style && style.pat) paintRoomWall(rctx, style, x + 2, y + 2, 96, 72, i);
+    if (has && roomProps[sp.id]) {
+      for (const pid of roomProps[sp.id]) {
+        const slot = ROOM_PROPS.find((q) => q.id === pid).slot;
+        if (slot === "wallL") drawRoomProp(rctx, pid, x + 8, y + 20, t);
+        else if (slot === "wallR") drawRoomProp(rctx, pid, x + 70, y + 20, t);
+        else if (slot === "floorL") drawRoomProp(rctx, pid, x + 16, y + 74, t);
+        else if (slot === "floorR") drawRoomProp(rctx, pid, x + 86, y + 74, t);
+        else drawRoomProp(rctx, pid, x + 50, y + 72, t); // rug under the slime
+      }
+    }
     if (has) {
       const ph = slotPh[i];
       let face = "idle";
@@ -7689,6 +7874,19 @@ function drawRanch(ms) {
       rctx.lineWidth = 1;
       rctx.strokeRect(x + 4.5, y + 78.5, 15, 11);
       drawText(rctx, isPal ? "-" : "+", x + 10, y + 81, 1, "#5c4632");
+      // room decor button (top-center): opens the theme/prop panel once
+      // the player owns any decor. a tiny house glyph marks it
+      if (decorOwned.length) {
+        const hot = decorPick === i;
+        rctx.fillStyle = hot ? "#f0dcae" : "#e8d9b8";
+        rctx.fillRect(x + 44, y + 4, 12, 11);
+        rctx.strokeStyle = hot ? "#e08a5a" : "#8a6b4a";
+        rctx.lineWidth = 1;
+        rctx.strokeRect(x + 44.5, y + 4.5, 11, 10);
+        rctx.fillStyle = "#8a5f3a";
+        rctx.fillRect(x + 46, y + 10, 8, 4);
+        rctx.fillRect(x + 46, y + 8, 2, 2); rctx.fillRect(x + 48, y + 6, 4, 2); rctx.fillRect(x + 52, y + 8, 2, 2);
+      }
     } else {
       drawSm(rctx, sprite("idle", i, true), x + 25, y + 74 - 36, 50, 36);
       drawText(rctx, "?", x + 47, y + 44, 2, "#8a6b4a");
@@ -7745,7 +7943,7 @@ function drawRanch(ms) {
     const nb = babyIdx().length;
     btn(NURSERY_BTN(), nb ? `NURSERY ${nb}` : "NURSERY", true, "#5c86b0");
     if (shopMode) {
-      drawText(rctx, "ACCESSORY SHOP", 284, fy + 6, 1, "#8a6b4a");
+      btn(SHOPTAB_R(), `TAB:${shopTab}`, true, "#2f5f8e");
     } else {
       btn(SORT_R(), `SORT:${SORTS[sortMode]}`, true, "#2f5f8e");
       btn(FILT_R(), `FILT:${FILTS[filtMode]}`, true, "#2f5f8e");
@@ -7777,6 +7975,54 @@ function drawRanch(ms) {
       rctx.strokeRect(ix + 0.5, iy + 0.5, 29, 21);
       if (items[k]) drawAcc(rctx, items[k], ix + 15, iy + 11, 1.2);
       else drawText(rctx, "-", ix + 13, iy + 9, 1, "#a8845c");
+    }
+  }
+
+  // room decor panel: a theme row (plain + owned styles as mini rooms)
+  // and a props row (owned furniture, slot-toggled). lives pinned to the
+  // panel bottom like the equip picker
+  if (decorPick !== null && SPECIES[decorPick]) {
+    const dId = SPECIES[decorPick].id;
+    const themes = ROOM_STYLES.filter((s) => s.id === "plain" || decorOwned.includes(s.id));
+    const props = ROOM_PROPS.filter((p) => decorOwned.includes(p.id));
+    const cols = Math.max(themes.length, props.length);
+    const pw2 = Math.max(150, cols * 36 + 14), ph3 = 92;
+    const px3 = Math.round(RW / 2 - pw2 / 2), py3 = Math.round(RHc - ph3 - 10);
+    rctx.fillStyle = "#f7ecd7";
+    rctx.fillRect(px3, py3, pw2, ph3);
+    rctx.strokeStyle = "#8a6b4a";
+    rctx.lineWidth = 2;
+    rctx.strokeRect(px3 + 1, py3 + 1, pw2 - 2, ph3 - 2);
+    drawText(rctx, "ROOM", px3 + pw2 / 2 - textW("ROOM", 1) / 2, py3 + 5, 1, "#5c4632");
+    for (let k = 0; k < themes.length; k++) {
+      const s = themes[k];
+      const ix = px3 + 7 + k * 36, iy = py3 + 15;
+      const cur = (roomTheme[dId] || "plain") === s.id;
+      rctx.fillStyle = s.wall || ROOM_THEME[SPECIES[decorPick].trait] || "#f3e6cd";
+      rctx.fillRect(ix, iy, 30, 24);
+      rctx.fillStyle = s.floor;
+      rctx.fillRect(ix + 1, iy + 18, 28, 5);
+      if (s.pat) paintRoomWall(rctx, s, ix + 1, iy + 1, 28, 17, k);
+      rctx.strokeStyle = cur ? "#e08a5a" : "#8a6b4a";
+      rctx.lineWidth = cur ? 2 : 1;
+      rctx.strokeRect(ix + 0.5, iy + 0.5, 29, 23);
+      drawText(rctx, s.name, ix + 15 - textW(s.name, 1) / 2, iy + 26, 1, cur ? "#e08a5a" : "#a8845c", null, true);
+    }
+    const placed = roomProps[dId] || [];
+    for (let k = 0; k < props.length; k++) {
+      const p = props[k];
+      const ix = px3 + 7 + k * 36, iy = py3 + 52;
+      const on = placed.includes(p.id);
+      rctx.fillStyle = on ? "#f0dcae" : "#e8d9b8";
+      rctx.fillRect(ix, iy, 30, 22);
+      rctx.strokeStyle = on ? "#e08a5a" : "#8a6b4a";
+      rctx.lineWidth = 1;
+      rctx.strokeRect(ix + 0.5, iy + 0.5, 29, 21);
+      drawRoomProp(rctx, p.id, ix + 15, iy + 20, t);
+      if (!on && placed.some((q) => ROOM_PROPS.find((r) => r.id === q).slot === p.slot)) {
+        rctx.fillStyle = "rgba(90,64,40,0.35)";
+        rctx.fillRect(ix, iy, 30, 22);
+      }
     }
   }
 
@@ -8550,6 +8796,7 @@ kc.addEventListener("contextmenu", (e) => e.preventDefault());
 // accessory shop: each item costs ACC_COST gems, drawn in the same
 // room-cell layout as the ranch
 function drawShopCells(t) {
+  if (shopTab === "ROOM") { drawRoomShopCells(t); return; }
   const items = pageItems();
   for (let k = 0; k < items.length; k++) {
     const i = items[k];
@@ -8581,6 +8828,52 @@ function drawShopCells(t) {
       const afford = jelly >= cost;
       bubbleIcon(rctx, x + 40, y + 85);
       drawText(rctx, String(cost), x + 48, y + 80, 1, afford ? "#5c4632" : "#c47070");
+    }
+  }
+}
+
+// ROOM shop shelf: style cells preview a mini room (wall+floor+pattern);
+// furniture cells show the piece on the same pedestal layout as gear
+function drawRoomShopCells(t) {
+  const items = pageItems();
+  for (let k = 0; k < items.length; k++) {
+    const i = items[k];
+    const { x, y } = cellOf(k);
+    const d = ROOM_SHOP[i];
+    const has = decorOwned.includes(d.id);
+    rctx.fillStyle = "#f3e6cd";
+    rctx.fillRect(x, y, 100, 92);
+    rctx.strokeStyle = has ? "#7aa888" : d.prem ? "#e8b83f" : "#a8c4d4";
+    rctx.lineWidth = d.prem ? 3 : 2;
+    rctx.strokeRect(x + 1, y + 1, 98, 90);
+    rctx.fillStyle = "#c9a06c";
+    rctx.fillRect(x + 2, y + 76, 96, 14);
+    rctx.fillStyle = "#8a6b4a";
+    rctx.fillRect(x + 2, y + 74, 96, 2);
+    if (d.slot) {
+      // furniture: pedestal + piece preview
+      rctx.fillStyle = "#d9c49a";
+      rctx.fillRect(x + 34, y + 58, 32, 4);
+      drawRoomProp(rctx, d.id, x + 50, y + 58, t);
+    } else {
+      // theme: framed mini room so the pattern reads at a glance
+      rctx.fillStyle = d.wall;
+      rctx.fillRect(x + 32, y + 14, 36, 34);
+      rctx.fillStyle = d.floor;
+      rctx.fillRect(x + 33, y + 40, 34, 7);
+      paintRoomWall(rctx, d, x + 33, y + 15, 34, 25, i);
+      rctx.strokeStyle = "#8a6b4a";
+      rctx.lineWidth = 1;
+      rctx.strokeRect(x + 32.5, y + 14.5, 35, 33);
+      if (d.prem) drawSpr(rctx, "star5", x + 6, y + 6, 1);
+    }
+    drawText(rctx, d.name, x + 50 - textW(d.name, 1) / 2, y + 62, 1, "#6b5338");
+    if (has) {
+      drawText(rctx, "OWNED", x + 50 - textW("OWNED", 1) / 2, y + 80, 1, "#7aa888");
+    } else {
+      const afford = jelly >= d.cost;
+      bubbleIcon(rctx, x + 40, y + 85);
+      drawText(rctx, String(d.cost), x + 48, y + 80, 1, afford ? "#5c4632" : "#c47070");
     }
   }
 }
@@ -8693,6 +8986,7 @@ function toggleRanch(force) {
   ranchOpen = force !== undefined ? force : !ranchOpen;
   ranch.classList.toggle("open", ranchOpen);
   accPick = null;
+  decorPick = null;
   pullResults = null; // a closed ranch drops the pending results sheet
   // infoPick survives — the card is its own overlay, not ranch content
   if (ranchOpen) {
@@ -8787,21 +9081,64 @@ rc.addEventListener("pointerdown", (e) => {
     accPick = null;
     return;
   }
+  // room decor panel: theme swatches assign the room style (plain clears),
+  // prop cells slot-toggle furniture. same modal semantics as the picker
+  if (decorPick !== null && SPECIES[decorPick]) {
+    const dId = SPECIES[decorPick].id;
+    const themes = ROOM_STYLES.filter((s) => s.id === "plain" || decorOwned.includes(s.id));
+    const props = ROOM_PROPS.filter((p) => decorOwned.includes(p.id));
+    const cols = Math.max(themes.length, props.length);
+    const pw2 = Math.max(150, cols * 36 + 14), ph3 = 92;
+    const px3 = Math.round(RW / 2 - pw2 / 2), py3 = Math.round(rc.height - ph3 - 10);
+    if (mx >= px3 && mx <= px3 + pw2 && my >= py3 && my <= py3 + ph3) {
+      for (let k = 0; k < themes.length; k++) {
+        const ix = px3 + 7 + k * 36, iy = py3 + 15;
+        if (mx >= ix && mx <= ix + 30 && my >= iy && my <= iy + 36) {
+          if (themes[k].id === "plain") delete roomTheme[dId];
+          else roomTheme[dId] = themes[k].id;
+          dirty = true;
+          sfx.pop();
+          break;
+        }
+      }
+      for (let k = 0; k < props.length; k++) {
+        const ix = px3 + 7 + k * 36, iy = py3 + 52;
+        if (mx >= ix && mx <= ix + 30 && my >= iy && my <= iy + 22) {
+          toggleRoomProp(dId, props[k].id);
+          dirty = true;
+          sfx.pop();
+          break;
+        }
+      }
+    } else decorPick = null;
+    return;
+  }
   // footer: pager + sort/filter cyclers
   if (inR(PG_L()) && ranchPage > 0) { ranchPage--; sfx.pop(); return; }
   if (inR(PG_R()) && ranchPage < pageCount() - 1) { ranchPage++; sfx.pop(); return; }
+  if (shopMode && inR(SHOPTAB_R())) { shopTab = shopTab === "ACC" ? "ROOM" : "ACC"; ranchPage = 0; sfx.pop(); return; }
   if (!shopMode && inR(SORT_R())) { sortMode = (sortMode + 1) % SORTS.length; ranchPage = 0; sfx.pop(); return; }
   if (!shopMode && inR(FILT_R())) { filtMode = (filtMode + 1) % FILTS.length; ranchPage = 0; sfx.pop(); return; }
   if (inR(NURSERY_BTN())) { toggleNursery(); sfx.pop(); return; }
-  if (inR(SHOP_R)) { shopMode = !shopMode; breedMode = false; breedSel = []; ranchPage = 0; accPick = null; infoPick = null; sfx.pop(); return; }
+  if (inR(SHOP_R)) { shopMode = !shopMode; shopTab = "ACC"; breedMode = false; breedSel = []; ranchPage = 0; accPick = null; infoPick = null; decorPick = null; sfx.pop(); return; }
   if (shopMode) {
-    // buy accessories: 250 gems each
+    // buy off the open shelf: gear on ACC, room decor on ROOM
     const items = pageItems();
     for (let k = 0; k < items.length; k++) {
       const i = items[k];
       if (my < 42) break;
       const { x, y } = cellOf(k);
       if (mx >= x && mx <= x + 100 && my >= y && my <= y + 92) {
+        if (shopTab === "ROOM") {
+          const d = ROOM_SHOP[i];
+          if (!decorOwned.includes(d.id) && jelly >= d.cost) {
+            jelly -= d.cost;
+            decorOwned.push(d.id);
+            dirty = true;
+            sfx.reveal();
+          } else sfx.pop();
+          return;
+        }
         const a = ACCS[i];
         const cost = a.cost || ACC_COST;
         if (!accOwned.includes(a.id) && jelly >= cost) {
@@ -8839,6 +9176,7 @@ rc.addEventListener("pointerdown", (e) => {
       breedSel = [];
       accPick = null;
       infoPick = null;
+      decorPick = null;
       sfx.pop();
     }
     return;
@@ -8854,10 +9192,20 @@ rc.addEventListener("pointerdown", (e) => {
       if (mx >= x + 84 && mx <= x + 96 && my >= y + 4 && my <= y + 15) {
         infoHost = "ranch";
         infoPick = i;
+        accPick = null;
+        decorPick = null;
         sfx.pop();
         return;
       }
       if (!owned.includes(SPECIES[i].id)) return;
+      // room decor button (top-center)
+      if (!breedMode && decorOwned.length && mx >= x + 44 && mx <= x + 56 && my >= y + 4 && my <= y + 15) {
+        decorPick = decorPick === i ? null : i;
+        accPick = null;
+        infoPick = null;
+        sfx.pop();
+        return;
+      }
       // summon toggle (bottom-left corner of the cell). for the active
       // species while it's parked home, + brings the main pet back out
       if (!breedMode && mx >= x + 4 && mx <= x + 20 && my >= y + 78 && my <= y + 90) {
@@ -8874,6 +9222,8 @@ rc.addEventListener("pointerdown", (e) => {
       // accessory slot button: opens the equip picker grid
       if (!breedMode && accOwned.length && mx >= x + 82 && mx <= x + 98 && my >= y + 78 && my <= y + 90) {
         accPick = i;
+        decorPick = null;
+        infoPick = null;
         sfx.pop();
         return;
       }
@@ -8905,7 +9255,7 @@ rc.addEventListener("contextmenu", (e) => {
   e.preventDefault();
   const r = rc.getBoundingClientRect();
   const mx = e.clientX - r.left, my = e.clientY - r.top;
-  if (my < 42 || infoPick !== null || accPick !== null || shopMode || pullAnim) return;
+  if (my < 42 || infoPick !== null || accPick !== null || decorPick !== null || shopMode || pullAnim) return;
   const items = pageItems();
   for (let k = 0; k < items.length; k++) {
     const i = items[k];
@@ -9157,7 +9507,7 @@ addEventListener("keydown", (e) => {
     // an interrupted slider drag must die with the panel — otherwise the
     // cursor stays "grabbing" and the volume still tracks invisible moves
     if (volDrag) { volDrag = null; cv.style.cursor = "default"; invokeQuiet("set_dragging", { on: false }); }
-    treatAim = false; closeSettings(); gemShop = false; shopMode = false; breedMode = false; accPick = null; infoPick = null; albumOpenWanted = false; albumOpen = false; if (cardTarget) closeCard(); if (nurseryOpen) toggleNursery(false);
+    treatAim = false; closeSettings(); gemShop = false; shopMode = false; shopTab = "ACC"; breedMode = false; accPick = null; infoPick = null; decorPick = null; albumOpenWanted = false; albumOpen = false; if (cardTarget) closeCard(); if (nurseryOpen) toggleNursery(false);
   }
 });
 
