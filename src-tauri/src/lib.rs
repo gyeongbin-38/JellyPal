@@ -3201,6 +3201,76 @@ fn agent_notice(app: tauri::AppHandle) -> Option<String> {
     Some(s)
 }
 
+// NEEDS YOU follow-through: an "approve" notice can name the window that
+// wants attention ("app":"JARVIS"), and tapping the pet jumps straight
+// there. Windows: first visible top-level window whose title contains the
+// needle, restored if minimized then foregrounded. Other platforms
+// decline — the notice still lands, the hop just no-ops.
+#[tauri::command]
+fn focus_app(name: String) -> bool {
+    let needle = name.trim().to_lowercase();
+    if needle.is_empty() || needle.len() > 80 {
+        return false;
+    }
+    focus_named_window(&needle)
+}
+
+#[cfg(windows)]
+struct FocusHit {
+    needle: String,
+    hwnd: HWND,
+}
+
+#[cfg(windows)]
+unsafe extern "system" fn focus_windows_cb(hwnd: HWND, lparam: LPARAM) -> i32 {
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetWindowTextW;
+    let hit = &mut *(lparam as *mut FocusHit);
+    if IsWindowVisible(hwnd) == 0 {
+        return TRUE;
+    }
+    let mut buf = [0u16; 256];
+    let n = GetWindowTextW(hwnd, buf.as_mut_ptr(), buf.len() as i32);
+    if n > 0
+        && String::from_utf16_lossy(&buf[..n as usize])
+            .to_lowercase()
+            .contains(&hit.needle)
+    {
+        hit.hwnd = hwnd;
+        return 0; // stop enumerating
+    }
+    TRUE
+}
+
+#[cfg(windows)]
+fn focus_named_window(needle: &str) -> bool {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        BringWindowToTop, SetForegroundWindow, ShowWindow, SW_RESTORE,
+    };
+    let mut hit = FocusHit {
+        needle: needle.to_string(),
+        hwnd: std::ptr::null_mut(),
+    };
+    unsafe {
+        EnumWindows(
+            Some(focus_windows_cb),
+            &mut hit as *mut FocusHit as LPARAM,
+        );
+        if hit.hwnd.is_null() {
+            return false;
+        }
+        if IsIconic(hit.hwnd) != 0 {
+            ShowWindow(hit.hwnd, SW_RESTORE);
+        }
+        BringWindowToTop(hit.hwnd);
+        SetForegroundWindow(hit.hwnd) != 0
+    }
+}
+
+#[cfg(not(windows))]
+fn focus_named_window(_needle: &str) -> bool {
+    false
+}
+
 // True when built with `--features store` — the frontend reads this once
 // to switch into the sandboxed companion-card UI (no redeem, no overlay
 // toggles) and to hide controls that cannot work under the App Sandbox.
@@ -4361,6 +4431,7 @@ pub fn run() {
             get_monitors,
             get_weather,
             agent_notice,
+            focus_app,
             set_autostart,
             is_store_build,
             autostart_available,

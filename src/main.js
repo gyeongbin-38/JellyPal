@@ -158,7 +158,15 @@ let petEchoCd = 0; // pet-glance-at-pal-outburst cooldown
 let sayText = "", sayUntil = 0;                  // pet speech bubble — ambient one-liners
 let nextSayRoll = 0, sayKey = "";                // chatter cadence + last context remarked on
 let agentPollAt = 0, agentSeq = 0;               // JARVIS-style drop-file polling
+let agentNeedAt = 0, agentApp = "JARVIS";        // pending approval + the window it names
 function petStamp(why, f) { petWhy = why; petWhyF = f; petWhyAt = performance.now(); if (f && why) petFaceWhy[f] = why; }
+// a NEEDS-YOU stamp is a live link for 30s: grabbing the pet jumps to the
+// window the notice named (JARVIS unless the writer says otherwise)
+function focusAgentApp() {
+  if (performance.now() - agentNeedAt > 30000) return; // frame clock == perf clock
+  agentNeedAt = 0;
+  invokeAsync("focus_app", { name: agentApp }).then((ok) => { if (!ok) say("NO WINDOW?"); }).catch(() => {});
+}
 
 // rarity: 0 common, 1 rare, 2 epic, 3 legendary
 const SPECIES = [
@@ -6212,6 +6220,7 @@ cv.addEventListener("pointerdown", (e) => {
     return;
   }
   held = true;
+  focusAgentApp(); // NEEDS-YOU pending? the tap doubles as a jump link
   grabT0 = performance.now();
   touch();
   flying = false;
@@ -10758,8 +10767,9 @@ function frameBody(now) {
       try { n = JSON.parse(raw); } catch (e) { return; }
       if (!n || typeof n.seq !== "number" || n.seq <= agentSeq) return;
       agentSeq = n.seq;
+      if (typeof n.app === "string" && n.app.trim()) agentApp = n.app.trim().slice(0, 60);
       if (n.kind === "done") { starUntil = now + 1600; petStamp("AGENT", "star"); squashV += 1.2; say(n.msg || "TASK DONE!"); }
-      else if (n.kind === "approve") { excitedUntil = now + 1600; petStamp("NEEDS YOU", "excited"); squashV += 0.8; say(n.msg || "NEED YOU!"); }
+      else if (n.kind === "approve") { agentNeedAt = now; excitedUntil = now + 1600; petStamp("NEEDS YOU", "excited"); squashV += 0.8; say(n.msg || "NEED YOU!"); }
       else if (n.kind === "fail") { worryUntil = now + 1600; petStamp("AGENT", "worry"); say(n.msg || "UH OH..."); }
       else if (n.kind === "say") say(n.msg, 3600);
     }).catch(() => {});

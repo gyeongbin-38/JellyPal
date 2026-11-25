@@ -1066,6 +1066,23 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
     "stale agent seq never re-fires", ev(`JSON.stringify({say:sayText,w:worryUntil})`));
   delete invokeMocks.agent_notice;
 
+  // NEEDS YOU link: an approve notice records the window it names, and
+  // the pending-need tap fires focus_app once then disarms itself
+  invokeMocks.agent_notice = () => Promise.resolve(JSON.stringify({ seq: 9, kind: "approve", msg: "REVIEW", app: "NOTEPAD" }));
+  ev("agentPollAt = 0;");
+  frame(t += 16.7);
+  await new Promise((r) => setImmediate(r));
+  frame(t += 16.7);
+  check(ev(`agentNeedAt > 0 && agentApp === "NOTEPAD"`),
+    "approve notice arms the jump link and names the window",
+    ev(`JSON.stringify({need:agentNeedAt>0,app:agentApp})`));
+  ev(`focusAgentApp()`);
+  check(invokeCalls.focus_app && invokeCalls.focus_app.name === "NOTEPAD" && ev(`agentNeedAt === 0`),
+    "the tap invokes focus_app once then disarms",
+    ev(`JSON.stringify({need:agentNeedAt})`) + " " + JSON.stringify(invokeCalls.focus_app));
+  delete invokeCalls.focus_app;
+  delete invokeMocks.agent_notice;
+
   // an expired face's cause stamp dies with it — a lingering stamp used to
   // ghost-pop the old reason icon on the frame after expiry, and to
   // resurrect it on any later unstamped return to that same face
@@ -1110,7 +1127,9 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
   // fetches one home for +1, a dead platform's drop vanishes, and the
   // spell ending melts whatever is left
   ev(`wxDrops.length = 0; pals.length = 0; petHome = false; boxHide = 0; setSkyMode("rain");`);
-  for (let i = 0; i < 2000; i++) { t += 33; frame(t); }
+  // stop at the first drop — a full 66s warm-up outlives the 40s melt
+  // window and flakes this check with early-spawned, already-melted drops
+  for (let i = 0; i < 2000 && ev(`wxDrops.length === 0`); i++) { t += 33; frame(t); }
   check(ev(`wxDrops.length > 0 && wxDrops.every((d) => d.plat && plats.includes(d.plat))`),
     "rain spell leaves collectible drops on live decks", ev(`JSON.stringify(wxDrops)`));
   ev(`(() => {
