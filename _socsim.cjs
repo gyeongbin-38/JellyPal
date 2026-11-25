@@ -634,6 +634,25 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
   // --- T17: expanded settings fit without wasting a scroll on large screens ---
   ev("winH=1080; setScroll=999");
   check(ev("setMaxScroll()") === 0, "all settings rows fit at 1080p");
+  check(ev("settingsRowIds().includes(17)"), "sky row is listed in settings");
+
+  // --- sky mode: manual weather override pins or clears the drizzle spell ---
+  ev(`(function(){
+    setSkyMode("rain");
+  })()`);
+  check(ev("drizzleUntil > performance.now() && drizzleKind === 'rain' && wxRainy()"),
+    "sky RAIN pins a rain spell and reads as rainy");
+  check(ev("sayBucket()") === "rain", "sky RAIN picks the rain line bucket");
+  ev(`(function(){ setSkyMode("snow"); })()`);
+  check(ev("drizzleKind === 'snow' && wxSnowy()"), "sky SNOW flips the pinned spell to snow");
+  ev(`(function(){
+    pals.length = 0;
+    pals.push({ sp: 0, x: 500, y: 1080, ph: 0, duckedWx: drizzleUntil, hideUntil: ${t + 3000} });
+    setSkyMode("clear");
+  })()`);
+  check(ev(`drizzleUntil < performance.now() && pals[0].duckedWx === drizzleUntil && !wxRainy() && !wxSnowy()`),
+    "sky CLEAR ends the spell and re-tags a sheltering pal for the all-clear");
+  ev(`(function(){ pals.length = 0; setSkyMode("auto"); })()`);
   ev("winH=460; settingsCells()");
   check(ev("setMaxScroll()") > 0 && ev("setScroll") === ev("setMaxScroll()"),
     "short-screen settings remain scrollable and clamped");
@@ -1026,6 +1045,26 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
   check(ev("pals[0].walkV < 30"),
     "U-turn sheds walk speed", ev("Math.round(pals[0].walkV)"));
   ev(`(function(){ const p = pals[0]; p.walkT = null; p.walkV = 0; p.walkWhy = null; })();`);
+
+  // JARVIS drop-file: an agent notice reacts on screen — star eyes + a
+  // spoken line; a second notice with an older seq is ignored
+  invokeMocks.agent_notice = () => Promise.resolve(JSON.stringify({ seq: 7, kind: "done", msg: "BUILD OK" }));
+  ev("agentPollAt = 0; sayUntil = 0;");
+  frame(t += 16.7);
+  await new Promise((r) => setImmediate(r));
+  frame(t += 16.7);
+  check(ev(`starUntil > ${t} && sayUntil > 0 && sayText === "BUILD OK"`),
+    "agent 'done' notice celebrates and speaks",
+    ev(`JSON.stringify({star:starUntil>${t},say:sayText,until:sayUntil>0,seq:agentSeq})`));
+  ev("sayUntil = 0; starUntil = 0;");
+  invokeMocks.agent_notice = () => Promise.resolve(JSON.stringify({ seq: 4, kind: "fail", msg: "IT BROKE" }));
+  ev("agentPollAt = 0;");
+  frame(t += 16.7);
+  await new Promise((r) => setImmediate(r));
+  frame(t += 16.7);
+  check(ev(`sayText !== 'IT BROKE' && worryUntil < ${t}`),
+    "stale agent seq never re-fires", ev(`JSON.stringify({say:sayText,w:worryUntil})`));
+  delete invokeMocks.agent_notice;
 
   // swallowed frame exceptions abort the rest of frameBody silently —
   // any FRAME crash logged during the whole run is a real regression

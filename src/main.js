@@ -2806,19 +2806,19 @@ const SIZE_STEPS = [0.8, 1, 1.2];
 // inside a clipped viewport — footer stats stay pinned to the bottom
 let setScroll = 0;
 function settingsRect() {
-  // 500px exposes the whole sectioned list plus the pinned footer on roomy
+  // 560px exposes the whole sectioned list plus the pinned footer on roomy
   // screens; shorter desktops still get the same clipped, scrollable panel.
-  const ph = Math.min(500, Math.max(220, winH - 70));
+  const ph = Math.min(560, Math.max(220, winH - 70));
   return [Math.round(winW / 2 - 100), Math.round(winH / 2 - ph / 2), 200, ph];
 }
 const SET_VIEW_TOP = 28, SET_VIEW_BOT = 34; // title gap + footer reserve
 // logical row ids — 0 VOL 1 SIZE 2 MOTION 3 PHOTO 4 ALBUM 5 POMO 6 FOCUS
 // 7 BREAK 8 SHARE 9 WEATHER 10 BOOT 11 JELLY 12 REDEEM 13 ID 14 RESET 15 QUIT
-// 16 POWER (battery saver frame cap)
+// 16 POWER (battery saver frame cap) 17 SKY (manual weather mode)
 // visual layout: captioned sections; a two-id row splits into half cells.
 // cell rects are the only hit areas — captions are decorative and gap-filling
 const SET_LAYOUT = [
-  { cap: "DISPLAY", rows: [[0], [1], [2, 16]] },
+  { cap: "DISPLAY", rows: [[0], [1], [2, 16], [17]] },
   { cap: "MEMORIES", rows: [[3, 4], [8]] },
   { cap: "TIMER", rows: [[5], [6, 7]] },
   { cap: "SYSTEM", rows: [[9, 10]] },
@@ -2835,7 +2835,7 @@ const SET_ROW_P = 30;   // row pitch (20px row + 10px air)
 const STORE_HIDDEN_ROWS = new Set([9, 10, 12]);
 function settingsRowIds() {
   const ids = [];
-  for (let i = 0; i < 17; i++) if (!STORE || !STORE_HIDDEN_ROWS.has(i)) ids.push(i);
+  for (let i = 0; i < 18; i++) if (!STORE || !STORE_HIDDEN_ROWS.has(i)) ids.push(i);
   return ids;
 }
 function setContentH() {
@@ -2924,6 +2924,11 @@ let resetBusy = false;
 // local weather — cosmetic only: umbrella in rain, snowflakes in snow.
 // polled every 30min; the Rust side resolves coarse ip geo -> open-meteo
 let weatherOn = true;
+// SKY settings row: the ambient weather spell can be forced or suppressed
+// from settings — "auto" rolls it naturally, "clear" keeps the deck dry,
+// "rain"/"snow" pin a spell until the user changes the sky back
+let skyMode = "auto";
+const SKY_MODES = ["auto", "rain", "snow", "clear"];
 let wxCode = -1;
 let wxAt = 0;
 let weatherRequest = 0;
@@ -2934,8 +2939,8 @@ let weatherBootProbeWaiting = true;
 const savedDefaultOn = (value) => value === undefined || value === true;
 const isWeatherCode = (value) => Number.isInteger(value) && value >= 0 && value <= 99;
 const wxFresh = () => weatherOn && wxCode >= 0 && Date.now() - wxAt < 45 * 60000;
-const wxRainy = () => wxFresh() && ((wxCode >= 51 && wxCode <= 67) || (wxCode >= 80 && wxCode <= 82) || wxCode >= 95);
-const wxSnowy = () => wxFresh() && ((wxCode >= 71 && wxCode <= 77) || wxCode === 85 || wxCode === 86);
+const wxRainy = () => skyMode === "rain" || (skyMode === "auto" && wxFresh() && ((wxCode >= 51 && wxCode <= 67) || (wxCode >= 80 && wxCode <= 82) || wxCode >= 95));
+const wxSnowy = () => skyMode === "snow" || (skyMode === "auto" && wxFresh() && ((wxCode >= 71 && wxCode <= 77) || wxCode === 85 || wxCode === 86));
 let bootOn = false; // launch at Windows startup (HKCU Run key)
 let autostartRequest = 0;
 let autostartQueue = Promise.resolve();
@@ -3194,6 +3199,23 @@ function setWeatherEnabled(enabled) {
     wxAt = 0;
   }
 }
+// manual sky control: pinning a spell hands it a fixed far-future id so a
+// pal that ducked for THIS rain keeps its spell tag (duckedWx === id).
+// clearing the sky ends the spell *just now* and rewrites refugee tags to
+// match, so they surface to the all-clear hop instead of a stale squint
+function setSkyMode(m) {
+  if (!SKY_MODES.includes(m) || skyMode === m) return;
+  skyMode = m;
+  const n = performance.now();
+  if (m === "rain" || m === "snow") {
+    drizzleKind = m;
+    if (drizzleUntil < n + 3500000) drizzleUntil = n + 3600000; // pin — re-pins only near expiry
+    for (const p of pals) if (p.duckedWx) p.duckedWx = drizzleUntil; // refugees keep a valid spell tag
+  } else if (n < drizzleUntil) {
+    drizzleUntil = n - 1;
+    for (const p of pals) if (p.duckedWx) p.duckedWx = drizzleUntil;
+  }
+}
 setInterval(pollWeather, 30 * 60000);
 setTimeout(() => {
   weatherBootProbeWaiting = false;
@@ -3356,6 +3378,7 @@ invokeAsync("load_state").then((txt) => {
   customNames = sanitizeCustomNames(s.names);
   shinyOwned = sanitizeShinyOwned(s.shiny);
   weatherOn = savedDefaultOn(s.weatherOn);
+  skyMode = SKY_MODES.includes(s.skyMode) ? s.skyMode : "auto";
   // If an unusually slow load outlived the four-second boot timer, resume the
   // one missed probe now that the persisted privacy choice is authoritative.
   if (!weatherBootProbeWaiting) pollWeather();
@@ -3481,7 +3504,7 @@ function persist() {
       reduceMotion, treatKind, stats, volStep, pomo, dexMile, saverMode,
       lastDaily, dailyStreak, lastWeekly, pomoFocusMin, pomoBreakMin,
       redeemed, redeemedBound, uid, claimed: claimedNonces, iapTx: iapTxIds,
-      panelPos, petHome, weatherOn, bootOn, lastSelfie, hints: hintsSeen,
+      panelPos, petHome, weatherOn, skyMode, bootOn, lastSelfie, hints: hintsSeen,
       props: { bowl: bowl ? { x: bowl.x, y: bowl.y, fill: bowl.fill ?? 2 } : null, cushion: cushion ? { x: cushion.x, y: cushion.y } : null, box: box ? { x: box.x, y: box.y } : null, plant: plant ? { x: plant.x, y: plant.y } : null, music: music ? { x: music.x, y: music.y } : null, mirror: mirror ? { x: mirror.x, y: mirror.y } : null, mat: mat ? { x: mat.x, y: mat.y } : null, jar: jar ? { x: jar.x, y: jar.y, fill: jar.fill ?? 2 } : null },
       bond, pairBonds, lastEgg, fab: [fabX, fabY],
       names: customNames, shiny: shinyOwned,
@@ -4629,7 +4652,11 @@ function palWhy(p) {
      p.propGoal ? (PROP_WHY[p.propGoal.kind] || "ERRAND") :
      p.accAct ? "DOODAD" :
      p.act ? (ACT_WHY[p.act.k] || "PLAY") :
-     p.follow ? "FOLLOWING" : p.carry ? "DELIVERY" : p.walkWhy || null);
+     p.follow ? "FOLLOWING" : p.carry ? "DELIVERY" :
+     // the walk cause only counts while the walk is live — interrupted
+     // walks clear walkT at ~27 sites but not always the why tag, so a
+     // stale "STROLLING" would otherwise keep naming a standing pal's faces
+     (p.walkT !== null ? (p.walkWhy || "WANDERING") : null));
 }
 // a fresh face gets its cause stamped; an older face keeps its own why
 function stampWhy(p, why) {
@@ -5710,6 +5737,10 @@ cv.addEventListener("pointerdown", (e) => {
       const previous = bootOn;
       bootOn = !previous;
       requestAutostart(bootOn, previous, true);
+      dirty = true; sfx.pop();
+    }
+    else if (inRow(rowFor(17))) {
+      setSkyMode(SKY_MODES[(SKY_MODES.indexOf(skyMode) + 1) % SKY_MODES.length]);
       dirty = true; sfx.pop();
     }
     else if (inRow(rowFor(11))) {
@@ -9962,7 +9993,12 @@ function frameBody(now) {
   const ds = (now / 1000) | 0;
   if (ds !== drizSec) {
     drizSec = ds;
-    if (now > drizzleNext && !reduceMotion && !petHome && now >= boxHide && Math.random() < 0.3) {
+    if (skyMode === "rain" || skyMode === "snow") {
+      // a pinned sky never expires — re-arm the spell a breath before it
+      // would lapse so the weather reads continuous, not stuttering
+      drizzleKind = skyMode;
+      if (drizzleUntil < now + 5000) drizzleUntil = now + 3600000;
+    } else if (skyMode !== "clear" && now > drizzleNext && !reduceMotion && !petHome && now >= boxHide && Math.random() < 0.3) {
       drizzleUntil = now + 24000 + Math.random() * 24000;
       drizzleNext = now + 300000 + Math.random() * 300000; // roughly 5-10 min dry spells
       const mo = new Date().getMonth();
@@ -9987,7 +10023,6 @@ function frameBody(now) {
         if (Math.random() < 0.5) { happyUntil = now + 800; petStamp("SNOW", "happy"); }
       }
     } else {
-      snowAcc = Math.max(0, snowAcc - dt * 0.04);
       // the rain waters the plant — the pot perks visibly while it drinks
       if (plant && Math.random() < dt * 0.1) plant.steamUntil = Date.now() + 3000;
     }
@@ -10014,6 +10049,10 @@ function frameBody(now) {
       sfx.drop();
     }
   }
+  // the dusting melts whenever it isn't actively snowing — the decay used
+  // to live inside the rain branch only, so a floor left white by a snow
+  // spell stayed white until the next rain spell bothered to wash it
+  if (!(now < drizzleUntil && drizzleKind === "snow")) snowAcc = Math.max(0, snowAcc - dt * 0.04);
   // the rainbow beat: when a rain spell ends there's a one-in-five chance
   // of a little arc in the sky — snow gets no rainbow, just the quiet
   if (wasDrizzle && now > drizzleUntil && drizzleKind === "rain") wetUntil = now + 12000;
@@ -14377,11 +14416,11 @@ function frameBody(now) {
     const NAME = { 0: "SOUND", 1: "SIZE", 2: "MOTION", 3: "PHOTO", 4: "ALBUM", 5: "POMO",
       6: "FOCUS", 7: "BREAK", 8: "SHARE", 9: "WEATHER", 10: "BOOT", 11: "JELLY",
       12: "REDEEM", 13: "MY ID", 14: Date.now() < resetArm ? "SURE?" : "RESET", 15: "QUIT",
-      16: "POWER" };
+      16: "POWER", 17: "SKY" };
     const VAL = { 0: vol <= 0.001 ? "OFF" : `${Math.round(vol * 100)}%`, 1: `${sizeMul.toFixed(1)}X`,
       2: reduceMotion ? "LOW" : "FULL", 5: pomoLbl, 6: `${pomoFocusMin}M`, 7: `${pomoBreakMin}M`,
       9: weatherOn ? "ON" : "OFF", 10: bootOn ? "ON" : "OFF", 13: uid ? uid.slice(0, 8) : "-",
-      16: SAVER_LABEL[saverMode] };
+      16: SAVER_LABEL[saverMode], 17: skyMode.toUpperCase() };
     const DOOR = new Set([3, 4, 8, 11, 12]);
     // rows paint inside a clipped viewport — the title and the footer
     // stats stay put while the list slides underneath
