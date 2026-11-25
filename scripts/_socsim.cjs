@@ -1277,6 +1277,34 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
     "name sanitizer still drops hostile names");
   ev(`delete customNames[SPECIES[5].id];`);
 
+  // #11 trophies: achCheckAll pays jelly once per def over lifetime counters.
+  // pre-mark every def except the two under test — counters accumulated by
+  // earlier tests would otherwise unlock extra trophies in the same sweep
+  ev(`stats.pulls = 0; achDone = {}; for (const id of ACH_IDS) if (id !== "pull1" && id !== "pull25") achDone[id] = 1;`);
+  const achJelly0 = ev(`jelly`);
+  ev(`stats.pulls = 1;`);
+  ev(`achCheckAll();`);
+  check(ev(`achDone.pull1 === 1 && jelly === ${achJelly0} + ACH_DEFS.pull1.g`),
+    "trophy unlocks at the threshold and pays jelly once",
+    ev(`JSON.stringify({done:achDone.pull1,j:jelly,g:ACH_DEFS.pull1.g})`));
+  const achJelly1 = ev(`jelly`);
+  ev(`achCheckAll();`);
+  check(ev(`jelly`) === achJelly1, "an unlocked trophy never repays",
+    ev(`JSON.stringify({j:jelly})`));
+  check(ev(`stats.pulls = 24; achCheckAll(); achDone.pull25`) === undefined &&
+    ev(`stats.pulls = 25; achCheckAll(); achDone.pull25 === 1`),
+    "tiered trophies fire at their own thresholds", ev(`JSON.stringify(achDone)`));
+  check(ev(`sanitizeAchDone({pull1:1,bogus:1,night:true})`) &&
+    ev(`JSON.stringify(sanitizeAchDone({pull1:1,bogus:1,night:true}))`) === `{"pull1":1,"night":1}`,
+    "achDone sanitizer keeps known ids, drops bogus",
+    ev(`JSON.stringify(sanitizeAchDone({pull1:1,bogus:1,night:true}))`));
+  check(ev(`(()=>{const s=sanitizeStats({pulls:0,breeds:0,shiny:0,treats:0,plays:0,pets:5,photos:2,errands:3,quests:4,drops:1});return s.pets===5&&s.photos===2&&s.errands===3&&s.quests===4&&s.drops===1})()`),
+    "stats sanitizer keeps the new lifetime counters");
+  ev(`achSeenN = 0; questSeenN = 99;`);
+  check(ev(`missions.filter(q=>q.done).length > questSeenN || Object.keys(achDone).length > achSeenN`),
+    "quest badge also flags unseen trophies");
+  ev(`achDone = {}; stats.pulls = 0; achSeenN = 0; questSeenN = 0;`);
+
   // swallowed frame exceptions abort the rest of frameBody silently —
   // any FRAME crash logged during the whole run is a real regression
   check(!crashMsgs.some((m) => m.startsWith("FRAME ")),

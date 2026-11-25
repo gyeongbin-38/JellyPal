@@ -111,7 +111,7 @@ const WHY_ICON = {
   "MIRROR": "box", "MAT": "box", "DELIVERY": "box", "FORAGING": "box",
   "SHOVED": "bolt", "SHOVED!": "bolt", "BUMP!": "bolt", "STEPPED ON": "bolt",
   "POKED": "bolt", "TICKLED": "bolt", "FAST BALL": "bolt", "RATTLED": "bolt",
-  "WHEE!": "star",
+  "WHEE!": "star", "TROPHY": "star",
   "TAG": "flag", "REMATCH": "flag", "FINAL ROUND": "flag", "RACE": "flag",
   "LEAPFROG": "flag", "STAREDOWN": "flag", "MIRROR PLAY": "flag",
   "PIGGYBACK": "flag", "THE WAVE": "flag", "PLAY": "flag",
@@ -1965,6 +1965,40 @@ const MISSION_IDS = Object.keys(MISSION_DEFS);
 let missions = [];       // [{id, n, done}] — today's three, persisted
 let missionDay = "";     // localIsoDayKey the list was rolled for
 let questSeenN = 0;      // how many completed missions the panel has shown
+// ---------- trophies: permanent achievements over lifetime counters ----------
+// progress renders as min(v,n)/n; done pays g jelly once, then the row ticks.
+// `sec` entries hide title+desc behind ??? until unlocked. checks run on the
+// 3s agent-poll cadence — cheap enough that ~20 defs cost nothing per pass.
+const ACH_DEFS = {
+  pull1:    { t: "FIRST PULL",    d: "PULL THE CAPSULE ONCE",      n: 1,    v: () => stats.pulls,    g: 20 },
+  pull25:   { t: "CAPSULE HABIT", d: "PULL 25 TIMES",              n: 25,   v: () => stats.pulls,    g: 60 },
+  breed1:   { t: "MATCHMAKER",    d: "BREED A PAIR",               n: 1,    v: () => stats.breeds,   g: 30 },
+  breed10:  { t: "BREEDER",       d: "BREED 10 PAIRS",             n: 10,   v: () => stats.breeds,   g: 120 },
+  shiny1:   { t: "SHINY!",        d: "FIND A SHINY SLIME",         n: 1,    v: () => stats.shiny,    g: 100 },
+  treat25:  { t: "SNACK BAR",     d: "SERVE 25 SNACKS",            n: 25,   v: () => stats.treats,   g: 30 },
+  treat200: { t: "FULL PANTRY",   d: "SERVE 200 SNACKS",           n: 200,  v: () => stats.treats,   g: 150 },
+  play25:   { t: "PLAYMATE",      d: "PLAY 25 TIMES",              n: 25,   v: () => stats.plays,    g: 30 },
+  pet50:    { t: "BELLY RUB",     d: "PET THE SLIME 50 TIMES",     n: 50,   v: () => stats.pets,     g: 30 },
+  pet200:   { t: "SCRATCH FEVER", d: "PET THE SLIME 200 TIMES",    n: 200,  v: () => stats.pets,     g: 120 },
+  focus1:   { t: "LOCKED IN",     d: "FOCUS 10 MIN TOTAL",         n: 600,  v: () => stats.focusSec, g: 20 },
+  focus2:   { t: "DEEP WORKER",   d: "FOCUS 2 HOURS TOTAL",        n: 7200, v: () => stats.focusSec, g: 100 },
+  photo1:   { t: "FIRST SHOT",    d: "TAKE A PHOTO",               n: 1,    v: () => stats.photos,   g: 15 },
+  errand10: { t: "COURIER",       d: "COMPLETE 10 PAL DELIVERIES", n: 10,   v: () => stats.errands,  g: 40 },
+  quest15:  { t: "DAILY GRIND",   d: "FINISH 15 DAILY QUESTS",     n: 15,   v: () => stats.quests,   g: 60 },
+  drop1:    { t: "RAINCATCHER",   d: "COLLECT A SKY DROP",         n: 1,    v: () => stats.drops,    g: 20 },
+  level5:   { t: "GROWN UP",      d: "REACH LEVEL 5",              n: 5,    v: () => level,          g: 40 },
+  dex62:    { t: "DEX MASTER",    d: "OWN ALL 62 SPECIES",         n: 62,   v: () => owned.length,   g: 300 },
+  decor3:   { t: "INTERIOR",      d: "PLACE 3 PROPS IN ONE ROOM",  n: 3,    v: () => Math.max(0, ...Object.values(roomProps).map((r) => Array.isArray(r) ? r.length : 0)), g: 30 },
+  dye1:     { t: "DYE JOB",       d: "DYE A NAMEPLATE",            n: 1,    v: () => Object.keys(nameDye).length, g: 20 },
+  locked1:  { t: "TAILOR-MADE",   d: "EQUIP A SPECIES-LOCKED GEAR",n: 1,    v: () => Object.values(accEquip).filter((a) => a && ACCS.find((x) => x.id === a && x.only)).length, g: 40 },
+  night:    { t: "NIGHT OWL",     d: "HANG OUT PAST 3AM",          n: 1,    v: () => { const h = new Date().getHours(); return h >= 3 && h < 5 && state !== "sleeping" ? 1 : 0; }, g: 30, sec: true },
+};
+const ACH_IDS = Object.keys(ACH_DEFS);
+const ACH_PAGE = 7;       // trophy rows per panel page
+let achDone = {};         // {id: 1} — persisted, once each
+let achSeenN = 0;         // unlocked count already shown — drives the badge
+let questTab = "today";   // "today" | "trophy" — the quest panel's two pages
+let achPage = 0;
 let owned = ["sprout"];
 let active = 0;
 let dirty = false;
@@ -2225,11 +2259,11 @@ let albumDeleteName = null; // serialize delete IPC and bind completion to its f
 let albumListRequest = null; // repeated ALBUM clicks share one catalog IPC
 let albumOpenWanted = false; // Escape/close invalidates a late catalog response
 let albumFolderRequest = null; // one OS folder launch at a time
-let stats = { pulls: 0, breeds: 0, shiny: 0, treats: 0, plays: 0 };
+let stats = { pulls: 0, breeds: 0, shiny: 0, treats: 0, plays: 0, focusSec: 0, pets: 0, photos: 0, errands: 0, quests: 0, drops: 0 };
 function sanitizeStats(value) {
-  const clean = { pulls: 0, breeds: 0, shiny: 0, treats: 0, plays: 0, focusSec: 0 };
+  const clean = { pulls: 0, breeds: 0, shiny: 0, treats: 0, plays: 0, focusSec: 0, pets: 0, photos: 0, errands: 0, quests: 0, drops: 0 };
   if (!value || typeof value !== "object" || Array.isArray(value)) return clean;
-  for (const key of ["pulls", "breeds", "shiny", "treats", "plays"]) {
+  for (const key of ["pulls", "breeds", "shiny", "treats", "plays", "pets", "photos", "errands", "quests", "drops"]) {
     const n = value[key];
     if (Number.isFinite(n) && n >= 0) clean[key] = Math.min(Number.MAX_SAFE_INTEGER - 1, Math.floor(n));
   }
@@ -2384,12 +2418,14 @@ function toyboxStripRect() {
   const safe = usableRectAt(ix, iy);
   return [Math.max(safe.left + 8, ix - 328), iy, 324, 34]; // nine prop slots
 }
-// daily-quest panel: hangs left of the quest item — three rows, one per
-// mission (label + progress + reward), display only
+// daily-quest panel: hangs left of the quest item. two pages share the
+// frame — TODAY (three mission rows) and TROPHY (paged achievement rows),
+// so the height follows whichever tab is showing
 function questPanelRect() {
   const [ix, iy] = fabItemRect(3);
   const safe = usableRectAt(ix, iy);
-  return [Math.max(safe.left + 8, ix - 196), iy - 10, 188, 54];
+  const h = questTab === "today" ? 68 : 126;
+  return [Math.max(safe.left + 8, ix - 196), iy - 10, 188, h];
 }
 let egg = null;            // {x, y, plat, t0, wob} — today's mystery egg
 let lastEgg = "";          // date key of the day the egg last dropped
@@ -3542,6 +3578,8 @@ invokeAsync("load_state").then((txt) => {
   missions = sanitizeMissions(s.missions);
   missionDay = typeof s.missionDay === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s.missionDay) ? s.missionDay : "";
   questSeenN = sanitizeSavedInt(s.questSeenN, 0, 3);
+  achDone = sanitizeAchDone(s.achDone);
+  achSeenN = sanitizeSavedInt(s.achSeenN, 0, ACH_IDS.length);
   // If an unusually slow load outlived the four-second boot timer, resume the
   // one missed probe now that the persisted privacy choice is authoritative.
   if (!weatherBootProbeWaiting) pollWeather();
@@ -3679,12 +3717,38 @@ function missionTick(id) {
   m.n++;
   if (m.n >= MISSION_DEFS[m.id].n) {
     m.done = true;
+    stats.quests = addSavedInt(stats.quests, 1);
     jelly = addSavedInt(jelly, MISSION_DEFS[m.id].g);
     bangs.push({ x: petX, y: petY - 130, life: 2.4, t: `QUEST +${MISSION_DEFS[m.id].g}` });
     sfx.reveal();
     if (questOpen) questSeenN = missions.filter((q) => q.done).length;
   }
   dirty = true;
+}
+// trophies sweep: runs on the agent-poll cadence — walks every def, pays
+// the jelly once, and records it so re-checking costs nothing
+function achCheckAll() {
+  let hit = false;
+  for (const id of ACH_IDS) {
+    if (achDone[id]) continue;
+    const d = ACH_DEFS[id];
+    let v = 0;
+    try { v = d.v() || 0; } catch { v = 0; }
+    if (!(v >= d.n)) continue;
+    achDone[id] = 1;
+    jelly = addSavedInt(jelly, d.g);
+    bangs.push({ x: petX, y: petY - 144, life: 2.4, t: `TROPHY +${d.g}` });
+    hit = true;
+  }
+  if (hit) { petStamp("TROPHY", "star"); sfx.reveal(); dirty = true; }
+}
+function sanitizeAchDone(value) {
+  const clean = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return clean;
+  for (const id of Object.keys(value)) {
+    if (id in ACH_DEFS && value[id]) clean[id] = 1;
+  }
+  return clean;
 }
 function sanitizeMissions(v) {
   if (!Array.isArray(v)) return [];
@@ -3714,7 +3778,7 @@ function persist() {
       muted, vol, sizeMul, macSizeBaseline, seen, savedAt: Date.now(),
       reduceMotion, treatKind, stats, volStep, pomo, dexMile, saverMode,
       lastDaily, dailyStreak, lastWeekly, pomoFocusMin, pomoBreakMin,
-      missions, missionDay, questSeenN,
+      missions, missionDay, questSeenN, achDone, achSeenN,
       redeemed, redeemedBound, uid, claimed: claimedNonces, iapTx: iapTxIds,
       panelPos, petHome, weatherOn, skyMode, hideMode, bootOn, lastSelfie, hints: hintsSeen,
       props: { bowl: bowl ? { x: bowl.x, y: bowl.y, fill: bowl.fill ?? 2 } : null, cushion: cushion ? { x: cushion.x, y: cushion.y } : null, box: box ? { x: box.x, y: box.y } : null, plant: plant ? { x: plant.x, y: plant.y } : null, music: music ? { x: music.x, y: music.y } : null, mirror: mirror ? { x: mirror.x, y: mirror.y } : null, mat: mat ? { x: mat.x, y: mat.y } : null, jar: jar ? { x: jar.x, y: jar.y, fill: jar.fill ?? 2 } : null },
@@ -5897,6 +5961,7 @@ cv.addEventListener("pointerdown", (e) => {
           saveCanvasPng(cv, name).then(() => {
             bangs.push({ x: winW / 2, y: 100, life: 2, t: "SAVED" });
             sfx.reveal();
+            stats.photos = addSavedInt(stats.photos, 1);
             missionTick("photo");
             // if the album was left open under the hide, fold the new
             // shot in and jump to it
@@ -6042,7 +6107,7 @@ cv.addEventListener("pointerdown", (e) => {
       else if (id === "quest") {
         questOpen = !questOpen;
         // the badge counts completed quests as seen the moment they render
-        if (questOpen) { questSeenN = missions.filter((q) => q.done).length; dirty = true; }
+        if (questOpen) { questSeenN = missions.filter((q) => q.done).length; achSeenN = Object.keys(achDone).length; dirty = true; }
       }
       else if (id === "barn") { fabOpen = false; toggleRanch(); }
       else if (id === "gear") { fabOpen = false; if (settingsOpen) closeSettings(); else { settingsOpen = true; setScroll = 0; } }
@@ -6129,11 +6194,23 @@ cv.addEventListener("pointerdown", (e) => {
       }
       toyboxOpen = false; // clicked off the strip — fold the chooser
     }
-    // quest panel: info only — clicks inside land but do nothing, a click
-    // anywhere else folds it like the toybox strip
+    // quest panel: the tab row and the trophy pager react; other clicks
+    // inside land but do nothing, a click anywhere else folds the panel
+    // like the toybox strip
     if (questOpen) {
       const [qx, qy, qw, qh] = questPanelRect();
-      if (mx >= qx && mx <= qx + qw && my >= qy && my <= qy + qh) return;
+      if (mx >= qx && mx <= qx + qw && my >= qy && my <= qy + qh) {
+        if (my >= qy && my <= qy + 14) {
+          if (mx <= qx + 44) { questTab = "today"; sfx.pop(); return; }
+          if (mx <= qx + 100) { questTab = "trophy"; sfx.pop(); return; }
+        }
+        if (questTab === "trophy" && my >= qy + qh - 14) {
+          const pages = Math.max(1, Math.ceil(ACH_IDS.length / ACH_PAGE));
+          if (mx <= qx + 24 && achPage > 0) { achPage--; sfx.pop(); return; }
+          if (mx >= qx + qw - 24 && achPage < pages - 1) { achPage++; sfx.pop(); return; }
+        }
+        return;
+      }
       questOpen = false;
     }
     fabOpen = false; // clicked outside the menu — fold it up
@@ -6168,6 +6245,7 @@ cv.addEventListener("pointerdown", (e) => {
     if (di >= 0) {
       const d = wxDrops.splice(di, 1)[0];
       jelly = addSavedInt(jelly, 1);
+      stats.drops = addSavedInt(stats.drops, 1);
       dirty = true;
       for (let k = 0; k < 6; k++) fx.push({ x: d.x + (Math.random() - 0.5) * 12, y: d.y - 6 - Math.random() * 8, vx: (Math.random() - 0.5) * 50, vy: -24 - Math.random() * 30, life: 0.5, c: d.k === "snow" ? "#eef4ff" : "#6fc6e8" });
       bangs.push({ x: d.x, y: d.y - 26, life: 1.4, t: "+1" });
@@ -10206,6 +10284,7 @@ function frameBody(now) {
         rubCd = now + 3500;
         contentUntil = now + 2400;
         petUntil = now + 900;
+        stats.pets = addSavedInt(stats.pets, 1);
         missionTick("pet");
         if (Math.random() < 0.5) { embarUntil = now + 3100; petStamp("PETTED", "embar"); } // blush tail after the melt
         squashV += 4;
@@ -10859,6 +10938,7 @@ function frameBody(now) {
         hide: hideMode, fs: !!fsActive,
       }),
     });
+    achCheckAll(); // trophy sweep rides the same 3s cadence
     invokeAsync("agent_notice").then((raw) => {
       if (typeof raw !== "string" || !raw) return;
       let n = null;
@@ -13286,6 +13366,7 @@ function frameBody(now) {
               const di = wxDrops.indexOf(pg.drop);
               if (di >= 0 && Math.abs(pg.drop.y - p.y) < 30 && Math.abs(pg.drop.x - p.x) < 26) {
                 wxDrops.splice(di, 1);
+                stats.drops = addSavedInt(stats.drops, 1);
                 for (let k = 0; k < 6; k++) fx.push({ x: p.x + (Math.random() - 0.5) * 18, y: p.y - 10 - Math.random() * 16, vx: (Math.random() - 0.5) * 40, vy: -20 - Math.random() * 26, life: 0.55, c: pg.drop.k === "snow" ? "#e8f4ff" : "#9ec8e8", spr: "mote" });
                 p.carry = { n: 1, since: now };
                 p.squashV += 3;
@@ -13310,6 +13391,7 @@ function frameBody(now) {
               // pal gets the satisfaction
               if (!petHome && Math.abs(petX - p.x) < 95 && Math.abs(petY - p.y) < 40) {
                 jelly = addSavedInt(jelly, p.carry.n);
+                stats.errands = addSavedInt(stats.errands, 1);
                 missionTick("errand");
                 dirty = true;
                 p.carry = null;
@@ -15198,7 +15280,7 @@ function frameBody(now) {
       // quest badge: a red dot flags rewards banked since the panel last
       // rendered — completed quests are auto-paid, so it means "look, a
       // quest finished" not "come claim"
-      if (id === "quest" && missions.filter((q) => q.done).length > questSeenN) {
+      if (id === "quest" && (missions.filter((q) => q.done).length > questSeenN || Object.keys(achDone).length > achSeenN)) {
         ctx.fillStyle = "#e05a6e";
         ctx.fillRect(ix + iw - 7, iy + 1, 5, 5);
       }
@@ -15221,8 +15303,9 @@ function frameBody(now) {
         ctx.globalAlpha = 1;
       }
     }
-    // quest panel: today's three missions — label, n/N progress, reward or
-    // a done-tick. info only; rewards already paid out on completion
+    // quest panel: TODAY shows the three daily missions; TROPHY pages
+    // through the permanent achievements. rewards auto-pay on completion,
+    // so both pages are display-only
     if (questOpen && fabOpen) {
       missionRollCheck();
       const [qx, qy, qw, qh] = questPanelRect();
@@ -15233,13 +15316,35 @@ function frameBody(now) {
       ctx.lineWidth = 2;
       ctx.strokeRect(qx + 0.5, qy + 0.5, qw - 1, qh - 1);
       ctx.globalAlpha = 1;
-      drawText(ctx, "TODAY", qx + 6, qy + 4, 1, "#a8845c", null, true);
-      for (let i = 0; i < missions.length; i++) {
-        const m = missions[i], d = MISSION_DEFS[m.id];
-        const my2 = qy + 14 + i * 13;
-        const lbl = `${d.t} ${Math.min(m.n, d.n)}/${d.n}`;
-        drawText(ctx, lbl, qx + 6, my2, 1, m.done ? "#a89478" : "#5c4632", null, true);
-        drawText(ctx, m.done ? "OK" : `+${d.g}`, qx + qw - 6 - textW(m.done ? "OK" : `+${d.g}`, 1), my2, 1, m.done ? "#4c9e50" : "#c98a2e", null, true);
+      drawText(ctx, "TODAY", qx + 6, qy + 4, 1, questTab === "today" ? "#5c4632" : "#b09a78", null, true);
+      drawText(ctx, "TROPHY", qx + 48, qy + 4, 1, questTab === "trophy" ? "#5c4632" : "#b09a78", null, true);
+      if (questTab === "today") {
+        for (let i = 0; i < missions.length; i++) {
+          const m = missions[i], d = MISSION_DEFS[m.id];
+          const my2 = qy + 16 + i * 13;
+          const lbl = `${d.t} ${Math.min(m.n, d.n)}/${d.n}`;
+          drawText(ctx, lbl, qx + 6, my2, 1, m.done ? "#a89478" : "#5c4632", null, true);
+          drawText(ctx, m.done ? "OK" : `+${d.g}`, qx + qw - 6 - textW(m.done ? "OK" : `+${d.g}`, 1), my2, 1, m.done ? "#4c9e50" : "#c98a2e", null, true);
+        }
+      } else {
+        const pages = Math.max(1, Math.ceil(ACH_IDS.length / ACH_PAGE));
+        achPage = Math.max(0, Math.min(pages - 1, achPage));
+        const ids = ACH_IDS.slice(achPage * ACH_PAGE, achPage * ACH_PAGE + ACH_PAGE);
+        for (let i = 0; i < ids.length; i++) {
+          const d = ACH_DEFS[ids[i]], done = achDone[ids[i]] === 1;
+          const my2 = qy + 16 + i * 13;
+          let v = 0;
+          try { v = done ? d.n : (d.v() || 0); } catch { v = 0; }
+          const lbl = done || !d.sec ? d.t : "???";
+          const right = done ? "OK" : `${Math.min(v, d.n)}/${d.n}`;
+          drawText(ctx, lbl, qx + 6, my2, 1, done ? "#a89478" : "#5c4632", null, true);
+          drawText(ctx, right, qx + qw - 6 - textW(right, 1), my2, 1, done ? "#4c9e50" : "#c98a2e", null, true);
+        }
+        const py2 = qy + qh - 12;
+        drawText(ctx, "<", qx + 8, py2, 1, achPage > 0 ? "#5c4632" : "#c9bba4", null, true);
+        const pg = `${achPage + 1}/${pages}`;
+        drawText(ctx, pg, qx + qw / 2 - textW(pg, 1) / 2, py2, 1, "#a8845c", null, true);
+        drawText(ctx, ">", qx + qw - 14, py2, 1, achPage < pages - 1 ? "#5c4632" : "#c9bba4", null, true);
       }
     }
   }
