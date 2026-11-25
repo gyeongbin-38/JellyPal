@@ -1141,6 +1141,24 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
   check(ev(`wxDrops.length === 0`), "melted drops fully evaporate", ev(`wxDrops.length`));
   ev(`setSkyMode("auto");`);
 
+  // nameplate dyes + trait-locked gear: dyeColor resolves an assigned
+  // dye (static or aurora-animated), accFits gates the locked line, and
+  // the equip sanitizer drops mismatched pairs outright
+  ev(`owned.push("tide"); accOwned.push("fin");`);
+  check(ev(`accFits("fin", "tide") === true && accFits("fin", "sprout") === false && accFits("cap", "sprout") === true`),
+    "trait-locked gear fits only its family",
+    ev(`JSON.stringify({ft:accFits("fin","tide"),fs:accFits("fin","sprout"),cs:accFits("cap","sprout")})`));
+  check(ev(`JSON.stringify(sanitizeAccEquip({ tide: "fin", sprout: "fin" })) === JSON.stringify({ tide: "fin" })`),
+    "equip sanitizer drops a locked item on the wrong species",
+    ev(`JSON.stringify(sanitizeAccEquip({ tide: "fin", sprout: "fin" }))`));
+  ev(`dyesOwned = ["rose", "aurora"]; nameDye = { sprout: "rose" };`);
+  check(ev(`dyeColor("sprout", 0) === "#e0558a" && dyeColor("tide", 0) === null`),
+    "an assigned dye colors the name, an undyed one stays default",
+    ev(`JSON.stringify({s:dyeColor("sprout",0),t:dyeColor("tide",0)})`));
+  check(ev(`nameDye.sprout = "aurora"; dyeColor("sprout", 1).indexOf("hsl") === 0`),
+    "aurora resolves to a live hue instead of a flat swatch", ev(`dyeColor("sprout", 1)`));
+  ev(`nameDye = {}; dyesOwned = [];`);
+
   // swallowed frame exceptions abort the rest of frameBody silently —
   // any FRAME crash logged during the whole run is a real regression
   check(!crashMsgs.some((m) => m.startsWith("FRAME ")),

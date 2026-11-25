@@ -574,6 +574,12 @@ const ACCS = [
   { id: "monocle", name: "MONOCLE", dy: 9, cost: 800, prem: true },
   { id: "tiara", name: "TIARA", dy: -1, cost: 1000, prem: true },
   { id: "wings", name: "WINGS", dy: 4, cost: 1400, prem: true },
+  // trait-locked line: gear only one family can wear — the signature
+  // look for a main, and a reason to chase that family's next member
+  { id: "fin", name: "DORSAL", dy: -3, cost: 400, prem: true, only: "drip" },
+  { id: "pyro", name: "EMBERDO", dy: -4, cost: 400, prem: true, only: "spark" },
+  { id: "cowl", name: "COWL", dy: -1, cost: 400, prem: true, only: "wisp" },
+  { id: "starlens", name: "STARLENS", dy: 9, cost: 400, prem: true, only: "glint" },
 ];
 // accessory secondary motion: each doodad class reacts differently to
 // the body spring — rigid hats tip and lag, face gear slides a hair,
@@ -584,10 +590,11 @@ const ACC_MOTION = {
   wiz: "hat", santa: "hat", pumpkin: "hat", beret: "hat", horns: "hat",
   band: "hat", prop: "hat", phones: "hat", mohawk: "hat", tiara: "hat",
   specs: "face", shades: "face", monocle: "face", patch: "face",
-  stache: "face", clip: "face",
+  stache: "face", clip: "face", starlens: "face",
   bow: "tail", ribbon: "tail", scarf: "tail", flower: "tail",
   antenna: "tail", leaf: "tail",
-  halo: "float", wings: "float",
+  halo: "float", wings: "float", pyro: "float",
+  fin: "hat", cowl: "hat",
 };
 let accMV = null; // {jig, lean, bob, sq, t, ph} — wearer motion snapshot
 function drawAcc(c, id, x, y, u) {
@@ -976,6 +983,62 @@ function drawAccRaw(c, id, x, y, u) {
     c.rotate(-0.15);
     c.drawImage(img, 0, -h, w, h);
     c.restore();
+  } else if (id === "fin") {
+    // drip-only dorsal: a little shark triangle riding the head — dark
+    // blue base, lighter crest, a notch of foam at the front edge
+    c.fillStyle = "#3a6fa8";
+    c.fillRect(x - 2 * u, ay, 4 * u, 2 * u);
+    c.fillRect(x - u, ay - 2 * u, 3 * u, 2 * u);
+    c.fillRect(x, ay - 4 * u, 2 * u, 2 * u);
+    c.fillRect(x + u, ay - 5 * u, u, u);
+    c.fillStyle = "#5b9bd8";
+    c.fillRect(x + u, ay - 4 * u, u, 4 * u);
+    c.fillRect(x + u, ay - u, 2 * u, u);
+    c.fillStyle = "#dff3ff";
+    c.fillRect(x - 3 * u, ay + u, 2 * u, u);
+  } else if (id === "pyro") {
+    // spark-only ember tuft: a three-tongue flame that reads at any
+    // scale — red skirt, orange body, yellow core
+    c.fillStyle = "#d84a2a";
+    c.fillRect(x - 3 * u, ay + u, 2 * u, 3 * u);
+    c.fillRect(x + u, ay + u, 2 * u, 3 * u);
+    c.fillRect(x - u, ay, 2 * u, 4 * u);
+    c.fillStyle = "#f0813a";
+    c.fillRect(x - 2 * u, ay + u, u, 2 * u);
+    c.fillRect(x + u, ay + u, u, 2 * u);
+    c.fillRect(x - u * 0.5, ay - u, u, 3 * u);
+    c.fillStyle = "#ffd75e";
+    c.fillRect(x - u * 0.5, ay + u, u, 2 * u);
+    c.fillRect(x - u * 0.5, ay - 2 * u, u * 0.5, u);
+  } else if (id === "cowl") {
+    // wisp-only shade hood: a deep cowl with two trailing tails and a
+    // single pale eye-slit — the hood eats light, the slit gives it back
+    c.fillStyle = "#2c2440";
+    c.fillRect(x - 6 * u, ay + u, 12 * u, 3 * u);
+    c.fillRect(x - 5 * u, ay - u, 10 * u, 2 * u);
+    c.fillStyle = "#1e1830";
+    c.fillRect(x - 6 * u, ay + 3 * u, 3 * u, 4 * u);
+    c.fillRect(x + 3 * u, ay + 3 * u, 3 * u, 4 * u);
+    c.fillStyle = "#8fd4f0";
+    c.fillRect(x - u, ay + 2 * u, 2 * u, u);
+    c.fillStyle = "#4a3f68";
+    c.fillRect(x - 5 * u, ay + 4 * u, 2 * u, u);
+    c.fillRect(x + 3 * u, ay + 4 * u, 2 * u, u);
+  } else if (id === "starlens") {
+    // glint-only star lens: a gold-rimmed crystal monocle with a
+    // four-point star caught inside it
+    c.fillStyle = "#eec23f";
+    c.fillRect(x - 4 * u, ay, 8 * u, u);
+    c.fillRect(x - 4 * u, ay + 5 * u, 8 * u, u);
+    c.fillRect(x - 4 * u, ay + u, u, 4 * u);
+    c.fillRect(x + 3 * u, ay + u, u, 4 * u);
+    c.fillStyle = "#a8d8f8";
+    c.fillRect(x - 3 * u, ay + u, 6 * u, 4 * u);
+    c.fillStyle = "#fff2b0";
+    c.fillRect(x - u * 0.5, ay + u, u, 3 * u);
+    c.fillRect(x - u, ay + 2 * u, 2 * u, u);
+    c.fillStyle = "#ffffff";
+    c.fillRect(x - 2 * u, ay + u, u, u);
   }
 }
 
@@ -1906,6 +1969,27 @@ let hybSeq = 0;
 const canMintHybrid = () => Number.isSafeInteger(hybSeq) && hybSeq >= 0 && hybSeq < MAX_HYBRID_SEQ;
 let accOwned = ["cap"]; // starter freebie + cosmetics the player owns (ACCS ids)
 let accEquip = {};
+// nameplate dyes: a bought-once color you can paint any slime's name
+// with — the name shows up dyed on its card header, its ranch cell,
+// and the share card. aurora drifts hue instead of holding one color
+const NAME_DYES = [
+  { id: "rose", c: "#e0558a", cost: 150 },
+  { id: "sky", c: "#4f9fe0", cost: 150 },
+  { id: "mint", c: "#4fbd8a", cost: 150 },
+  { id: "gold", c: "#d9a83c", cost: 400 },
+  { id: "void", c: "#4a3a68", cost: 400 },
+  { id: "aurora", cost: 700, anim: true },
+];
+let dyesOwned = [];
+let nameDye = {};       // species id -> dye id
+function auroraC(t) {
+  return `hsl(${Math.round(210 + Math.sin(t * 0.7) * 110)}, 78%, 62%)`;
+}
+function dyeColor(spId, t) {
+  const d = NAME_DYES.find((x) => x.id === nameDye[spId]);
+  if (!d) return null;
+  return d.anim ? auroraC(t) : d.c;
+}
 
 const MAX_SAVED_COUNTER = Number.MAX_SAFE_INTEGER - 1;
 function sanitizeSavedInt(value, fallback = 0, max = MAX_SAVED_COUNTER) {
@@ -2397,12 +2481,22 @@ function sanitizeAccOwnedList(value) {
   }
   return clean;
 }
+// trait-locked gear fits only its own family — the picker grids and the
+// save sanitizer both run through this, so a locked doodad can never sit
+// on a slime that wasn't built for it
+function accFits(accId, spId) {
+  const a = ACCS.find((x) => x.id === accId);
+  if (!a) return false;
+  if (!a.only) return true;
+  const sp = SPECIES.find((s) => s.id === spId);
+  return !!sp && sp.trait === a.only;
+}
 function sanitizeAccEquip(value) {
   const clean = {};
   const ownedSpecies = new Set(owned);
   const ownedAccessories = new Set(accOwned);
   for (const [id, accessory] of boundedSavedEntries(value)) {
-    if (ownedSpecies.has(id) && ownedAccessories.has(accessory)) clean[id] = accessory;
+    if (ownedSpecies.has(id) && ownedAccessories.has(accessory) && accFits(accessory, id)) clean[id] = accessory;
   }
   return clean;
 }
@@ -3065,7 +3159,7 @@ function shareCard() {
   // the star of the show: active slime, big, with its equipped accessory
   const sp = SPECIES[active];
   const nm = (customNames[sp.id] || sp.name).toUpperCase() + (shinyOwned[sp.id] ? " *" : "");
-  drawText(c, nm, W / 2 - textW(nm, 2) / 2, 78, 2, lite);
+  drawText(c, nm, W / 2 - textW(nm, 2) / 2, 78, 2, dyeColor(sp.id, performance.now() / 1000) || lite);
   const img = sprite("happy", active);
   const sc = 7;
   c.drawImage(img, W / 2 - img.width * sc / 2, 96, img.width * sc, img.height * sc);
@@ -3346,6 +3440,14 @@ invokeAsync("load_state").then((txt) => {
   // Gear is authoritative through both ownership sets and its scan is
   // bounded so a malformed legacy object cannot stall boot enumeration.
   accEquip = sanitizeAccEquip(s.accEquip);
+  if (Array.isArray(s.dyesOwned)) dyesOwned = s.dyesOwned.filter((id) => NAME_DYES.some((d) => d.id === id));
+  nameDye = {};
+  if (s.nameDye && typeof s.nameDye === "object") {
+    const spIds = new Set(SPECIES.map((p) => p.id));
+    for (const [k, v] of Object.entries(s.nameDye).slice(0, 200)) {
+      if (spIds.has(k) && NAME_DYES.some((d) => d.id === v) && dyesOwned.includes(v)) nameDye[k] = v;
+    }
+  }
   breedReadyAt = sanitizeSavedDeadline(s.breedReadyAt, BREED_CD);
   // offline earnings: 1 gem per 10 minutes away, capped at 20
   const savedAt = sanitizeSavedTimestamp(s.savedAt);
@@ -3576,7 +3678,7 @@ function persist() {
     request = invokeAsync("save_state", {
       json: JSON.stringify({
       ver: 2, xp, x: petX, jelly, owned, active: SPECIES[active].id,
-      pityRare, pityLeg, hybSeq, accOwned, accEquip, breedReadyAt,
+      pityRare, pityLeg, hybSeq, accOwned, accEquip, dyesOwned, nameDye, breedReadyAt,
       muted, vol, sizeMul, macSizeBaseline, seen, savedAt: Date.now(),
       reduceMotion, treatKind, stats, volStep, pomo, dexMile, saverMode,
       lastDaily, dailyStreak, lastWeekly, pomoFocusMin, pomoBreakMin,
@@ -7133,6 +7235,7 @@ kc.height = KH;
 let cardTarget = null; // "pet" | a pal object
 let cardAccPg = 0;     // gear-modal page for pal cards with many doodads
 let cardAccCells = []; // live hit rects, rebuilt every drawCard frame
+let cardDyeCells = []; // dye swatch hit rects in the same modal
 let cardGearCell = null; // the single gear cell on a pal card — opens the modal
 let cardAccModal = false; // accessory picker overlay inside the pal card
 const KC_CLOSE = [KW - 26, 5, 20, 20];
@@ -7599,7 +7702,7 @@ function drawRanch(ms) {
     // name on the floor strip: light text + dark shadow for contrast
     const editing = nameEdit && nameEdit.i === i;
     const nm = has ? (editing ? nameEdit.buf + (Math.floor(t * 3) % 2 ? "_" : " ") : spName(sp)) : "???";
-    drawText(rctx, nm, x + 50 - textW(nm, 1) / 2, y + 80, 1, editing ? "#ffd0d8" : has ? "#fff2dc" : "#e0cba4", "#4a2e18", true);
+    drawText(rctx, nm, x + 50 - textW(nm, 1) / 2, y + 80, 1, editing ? "#ffd0d8" : has ? (dyeColor(sp.id, t) || "#fff2dc") : "#e0cba4", "#4a2e18", true);
     if (has && shinyOwned[sp.id]) drawText(rctx, "*", x + 50 + textW(nm, 1) / 2 + 3, y + 80, 1, "#eec23f", "#4a2e18");
     // personality/baby tag: dark pill just left of the info button
     if (has && (sp.ps || isBaby(sp))) {
@@ -7651,7 +7754,7 @@ function drawRanch(ms) {
 
   // accessory picker: grid of owned accessories pinned to the panel bottom
   if (accPick !== null && SPECIES[accPick]) {
-    const items = [null, ...accOwned];
+    const items = [null, ...accOwned.filter((id) => accFits(id, SPECIES[accPick].id))];
     const cols = 4;
     const rows2 = Math.ceil(items.length / cols);
     const pw2 = cols * 34 + 14, ph3 = rows2 * 26 + 30;
@@ -8185,7 +8288,7 @@ function drawCard(now) {
   kctx.fillStyle = "#5c4632";
   kctx.fillRect(0, 0, KW, 30);
   const nm = spName(sp) + (shinyOwned[sp.id] ? " *" : "");
-  drawText(kctx, nm.slice(0, 16), 10, 11, 2, "#fff6e8", null, true);
+  drawText(kctx, nm.slice(0, 16), 10, 11, 2, dyeColor(sp.id, t) || "#fff6e8", null, true);
   kctx.fillStyle = "#a83240";
   kctx.fillRect(KC_CLOSE[0], KC_CLOSE[1], KC_CLOSE[2], KC_CLOSE[3]);
   drawText(kctx, "X", KC_CLOSE[0] + 6, KC_CLOSE[1] + 6, 1, "#fff6e8", null, true);
@@ -8284,7 +8387,7 @@ function drawCard(now) {
   // accessory picker modal: covers the card body below the header —
   // a grid of every owned doodad, current one marked, "-" unequips
   if (cardAccModal) {
-    const items = [null, ...accOwned];
+    const items = [null, ...accOwned.filter((id) => accFits(id, sp.id))];
     const cols = 6, cw = 38, chh = 28;
     const gx = 14, gy = 38;
     const vrows = Math.floor((cardKH() - gy - 34) / chh); // pager row reserved
@@ -8315,6 +8418,32 @@ function drawCard(now) {
       drawText(kctx, "NO GEAR YET", gx + 2, gy + 16 + vrows * chh - 30, 1, "#a8845c", null, true);
       drawText(kctx, "BUY AT RANCH SHOP", gx + 2, gy + 16 + vrows * chh - 18, 1, "#a8845c", null, true);
     }
+    // nameplate dye strip: one "none" swatch then every dye — unowned
+    // swatches carry their price, a tap buys and paints in one go
+    cardDyeCells = [];
+    {
+      const dyY = Math.min(gy + 16 + vrows * chh + 1, cardKH() - 36);
+      drawText(kctx, "NAME", gx + 2, dyY + 3, 1, "#a8845c", null, true);
+      const swatches = [null, ...NAME_DYES];
+      for (let k = 0; k < swatches.length; k++) {
+        const sx = gx + 38 + k * 30, sy2 = dyY;
+        const dye = swatches[k];
+        const activeDye = dye && nameDye[sp.id] === dye.id;
+        const owned2 = !dye || dyesOwned.includes(dye.id);
+        kctx.fillStyle = dye ? (owned2 ? (dye.c || "#a8e8d8") : "#c9b89a") : "#e8d9b8";
+        kctx.fillRect(sx, sy2, 26, 14);
+        kctx.strokeStyle = activeDye ? "#e08a5a" : "#8a6b4a";
+        kctx.lineWidth = activeDye ? 2 : 1;
+        kctx.strokeRect(sx + 0.5, sy2 + 0.5, 25, 13);
+        if (!dye) drawText(kctx, "-", sx + 10, sy2 + 4, 1, "#a8845c", null, true);
+        else if (dye.anim) {
+          kctx.fillStyle = auroraC(t);
+          kctx.fillRect(sx + 3, sy2 + 3, 20, 8);
+          if (!owned2) drawText(kctx, String(dye.cost), sx + 1, sy2 + 4, 1, "#5c4632", null, true);
+        } else if (!owned2) drawText(kctx, String(dye.cost), sx + 1, sy2 + 4, 1, "#5c4632", null, true);
+        cardDyeCells.push([sx, sy2, 26, 14, dye]);
+      }
+    }
     if (pgs > 1) {
       drawText(kctx, "<", KW - 60, cardKH() - 20, 1, "#5c4632", null, true);
       drawText(kctx, `${cardAccPg + 1}/${pgs}`, KW - 44, cardKH() - 20, 1, "#5c4632", null, true);
@@ -8337,7 +8466,7 @@ kc.addEventListener("pointerdown", (e) => {
     if (cardAccModal) {
       // picker modal: click a doodad to equip it on THIS slime, "-" to
       // unequip — any pick closes the modal back to the card
-      const items2 = [null, ...accOwned];
+      const items2 = [null, ...accOwned.filter((id) => accFits(id, cardTarget === "pet" ? SPECIES[active].id : SPECIES[cardTarget.sp].id))];
       for (const [cx, cy, cw, ch, accId] of cardAccCells) {
         if (mx >= cx && mx <= cx + cw && my >= cy && my <= cy + ch) {
           const sid = cardTarget === "pet" ? SPECIES[active].id : SPECIES[cardTarget.sp].id;
@@ -8345,6 +8474,26 @@ kc.addEventListener("pointerdown", (e) => {
           dirty = true;
           cardAccModal = false;
           sfx.pop();
+          return;
+        }
+      }
+      // dye swatches: tap paints the name — an unowned swatch buys
+      // first, then paints, so one row does shop and wardrobe both
+      for (const [dx, dy2, dw, dh, dye] of cardDyeCells) {
+        if (mx >= dx && mx <= dx + dw && my >= dy2 && my <= dy2 + dh) {
+          const sid = cardTarget === "pet" ? SPECIES[active].id : SPECIES[cardTarget.sp].id;
+          if (!dye || nameDye[sid] === dye.id) {
+            delete nameDye[sid];
+            dirty = true; sfx.pop();
+          } else if (dyesOwned.includes(dye.id)) {
+            nameDye[sid] = dye.id;
+            dirty = true; sfx.pop();
+          } else if (jelly >= dye.cost) {
+            jelly -= dye.cost;
+            dyesOwned.push(dye.id);
+            nameDye[sid] = dye.id;
+            dirty = true; sfx.reveal();
+          } else sfx.pop();
           return;
         }
       }
@@ -8423,6 +8572,7 @@ function drawShopCells(t) {
     drawAcc(rctx, a.id, x + 50, y + 34 + Math.sin(t * 2 + i) * 2, 2.6);
     if (a.season) drawText(rctx, "EVT", x + 6, y + 6, 1, "#d98a2b", null, true);
     if (a.prem) drawSpr(rctx, "star5", x + 6, y + 6, 1);
+    if (a.only) drawText(rctx, a.only.toUpperCase(), x + 6, y + 14, 1, "#8a6bd4", null, true);
     drawText(rctx, a.name, x + 50 - textW(a.name, 1) / 2, y + 62, 1, "#6b5338");
     if (has) {
       drawText(rctx, "OWNED", x + 50 - textW("OWNED", 1) / 2, y + 80, 1, "#7aa888");
@@ -8615,7 +8765,7 @@ rc.addEventListener("pointerdown", (e) => {
   // accessory picker overlay: pick an item (or NONE), any click closes it.
   // sits above the footer so it must be hit-tested first
   if (accPick !== null) {
-    const items = [null, ...accOwned];
+    const items = [null, ...accOwned.filter((id) => accFits(id, SPECIES[accPick].id))];
     const cols = 4;
     const rows2 = Math.ceil(items.length / cols);
     const pw2 = cols * 34 + 14, ph3 = rows2 * 26 + 30;
