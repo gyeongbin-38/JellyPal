@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Frontend harness
-        run: node _sim.cjs
+        run: node scripts/_sim.cjs
       - name: Rust check + tests
         working-directory: src-tauri
         run: |

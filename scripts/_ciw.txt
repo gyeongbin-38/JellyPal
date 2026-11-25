@@ -1,0 +1,338 @@
+Refreshing run status every 30 seconds. Press Ctrl+C to quit.
+
+* main build · 37181804575
+Triggered via push less than a minute ago
+
+JOBS
+* check (windows-latest) (ID 111375709666)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  * Rust check + tests
+  * Post Run actions/checkout@v4
+* bundle (ID 111375709780)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Run npm ci
+  * Run tauri-apps/tauri-action@v0
+  * Repack dmg with quarantine fixer
+  * Run actions/upload-artifact@v4
+  * Smoke test — launch app, verify it stays alive
+  * Post Run actions/checkout@v4
+* check (macos-latest) (ID 111375709782)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  * Rust check + tests
+  * Post Run actions/checkout@v4
+Refreshing run status every 30 seconds. Press Ctrl+C to quit.
+
+* main build · 37181804575
+Triggered via push about 1 minute ago
+
+JOBS
+* check (windows-latest) (ID 111375709666)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  * Rust check + tests
+  * Post Run actions/checkout@v4
+* bundle (ID 111375709780)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Run npm ci
+  * Run tauri-apps/tauri-action@v0
+  * Repack dmg with quarantine fixer
+  * Run actions/upload-artifact@v4
+  * Smoke test — launch app, verify it stays alive
+  * Post Run actions/checkout@v4
+* check (macos-latest) (ID 111375709782)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  * Rust check + tests
+  * Post Run actions/checkout@v4
+Refreshing run status every 30 seconds. Press Ctrl+C to quit.
+
+* main build · 37181804575
+Triggered via push about 1 minute ago
+
+JOBS
+* check (windows-latest) (ID 111375709666)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  * Rust check + tests
+  * Post Run actions/checkout@v4
+* bundle (ID 111375709780)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Run npm ci
+  * Run tauri-apps/tauri-action@v0
+  * Repack dmg with quarantine fixer
+  * Run actions/upload-artifact@v4
+  * Smoke test — launch app, verify it stays alive
+  * Post Run actions/checkout@v4
+* check (macos-latest) (ID 111375709782)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  * Rust check + tests
+  * Post Run actions/checkout@v4
+Refreshing run status every 30 seconds. Press Ctrl+C to quit.
+
+* main build · 37181804575
+Triggered via push about 2 minutes ago
+
+JOBS
+* check (windows-latest) (ID 111375709666)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  * Rust check + tests
+  * Post Run actions/checkout@v4
+* bundle (ID 111375709780)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Run npm ci
+  * Run tauri-apps/tauri-action@v0
+  * Repack dmg with quarantine fixer
+  * Run actions/upload-artifact@v4
+  * Smoke test — launch app, verify it stays alive
+  * Post Run actions/checkout@v4
+* check (macos-latest) (ID 111375709782)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  * Rust check + tests
+  * Post Run actions/checkout@v4
+Refreshing run status every 30 seconds. Press Ctrl+C to quit.
+
+* main build · 37181804575
+Triggered via push about 2 minutes ago
+
+JOBS
+* check (windows-latest) (ID 111375709666)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  * Rust check + tests
+  * Post Run actions/checkout@v4
+* bundle (ID 111375709780)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Run npm ci
+  * Run tauri-apps/tauri-action@v0
+  * Repack dmg with quarantine fixer
+  * Run actions/upload-artifact@v4
+  * Smoke test — launch app, verify it stays alive
+  * Post Run actions/checkout@v4
+* check (macos-latest) (ID 111375709782)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  * Rust check + tests
+  * Post Run actions/checkout@v4
+Refreshing run status every 30 seconds. Press Ctrl+C to quit.
+
+* main build · 37181804575
+Triggered via push about 3 minutes ago
+
+JOBS
+* check (windows-latest) (ID 111375709666)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  * Rust check + tests
+  * Post Run actions/checkout@v4
+* bundle (ID 111375709780)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Run npm ci
+  * Run tauri-apps/tauri-action@v0
+  * Repack dmg with quarantine fixer
+  * Run actions/upload-artifact@v4
+  * Smoke test — launch app, verify it stays alive
+  * Post Run actions/checkout@v4
+* check (macos-latest) (ID 111375709782)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  * Rust check + tests
+  * Post Run actions/checkout@v4
+Refreshing run status every 30 seconds. Press Ctrl+C to quit.
+
+* main build · 37181804575
+Triggered via push about 3 minutes ago
+
+JOBS
+* check (windows-latest) (ID 111375709666)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  * Rust check + tests
+  * Post Run actions/checkout@v4
+* bundle (ID 111375709780)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Run npm ci
+  ✓ Run tauri-apps/tauri-action@v0
+  ✓ Repack dmg with quarantine fixer
+  ✓ Run actions/upload-artifact@v4
+  * Smoke test — launch app, verify it stays alive
+  * Post Run actions/checkout@v4
+✓ check (macos-latest) in 3m15s (ID 111375709782)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  ✓ Rust check + tests
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete job
+
+ANNOTATIONS
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+check (macos-latest): .github#2
+
+- Due to capacity constraints, jobs targeting macOS arm64 runners may experience longer queue times.
+check (macos-latest): .github#1
+
+Refreshing run status every 30 seconds. Press Ctrl+C to quit.
+
+* main build · 37181804575
+Triggered via push about 4 minutes ago
+
+JOBS
+* check (windows-latest) (ID 111375709666)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  * Rust check + tests
+  * Post Run actions/checkout@v4
+✓ bundle in 3m54s (ID 111375709780)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Run npm ci
+  ✓ Run tauri-apps/tauri-action@v0
+  ✓ Repack dmg with quarantine fixer
+  ✓ Run actions/upload-artifact@v4
+  ✓ Smoke test — launch app, verify it stays alive
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete job
+✓ check (macos-latest) in 3m15s (ID 111375709782)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  ✓ Rust check + tests
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete job
+
+ANNOTATIONS
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+check (macos-latest): .github#2
+
+- Due to capacity constraints, jobs targeting macOS arm64 runners may experience longer queue times.
+check (macos-latest): .github#1
+
+Refreshing run status every 30 seconds. Press Ctrl+C to quit.
+
+* main build · 37181804575
+Triggered via push about 4 minutes ago
+
+JOBS
+* check (windows-latest) (ID 111375709666)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  * Rust check + tests
+  * Post Run actions/checkout@v4
+✓ bundle in 3m54s (ID 111375709780)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Run npm ci
+  ✓ Run tauri-apps/tauri-action@v0
+  ✓ Repack dmg with quarantine fixer
+  ✓ Run actions/upload-artifact@v4
+  ✓ Smoke test — launch app, verify it stays alive
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete job
+✓ check (macos-latest) in 3m15s (ID 111375709782)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  ✓ Rust check + tests
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete job
+
+ANNOTATIONS
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+check (macos-latest): .github#2
+
+- Due to capacity constraints, jobs targeting macOS arm64 runners may experience longer queue times.
+check (macos-latest): .github#1
+
+✓ main build · 37181804575
+Triggered via push about 5 minutes ago
+
+JOBS
+✓ check (windows-latest) in 5m12s (ID 111375709666)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  ✓ Rust check + tests
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete job
+✓ bundle in 3m54s (ID 111375709780)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Run npm ci
+  ✓ Run tauri-apps/tauri-action@v0
+  ✓ Repack dmg with quarantine fixer
+  ✓ Run actions/upload-artifact@v4
+  ✓ Smoke test — launch app, verify it stays alive
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete job
+✓ check (macos-latest) in 3m15s (ID 111375709782)
+  ✓ Set up job
+  ✓ Run actions/checkout@v4
+  ✓ Run dtolnay/rust-toolchain@stable
+  ✓ Frontend harness
+  ✓ Rust check + tests
+  ✓ Post Run actions/checkout@v4
+  ✓ Complete job
+
+ANNOTATIONS
+! Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+check (macos-latest): .github#2
+
+- Due to capacity constraints, jobs targeting macOS arm64 runners may experience longer queue times.
+check (macos-latest): .github#1
+
