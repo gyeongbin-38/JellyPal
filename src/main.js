@@ -9027,7 +9027,9 @@ function currentSprite(now) {
         (f === "smug" || f === "star" || f === "sideeye" || f === "wink" || f === "mischief")) pw = "THE SHOW";
     if (FACE_EMO[f] && pw && WHY_ICON[pw]) { petWhyIc = WHY_ICON[pw]; petWhyUntil = now + 1400; }
     else petWhyUntil = 0;
-    if (pw) petFaceWhy[f] = pw;
+    // a face that resolves reason-less also drops any stale entry — an
+    // old "AGENT" must not hang around to name the NEXT star-struck face
+    if (pw) petFaceWhy[f] = pw; else delete petFaceWhy[f];
   }
   return sprite(faceFrame(now < petSwapBlink ? "blink" : f), active, false);
 }
@@ -11394,7 +11396,12 @@ function frameBody(now) {
     // holding the slow for the whole face read as a weird trudge.
     // (facePrevU is update-side — the renderer keeps p.facePrev for its
     // own 90ms blink transition; sharing it killed the blink entirely)
-    if (now > (p.faceT || 0)) p.facePrevU = null; // episode ends — a same-face restamp later counts fresh
+    // episode ends — a same-face restamp later counts fresh. the cause
+    // stamp dies with the face too: faceId lingers after expiry, so the
+    // next frame re-resolves the icon — a surviving stamp would ghost-pop
+    // "THE SHOW" over an idle face, and an unstamped return to a once-
+    // stamped face would resurrect that old cause forever after
+    if (now > (p.faceT || 0)) { p.facePrevU = null; p.faceWhy = null; p.faceWhyId = null; }
     if (p.faceId !== p.facePrevU) {
       p.facePrevU = p.faceId; p.faceSetAt = now;
       // pop a little reason icon: the bubble over its head says WHY this
