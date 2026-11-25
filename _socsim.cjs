@@ -1083,6 +1083,29 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
     ev(`JSON.stringify({ic:pals[0].whyIc,u:pals[0].whyUntil})`));
   ev("pals.length = 0");
 
+  // daily quests: roll gives three unique seeded missions for today, a tick
+  // pays out once, a day flip re-rolls fresh, and sanitize drops junk
+  ev(`missionRollCheck()`);
+  check(ev(`missions.length === 3 && new Set(missions.map((q) => q.id)).size === 3 && missions.every((q) => MISSION_DEFS[q.id])`),
+    "quest roll gives three unique known missions", ev(`JSON.stringify(missions)`));
+  check(ev(`missionDay === localIsoDayKey(new Date())`), "quest day key is today", ev(`missionDay`));
+  ev(`missions[0] = { id: "pet", n: 4, done: false }; jelly = 1000; missionTick("pet")`);
+  check(ev(`missions[0].done === true && jelly === 1015`),
+    "quest completion pays out once", ev(`JSON.stringify({n:missions[0].n,d:missions[0].done,j:jelly})`));
+  ev(`missionTick("pet"); missionTick("pet")`);
+  check(ev(`jelly === 1015 && missions[0].n === 5`),
+    "a done quest never double-pays", ev(`JSON.stringify({n:missions[0].n,j:jelly})`));
+  check(ev(`missions.filter((q) => q.done).length > questSeenN`),
+    "quest badge shows unseen completions", ev(`JSON.stringify({seen:questSeenN,done:missions.filter((q)=>q.done).length})`));
+  ev(`missionDay = "2000-01-01"; missionRollCheck()`);
+  check(ev(`missionDay === localIsoDayKey(new Date()) && missions.every((q) => q.n === 0 && !q.done)`),
+    "a stale day re-rolls fresh quests", ev(`JSON.stringify({day:missionDay,m:missions})`));
+  check(ev(`sanitizeMissions([{id:"pet",n:99,done:true},{id:"bogus",n:1},{id:"feed",n:2,done:false}]).length === 2`),
+    "sanitizeMissions clamps progress and drops unknown ids",
+    ev(`JSON.stringify(sanitizeMissions([{id:"pet",n:99,done:true},{id:"bogus",n:1},{id:"feed",n:2,done:false}]))`));
+  check(ev(`(() => { const i = sprImg("quest"); return i && i.width === 10 && i.height === 10; })()`),
+    "quest slip sprite renders at 10x10", ev(`JSON.stringify((() => { const i = sprImg("quest"); return i ? [i.width, i.height] : null; })())`));
+
   // swallowed frame exceptions abort the rest of frameBody silently —
   // any FRAME crash logged during the whole run is a real regression
   check(!crashMsgs.some((m) => m.startsWith("FRAME ")),

@@ -1877,6 +1877,22 @@ let xp = 0;
 let level = 0;
 const START_JELLY = 500; // new installs start here — generous first session
 let jelly = START_JELLY;
+// daily quests: three seeded picks per local day. progress ticks at the
+// action hooks below; completion pays out instantly (no claim button —
+// the reward popping is the notification)
+const MISSION_DEFS = {
+  pet:    { t: "PET THE SLIME",   n: 5, g: 15 },
+  feed:   { t: "SERVE SNACKS",    n: 2, g: 15 },
+  play:   { t: "PLAY WITH PALS",  n: 3, g: 15 },
+  focus:  { t: "FINISH A FOCUS",  n: 1, g: 20 },
+  photo:  { t: "TAKE A PHOTO",    n: 1, g: 15 },
+  pull:   { t: "TRY THE CAPSULE", n: 1, g: 20 },
+  errand: { t: "PAL DELIVERIES",  n: 2, g: 15 },
+};
+const MISSION_IDS = Object.keys(MISSION_DEFS);
+let missions = [];       // [{id, n, done}] — today's three, persisted
+let missionDay = "";     // localIsoDayKey the list was rolled for
+let questSeenN = 0;      // how many completed missions the panel has shown
 let owned = ["sprout"];
 let active = 0;
 let dirty = false;
@@ -2196,6 +2212,7 @@ let mirror = null;         // vanity mirror — preen, or shy-slimes flee the re
 let mat = null;            // jelly bounce mat — hop on for a happy boing
 let jar = null;            // cookie jar — nibbles inside, a tap spills a real treat
 let toyboxOpen = false;    // the chooser strip under the toy button
+let questOpen = false;     // the daily-quest panel off the quest button
 let propHeld = null;       // furniture kind string — the prop being dragged
 // prop half-widths — also the grab radius; platform clamps use these so a
 // wide prop (box/mat) can't sit with its edge hanging off-screen
@@ -2238,7 +2255,7 @@ let fabX = null, fabY = null;   // null = default top-right spot
 let fabOpen = false;
 let fabDrag = null;             // {ox,oy,sx,sy,moved} while held
 let fabZzzT = 0;                // snot-bubble cadence while the pet is parked
-const FAB_ITEMS = ["recall", "snack", "toys", "barn", "gear"];
+const FAB_ITEMS = ["recall", "snack", "toys", "quest", "barn", "gear"];
 function clampWorkPoint(x, y, inset = 24) {
   const safe = usableRectAt(x, y);
   return [
@@ -2271,6 +2288,13 @@ function toyboxStripRect() {
   const [ix, iy] = fabItemRect(2);
   const safe = usableRectAt(ix, iy);
   return [Math.max(safe.left + 8, ix - 328), iy, 324, 34]; // nine prop slots
+}
+// daily-quest panel: hangs left of the quest item — three rows, one per
+// mission (label + progress + reward), display only
+function questPanelRect() {
+  const [ix, iy] = fabItemRect(3);
+  const safe = usableRectAt(ix, iy);
+  return [Math.max(safe.left + 8, ix - 196), iy - 10, 188, 54];
 }
 let egg = null;            // {x, y, plat, t0, wob} — today's mystery egg
 let lastEgg = "";          // date key of the day the egg last dropped
@@ -3379,6 +3403,9 @@ invokeAsync("load_state").then((txt) => {
   shinyOwned = sanitizeShinyOwned(s.shiny);
   weatherOn = savedDefaultOn(s.weatherOn);
   skyMode = SKY_MODES.includes(s.skyMode) ? s.skyMode : "auto";
+  missions = sanitizeMissions(s.missions);
+  missionDay = typeof s.missionDay === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s.missionDay) ? s.missionDay : "";
+  questSeenN = sanitizeSavedInt(s.questSeenN, 0, 3);
   // If an unusually slow load outlived the four-second boot timer, resume the
   // one missed probe now that the persisted privacy choice is authoritative.
   if (!weatherBootProbeWaiting) pollWeather();
@@ -3488,6 +3515,53 @@ function checkDex() {
   }
 }
 
+// ---- daily quests ----
+// the list re-rolls whenever the local day flips — checked lazily at every
+// tick/draw call site so a pet left running across midnight still sees
+// fresh quests without a reboot
+function missionRollCheck() {
+  const today = localIsoDayKey(new Date());
+  if (missionDay === today && missions.length === 3) return;
+  missionDay = today;
+  // seeded pick — the same three quests for everyone on a given date,
+  // and stable across a same-day reload
+  let h = 0;
+  for (const ch of today) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const pool = MISSION_IDS.slice();
+  missions = [];
+  for (let k = 0; k < 3 && pool.length; k++) {
+    h = (h * 1664525 + 1013904223) >>> 0;
+    missions.push({ id: pool.splice(h % pool.length, 1)[0], n: 0, done: false });
+  }
+  questSeenN = 0;
+  dirty = true;
+}
+function missionTick(id) {
+  missionRollCheck();
+  const m = missions.find((q) => q.id === id);
+  if (!m || m.done) return;
+  m.n++;
+  if (m.n >= MISSION_DEFS[m.id].n) {
+    m.done = true;
+    jelly = addSavedInt(jelly, MISSION_DEFS[m.id].g);
+    bangs.push({ x: petX, y: petY - 130, life: 2.4, t: `QUEST +${MISSION_DEFS[m.id].g}` });
+    sfx.reveal();
+    if (questOpen) questSeenN = missions.filter((q) => q.done).length;
+  }
+  dirty = true;
+}
+function sanitizeMissions(v) {
+  if (!Array.isArray(v)) return [];
+  const out = [];
+  for (const raw of v.slice(0, 3)) {
+    if (!raw || typeof raw !== "object" || !(raw.id in MISSION_DEFS)) continue;
+    const d = MISSION_DEFS[raw.id];
+    const n = Number.isSafeInteger(raw.n) ? Math.max(0, Math.min(d.n, raw.n)) : 0;
+    out.push({ id: raw.id, n, done: raw.done === true && n >= d.n });
+  }
+  return out;
+}
+
 function persist() {
   if (!saveReady) {
     dirty = true;
@@ -3503,6 +3577,7 @@ function persist() {
       muted, vol, sizeMul, macSizeBaseline, seen, savedAt: Date.now(),
       reduceMotion, treatKind, stats, volStep, pomo, dexMile, saverMode,
       lastDaily, dailyStreak, lastWeekly, pomoFocusMin, pomoBreakMin,
+      missions, missionDay, questSeenN,
       redeemed, redeemedBound, uid, claimed: claimedNonces, iapTx: iapTxIds,
       panelPos, petHome, weatherOn, skyMode, bootOn, lastSelfie, hints: hintsSeen,
       props: { bowl: bowl ? { x: bowl.x, y: bowl.y, fill: bowl.fill ?? 2 } : null, cushion: cushion ? { x: cushion.x, y: cushion.y } : null, box: box ? { x: box.x, y: box.y } : null, plant: plant ? { x: plant.x, y: plant.y } : null, music: music ? { x: music.x, y: music.y } : null, mirror: mirror ? { x: mirror.x, y: mirror.y } : null, mat: mat ? { x: mat.x, y: mat.y } : null, jar: jar ? { x: jar.x, y: jar.y, fill: jar.fill ?? 2 } : null },
@@ -5678,6 +5753,7 @@ cv.addEventListener("pointerdown", (e) => {
           saveCanvasPng(cv, name).then(() => {
             bangs.push({ x: winW / 2, y: 100, life: 2, t: "SAVED" });
             sfx.reveal();
+            missionTick("photo");
             // if the album was left open under the hide, fold the new
             // shot in and jump to it
             if (albumOpen) {
@@ -5815,9 +5891,15 @@ cv.addEventListener("pointerdown", (e) => {
       if (id === "recall") { fabOpen = false; recall(); }
       else if (id === "snack") { fabOpen = false; treatAim = true; }
       else if (id === "toys") toyboxOpen = !toyboxOpen; // strip hangs off this item
+      else if (id === "quest") {
+        questOpen = !questOpen;
+        // the badge counts completed quests as seen the moment they render
+        if (questOpen) { questSeenN = missions.filter((q) => q.done).length; dirty = true; }
+      }
       else if (id === "barn") { fabOpen = false; toggleRanch(); }
       else if (id === "gear") { fabOpen = false; if (settingsOpen) closeSettings(); else { settingsOpen = true; setScroll = 0; } }
       if (id !== "toys") toyboxOpen = false; // a dead strip used to linger — visible but unclickable
+      if (id !== "quest") questOpen = false;
       sfx.pop();
       return;
     }
@@ -5898,6 +5980,13 @@ cv.addEventListener("pointerdown", (e) => {
         return;
       }
       toyboxOpen = false; // clicked off the strip — fold the chooser
+    }
+    // quest panel: info only — clicks inside land but do nothing, a click
+    // anywhere else folds it like the toybox strip
+    if (questOpen) {
+      const [qx, qy, qw, qh] = questPanelRect();
+      if (mx >= qx && mx <= qx + qw && my >= qy && my <= qy + qh) return;
+      questOpen = false;
     }
     fabOpen = false; // clicked outside the menu — fold it up
     return;
@@ -6881,6 +6970,22 @@ const SPR = {
       ".oo..oo.",
     ],
     pal: { "o": "#5c4632", "R": "#e05a6e", "C": "#5ac8f0", "#": "#eec23f" },
+  },
+  // quest slip: a little parchment with a red tick — the daily-quest icon
+  quest: {
+    rows: [
+      "..oooooo..",
+      ".oWWWWWWo.",
+      "oWWWWW#WWo",
+      "oWWWW##WWo",
+      "oW#W##WWWo",
+      "oWWW##WWWo",
+      "oWWW#WWWWo",
+      "oWWWWWWWWo",
+      ".oWWWWWWo.",
+      "..oooooo..",
+    ],
+    pal: { "o": "#8a6b4a", "W": "#fff6e8", "#": "#e05a6e" },
   },
 };
 // wing flap frames — 3 poses, chars: m=main feather, d=dark shaft/edge,
@@ -8706,6 +8811,7 @@ function doPull() {
   }
   jelly -= PULL_COST;
   stats.pulls = addSavedInt(stats.pulls, 1);
+  missionTick("pull");
   const r = pullApply(rollSpecies());
   dirty = true;
   checkDex();
@@ -8726,6 +8832,7 @@ function doPull10() {
   }
   jelly -= PULL_COST * 10;
   stats.pulls = addSavedInt(stats.pulls, 10);
+  missionTick("pull");
   const picks = [];
   for (let i = 0; i < 10; i++) picks.push(rollSpecies());
   if (!picks.some((sp) => sp.r >= 1)) {
@@ -8923,6 +9030,7 @@ function sendClickable() {
   if (jar) rects.push([jar.x - 23, jar.y - 36, 46, 52]);
   if (egg) rects.push([egg.x - 16, egg.y - 36, 32, 52]);      // egg is a promise, not a wall
   if (fabOpen && toyboxOpen) rects.push(toyboxStripRect()); // chooser strip
+  if (fabOpen && questOpen) rects.push(questPanelRect());   // quest panel (info only, still eats clicks)
   if (awayReport) rects.push([Math.round(winW / 2 - 95), 54, 190, 78]);
   // canvas modals capture the whole window — outside clicks must reach the
   // dismiss handlers below instead of falling through to the desktop (where
@@ -8949,6 +9057,7 @@ setInterval(() => {
   // pomodoro phases flip on wall-clock time
   if (pomo && Date.now() > pomoUntil) {
     pomoPhase = pomoPhase === "focus" ? "break" : "focus";
+    if (pomoPhase === "break") missionTick("focus"); // a finished sprint pays the quest
     pomoLen = (pomoPhase === "focus" ? pomoFocusMin : pomoBreakMin) * 60000;
     pomoUntil = Date.now() + pomoLen;
     bangs.push({ x: petX, y: petY - 100, life: 2, t: pomoPhase === "focus" ? "FOCUS!" : "BREAK!" });
@@ -9481,6 +9590,7 @@ function frameBody(now) {
         rubCd = now + 3500;
         contentUntil = now + 2400;
         petUntil = now + 900;
+        missionTick("pet");
         if (Math.random() < 0.5) { embarUntil = now + 3100; petStamp("PETTED", "embar"); } // blush tail after the melt
         squashV += 4;
         hearts.push({ x: petX + (Math.random() * 20 - 10), y: petY - 62, life: 1.1 });
@@ -10695,6 +10805,7 @@ function frameBody(now) {
       const tk = TREATS[tkIdx];
       treat = null;
       stats.treats = addSavedInt(stats.treats, 1);
+      missionTick("feed");
       gainXp(tk.xp, petX + 20, petY - 96);
       munchUntil = now + 500;
       // a favorite snack — the pet's eyes turn to hearts for it
@@ -12282,6 +12393,7 @@ function frameBody(now) {
                 const tk = TREATS[tkIdx];
                 treat = null;
                 stats.treats = addSavedInt(stats.treats, 1);
+                missionTick("feed");
                 gainXp(tk.xp, p.x + 14, p.y - 92);
                 bondGain(SPECIES[p.sp].id, TREAT_PREF[psp.trait] === tkIdx ? 4 : 3); // a favorite earns extra love
                 // the snack's magic applies no matter who snatched it
@@ -12522,6 +12634,7 @@ function frameBody(now) {
               // pal gets the satisfaction
               if (!petHome && Math.abs(petX - p.x) < 95 && Math.abs(petY - p.y) < 40) {
                 jelly = addSavedInt(jelly, p.carry.n);
+                missionTick("errand");
                 dirty = true;
                 p.carry = null;
                 bondGain(psp.id, 2);
@@ -13537,6 +13650,7 @@ function frameBody(now) {
       // hyper pals want to play again soon; calm/lazy take a long breather
       p.playCd = mainPlayCd = now + 6000 * (ppsy.pace || 1);
       stats.plays = addSavedInt(stats.plays, 1);
+      missionTick("play");
       p.faceId = "happy";
       p.faceT = now + 900;
       p.faceWhy = "BUMP!"; p.faceWhyId = "happy";
@@ -13565,6 +13679,7 @@ function frameBody(now) {
         const qpsy = PSYCH[(SPECIES[q.sp] || {}).ps] || {};
         p.playCd = q.playCd = now + 6000 * Math.max(ppsy.pace || 1, qpsy.pace || 1);
         stats.plays = addSavedInt(stats.plays, 1);
+        missionTick("play");
         p.faceId = q.faceId = "happy";
         p.faceT = q.faceT = now + 900;
         p.faceWhy = q.faceWhy = "PLAY"; p.faceWhyId = q.faceWhyId = "happy";
@@ -14350,7 +14465,7 @@ function frameBody(now) {
   // accordion: the action items fold out of the circle (down, or up when
   // the menu is parked near the screen bottom)
   if (fabOpen) {
-    const onMap = { recall: petHome, snack: treatAim, toys: toyboxOpen || ball || bowl || cushion || box || plant || music || mirror || mat || jar, barn: ranchOpen, gear: settingsOpen };
+    const onMap = { recall: petHome, snack: treatAim, toys: toyboxOpen || ball || bowl || cushion || box || plant || music || mirror || mat || jar, quest: questOpen, barn: ranchOpen, gear: settingsOpen };
     for (let k = 0; k < FAB_ITEMS.length; k++) {
       const [ix, iy, iw, ih] = fabItemRect(k);
       const id = FAB_ITEMS[k];
@@ -14365,8 +14480,16 @@ function frameBody(now) {
       if (id === "recall") drawSm(ctx, sprite("idle", active, false), icx - 11, icy - 8, 22, 16);
       else if (id === "snack") drawTreat(icx, icy, 0, treatKind);
       else if (id === "toys") drawSpr(ctx, "toys", icx, icy + 2, 2);
+      else if (id === "quest") drawSpr(ctx, "quest", icx, icy + 2, 2);
       else if (id === "barn") drawSpr(ctx, "barn", icx, icy + 2, 2);
       else if (id === "gear") drawSpr(ctx, "gear", icx, icy, 2);
+      // quest badge: a red dot flags rewards banked since the panel last
+      // rendered — completed quests are auto-paid, so it means "look, a
+      // quest finished" not "come claim"
+      if (id === "quest" && missions.filter((q) => q.done).length > questSeenN) {
+        ctx.fillStyle = "#e05a6e";
+        ctx.fillRect(ix + iw - 7, iy + 1, 5, 5);
+      }
       ctx.globalAlpha = 1;
     }
     // toybox prop strip: nine slots hanging left of the toys item —
@@ -14384,6 +14507,27 @@ function frameBody(now) {
         ctx.strokeRect(kx + 3, sy + 2, 30, 30);
         drawSpr(ctx, ["ball", "bowl", "cushion", "box", "plant", "music", "mirror", "mat", "jar"][k], kx + 18, sy + 19, 2);
         ctx.globalAlpha = 1;
+      }
+    }
+    // quest panel: today's three missions — label, n/N progress, reward or
+    // a done-tick. info only; rewards already paid out on completion
+    if (questOpen && fabOpen) {
+      missionRollCheck();
+      const [qx, qy, qw, qh] = questPanelRect();
+      ctx.globalAlpha = 0.94;
+      ctx.fillStyle = "#f3e6cd";
+      ctx.fillRect(qx, qy, qw, qh);
+      ctx.strokeStyle = "#8a6b4a";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(qx + 0.5, qy + 0.5, qw - 1, qh - 1);
+      ctx.globalAlpha = 1;
+      drawText(ctx, "TODAY", qx + 6, qy + 4, 1, "#a8845c", null, true);
+      for (let i = 0; i < missions.length; i++) {
+        const m = missions[i], d = MISSION_DEFS[m.id];
+        const my2 = qy + 14 + i * 13;
+        const lbl = `${d.t} ${Math.min(m.n, d.n)}/${d.n}`;
+        drawText(ctx, lbl, qx + 6, my2, 1, m.done ? "#a89478" : "#5c4632", null, true);
+        drawText(ctx, m.done ? "OK" : `+${d.g}`, qx + qw - 6 - textW(m.done ? "OK" : `+${d.g}`, 1), my2, 1, m.done ? "#4c9e50" : "#c98a2e", null, true);
       }
     }
   }
