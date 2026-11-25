@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const { execSync } = require("child_process");
 
-const ROOT = __dirname;
+const ROOT = path.join(__dirname, "..");
 const EXE = path.join(ROOT, "src-tauri", "target", "release", "jellypal.exe");
 const LOADER = path.join(ROOT, "src-tauri", "target", "release", "WebView2Loader.dll");
 const README = path.join(ROOT, "README.txt");

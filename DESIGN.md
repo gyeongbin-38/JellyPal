@@ -12,8 +12,8 @@ website's visual design and conversion — not the app.
 - New deploys take a few seconds to propagate to the custom domain; check the
   `*.pages.dev` URL wrangler prints if jellypal.fun looks stale.
 - `site/dl/` holds the real downloads — **do not delete or rename**:
-  - `Jellypal_0.2.0_x64-setup.exe` (1.7 MB) — the NSIS installer
-  - `jellypal-0.2.0-win.zip` (2.1 MB) — portable
+  - `Jellypal_0.4.4_x64-setup.exe` — the NSIS installer
+  - `jellypal-0.4.4-win.zip` — portable
   - SHA-256 shown on the page (`#safe` section) must be updated if binaries change
 - Repo is private: github.com/gyeongbin-38/JellyPal (404s when logged out —
   that's expected, not broken).
