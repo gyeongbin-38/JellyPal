@@ -1136,7 +1136,9 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
     const d = wxDrops[0]; globalThis._d = d; d.at = 1e15; // pin past the 40s melt window
     owned.push(SPECIES[1].id); spawnPal(1);
     const q = pals[pals.length - 1];
-    q.x = d.x - 40; q.y = d.y; q.plat = d.plat; q.fly = false;
+    // land inside the 26px pickup band — a mid-walk decision roll can
+    // otherwise re-aim propGoal at a prop before the pal ever arrives
+    q.x = d.x - 20; q.y = d.y; q.plat = d.plat; q.fly = false;
     q.walkT = d.x; q.propGoal = { kind: "wxdrop", at: performance.now(), drop: d };
     petHome = false; state = "idle"; walkTarget = null; flying = false; held = false;
     petX = d.x + 60; petY = d.y;
@@ -1202,6 +1204,24 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
   check(ev(`shopMode = true; shopTab = "ROOM"; const n = pageList().length; shopMode = false; shopTab = "ACC"; n === ROOM_SHOP.length`),
     "room tab swaps the shop's paged list", ev(`ROOM_SHOP.length`));
   ev(`decorOwned = []; roomTheme = {}; roomProps = {};`);
+
+  // #9 HIDE row: cycles 0..3, SHARE modes (>=2) arm capture exclusion
+  check(ev(`settingsRowIds().includes(18)`), "HIDE row registered in settings");
+  ev(`setHideMode(2)`);
+  check(invokeCalls.set_capture_excluded && invokeCalls.set_capture_excluded.on === true && ev(`hideMode`) === 2,
+    "SHARE mode arms capture exclusion", JSON.stringify(invokeCalls.set_capture_excluded));
+  ev(`setHideMode(3)`);
+  check(ev(`hideMode`) === 3 && invokeCalls.set_capture_excluded.on === true,
+    "BOTH keeps the exclusion armed");
+  ev(`setHideMode(1)`);
+  check(invokeCalls.set_capture_excluded.on === false && ev(`hideMode`) === 1,
+    "FULL-only mode drops the exclusion");
+  (listeners["tauri:fullscreen"] || []).forEach((cb) => cb({ payload: true }));
+  check(ev(`fsActive`) === true, "fullscreen event flags fsActive");
+  (listeners["tauri:fullscreen"] || []).forEach((cb) => cb({ payload: false }));
+  check(ev(`fsActive`) === false, "fullscreen clear unflags fsActive");
+  ev(`setHideMode(0)`);
+  delete invokeCalls.set_capture_excluded;
 
   // swallowed frame exceptions abort the rest of frameBody silently —
   // any FRAME crash logged during the whole run is a real regression

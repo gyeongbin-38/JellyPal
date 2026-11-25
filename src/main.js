@@ -2943,11 +2943,11 @@ function settingsRect() {
 const SET_VIEW_TOP = 28, SET_VIEW_BOT = 34; // title gap + footer reserve
 // logical row ids — 0 VOL 1 SIZE 2 MOTION 3 PHOTO 4 ALBUM 5 POMO 6 FOCUS
 // 7 BREAK 8 SHARE 9 WEATHER 10 BOOT 11 JELLY 12 REDEEM 13 ID 14 RESET 15 QUIT
-// 16 POWER (battery saver frame cap) 17 SKY (manual weather mode)
+// 16 POWER (battery saver frame cap) 17 SKY (manual weather mode) 18 HIDE
 // visual layout: captioned sections; a two-id row splits into half cells.
 // cell rects are the only hit areas — captions are decorative and gap-filling
 const SET_LAYOUT = [
-  { cap: "DISPLAY", rows: [[0], [1], [2, 16], [17]] },
+  { cap: "DISPLAY", rows: [[0], [1], [2, 16], [17, 18]] },
   { cap: "MEMORIES", rows: [[3, 4], [8]] },
   { cap: "TIMER", rows: [[5], [6, 7]] },
   { cap: "SYSTEM", rows: [[9, 10]] },
@@ -2961,10 +2961,10 @@ const SET_ROW_P = 30;   // row pitch (20px row + 10px air)
 // (license codes — Apple wants IAP for digital goods; the store JELLY row
 // opens the IAP panel instead), WEATHER (coarse IP geo is data the store
 // SKU does not need — network surface stays zero).
-const STORE_HIDDEN_ROWS = new Set([9, 10, 12]);
+const STORE_HIDDEN_ROWS = new Set([9, 10, 12, 18]);
 function settingsRowIds() {
   const ids = [];
-  for (let i = 0; i < 18; i++) if (!STORE || !STORE_HIDDEN_ROWS.has(i)) ids.push(i);
+  for (let i = 0; i < 19; i++) if (!STORE || !STORE_HIDDEN_ROWS.has(i)) ids.push(i);
   return ids;
 }
 function setContentH() {
@@ -3058,6 +3058,24 @@ let weatherOn = true;
 // "rain"/"snow" pin a spell until the user changes the sky back
 let skyMode = "auto";
 const SKY_MODES = ["auto", "rain", "snow", "clear"];
+// HIDE row: duck out during a foreign fullscreen window and/or stay out
+// of screen-share captures (WDA_EXCLUDEFROMCAPTURE on Windows)
+let hideMode = 0;           // 0 off, 1 fullscreen, 2 share, 3 both
+const HIDE_LABEL = ["OFF", "FULL", "SHARE", "BOTH"];
+let fsActive = false;       // backend says a foreign window covers a monitor
+function applyAutoHide() {
+  try {
+    const w = window.__TAURI__ && window.__TAURI__.window && window.__TAURI__.window.getCurrentWindow();
+    if (!w) return;
+    if ((hideMode & 1) && fsActive) w.hide(); else w.show();
+  } catch (e) {}
+}
+function setHideMode(m) {
+  if (m === hideMode) return;
+  hideMode = m;
+  invokeQuiet("set_capture_excluded", { on: m >= 2 });
+  applyAutoHide();
+}
 let wxCode = -1;
 let wxAt = 0;
 let weatherRequest = 0;
@@ -3519,6 +3537,8 @@ invokeAsync("load_state").then((txt) => {
   shinyOwned = sanitizeShinyOwned(s.shiny);
   weatherOn = savedDefaultOn(s.weatherOn);
   skyMode = SKY_MODES.includes(s.skyMode) ? s.skyMode : "auto";
+  hideMode = Number.isInteger(s.hideMode) && s.hideMode >= 0 && s.hideMode <= 3 ? s.hideMode : 0;
+  invokeQuiet("set_capture_excluded", { on: hideMode >= 2 });
   missions = sanitizeMissions(s.missions);
   missionDay = typeof s.missionDay === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s.missionDay) ? s.missionDay : "";
   questSeenN = sanitizeSavedInt(s.questSeenN, 0, 3);
@@ -3696,7 +3716,7 @@ function persist() {
       lastDaily, dailyStreak, lastWeekly, pomoFocusMin, pomoBreakMin,
       missions, missionDay, questSeenN,
       redeemed, redeemedBound, uid, claimed: claimedNonces, iapTx: iapTxIds,
-      panelPos, petHome, weatherOn, skyMode, bootOn, lastSelfie, hints: hintsSeen,
+      panelPos, petHome, weatherOn, skyMode, hideMode, bootOn, lastSelfie, hints: hintsSeen,
       props: { bowl: bowl ? { x: bowl.x, y: bowl.y, fill: bowl.fill ?? 2 } : null, cushion: cushion ? { x: cushion.x, y: cushion.y } : null, box: box ? { x: box.x, y: box.y } : null, plant: plant ? { x: plant.x, y: plant.y } : null, music: music ? { x: music.x, y: music.y } : null, mirror: mirror ? { x: mirror.x, y: mirror.y } : null, mat: mat ? { x: mat.x, y: mat.y } : null, jar: jar ? { x: jar.x, y: jar.y, fill: jar.fill ?? 2 } : null },
       bond, pairBonds, lastEgg, fab: [fabX, fabY],
       names: customNames, shiny: shinyOwned,
@@ -5461,6 +5481,10 @@ function reconcileAnchoredPlatforms(platformNow = performance.now()) {
       p.y = platUnder(p.x, p.y).y;
   }
 }
+listenQuiet("fullscreen", (e) => {
+  fsActive = !!(e && e.payload);
+  applyAutoHide();
+});
 listenQuiet("platforms", (e) => {
   if (STORE) return; // no window-hopping inside the companion card
   const runtimePlatforms = sanitizeRuntimePlatforms(e && e.payload);
@@ -5940,6 +5964,10 @@ cv.addEventListener("pointerdown", (e) => {
     }
     else if (inRow(rowFor(17))) {
       setSkyMode(SKY_MODES[(SKY_MODES.indexOf(skyMode) + 1) % SKY_MODES.length]);
+      dirty = true; sfx.pop();
+    }
+    else if (inRow(rowFor(18))) {
+      setHideMode((hideMode + 1) % 4);
       dirty = true; sfx.pop();
     }
     else if (inRow(rowFor(11))) {
@@ -15200,11 +15228,11 @@ function frameBody(now) {
     const NAME = { 0: "SOUND", 1: "SIZE", 2: "MOTION", 3: "PHOTO", 4: "ALBUM", 5: "POMO",
       6: "FOCUS", 7: "BREAK", 8: "SHARE", 9: "WEATHER", 10: "BOOT", 11: "JELLY",
       12: "REDEEM", 13: "MY ID", 14: Date.now() < resetArm ? "SURE?" : "RESET", 15: "QUIT",
-      16: "POWER", 17: "SKY" };
+      16: "POWER", 17: "SKY", 18: "HIDE" };
     const VAL = { 0: vol <= 0.001 ? "OFF" : `${Math.round(vol * 100)}%`, 1: `${sizeMul.toFixed(1)}X`,
       2: reduceMotion ? "LOW" : "FULL", 5: pomoLbl, 6: `${pomoFocusMin}M`, 7: `${pomoBreakMin}M`,
       9: weatherOn ? "ON" : "OFF", 10: bootOn ? "ON" : "OFF", 13: uid ? uid.slice(0, 8) : "-",
-      16: SAVER_LABEL[saverMode], 17: skyMode.toUpperCase() };
+      16: SAVER_LABEL[saverMode], 17: skyMode.toUpperCase(), 18: HIDE_LABEL[hideMode] };
     const DOOR = new Set([3, 4, 8, 11, 12]);
     // rows paint inside a clipped viewport — the title and the footer
     // stats stay put while the list slides underneath

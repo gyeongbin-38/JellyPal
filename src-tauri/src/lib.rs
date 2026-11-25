@@ -3271,6 +3271,32 @@ fn focus_named_window(_needle: &str) -> bool {
     false
 }
 
+// screen-share stealth: WDA_EXCLUDEFROMCAPTURE keeps the pet window out
+// of OBS/Discord/Teams captures while the owner still sees it. Returns
+// false where the OS has no such flag (macOS would need NSWindow sharing
+// type — a separate path the caller can ignore).
+#[tauri::command]
+fn set_capture_excluded(app: tauri::AppHandle, on: bool) -> bool {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
+        };
+        if let Some(win) = app.get_webview_window("main") {
+            if let Ok(hwnd) = win.hwnd() {
+                unsafe {
+                    return SetWindowDisplayAffinity(
+                        hwnd.0 as HWND,
+                        if on { WDA_EXCLUDEFROMCAPTURE } else { WDA_NONE },
+                    ) != 0;
+                }
+            }
+        }
+    }
+    let _ = (app, on);
+    false
+}
+
 // True when built with `--features store` — the frontend reads this once
 // to switch into the sandboxed companion-card UI (no redeem, no overlay
 // toggles) and to hide controls that cannot work under the App Sandbox.
@@ -4432,6 +4458,7 @@ pub fn run() {
             get_weather,
             agent_notice,
             focus_app,
+            set_capture_excluded,
             set_autostart,
             is_store_build,
             autostart_available,
@@ -4705,8 +4732,42 @@ pub fn run() {
             let own_w = msize.width as i32;
             let own_h = msize.height as i32;
             if !store_mode {
-            std::thread::spawn(move || loop {
+            std::thread::spawn(move || {
+                // fullscreen watch: a foreign window covering ~an entire
+                // monitor flips the flag so the frontend can duck out of
+                // the way. maximized windows never trip it — the taskbar
+                // keeps their coverage under 98%.
+                let mut last_fs = false;
+                loop {
                 let rects = collect_window_rects(scale);
+                let own_rect = |r: &[i32; 4]| {
+                    r[0] == mpos.x && r[1] == mpos.y && r[2] - r[0] == own_w && r[3] - r[1] == own_h
+                };
+                let fs = handle2
+                    .available_monitors()
+                    .map(|mons| {
+                        mons.iter().any(|m| {
+                            let mp = m.position();
+                            let ms = m.size();
+                            let marea = ms.width as i64 * ms.height as i64;
+                            marea > 0
+                                && rects.iter().any(|r| {
+                                    if own_rect(r) {
+                                        return false;
+                                    }
+                                    let iw = (r[2].min(mp.x + ms.width as i32) - r[0].max(mp.x)).max(0)
+                                        as i64;
+                                    let ih = (r[3].min(mp.y + ms.height as i32) - r[1].max(mp.y)).max(0)
+                                        as i64;
+                                    iw * ih * 100 >= marea * 98
+                                })
+                        })
+                    })
+                    .unwrap_or(false);
+                if fs != last_fs {
+                    last_fs = fs;
+                    let _ = handle2.emit("fullscreen", fs);
+                }
                 let plats: Vec<[f64; 3]> = rects
                     .into_iter()
                     .filter(|r| {
@@ -4725,6 +4786,7 @@ pub fn run() {
                     .collect();
                 let _ = handle2.emit("platforms", plats);
                 std::thread::sleep(Duration::from_millis(600));
+                }
             });
             }
 
