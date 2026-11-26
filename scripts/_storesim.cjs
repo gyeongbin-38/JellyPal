@@ -9,6 +9,8 @@ const elc = {};
 // iap_drain is a queue the test controls: push events, they get consumed
 const iapQueue = [];
 let ackedTxs = [];
+let saveFails = false;
+let savedState = null;
 const IAP_PRODUCTS = [
   { id: "com.jellypal.jelly.small", title: "Jelly Pack S", price: "$0.99", jelly: 250 },
   { id: "com.jellypal.jelly.medium", title: "Jelly Pack M", price: "$1.99", jelly: 500 },
@@ -66,6 +68,11 @@ global.__TAURI__ = {
       if (cmd === "iap_refresh") return Promise.resolve(null);
       if (cmd === "iap_products") return Promise.resolve(IAP_PRODUCTS);
       if (cmd === "iap_drain") return Promise.resolve(iapQueue.splice(0));
+      if (cmd === "save_state") {
+        if (saveFails) return Promise.reject(new Error("simulated disk failure"));
+        savedState = JSON.parse(args.json);
+        return Promise.resolve(null);
+      }
       if (cmd === "iap_ack") { ackedTxs.push(args.tx); return Promise.resolve(null); }
       if (cmd === "iap_buy") return Promise.resolve(null);
       return Promise.resolve(null);
@@ -99,7 +106,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await sleep(30); // and the autostart_available probe behind it
 
   const ids = ev("settingsRowIds()");
-  check(ids.length === 14 && !ids.includes(9) && !ids.includes(12),
+  check([9, 12, 18].every((id) => !ids.includes(id)) && ids.length === 16,
     "store drops WEATHER/REDEEM rows", JSON.stringify(ids));
   check(ids.includes(11), "JELLY row stays — it opens the IAP panel");
   check(ids.includes(10), "BOOT un-hides when login items are available");
@@ -121,9 +128,32 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await ev("iapPoll()");
   check(ev("jelly") === before + 250, "purchased event grants jelly", `jelly=${ev("jelly")}`);
   check(ackedTxs.join() === "777", "grant acks the transaction", ackedTxs.join());
+  check(savedState.jelly === before + 250 && savedState.iapTx.includes("777"),
+    "balance and transaction are saved before payment finishes");
   iapQueue.push({ kind: "purchased", product: "com.jellypal.jelly.small", jelly: 250, tx: "777" });
   await ev("iapPoll()");
   check(ev("jelly") === before + 250, "redelivered tx does not grant twice");
+
+  const failedTx = { kind: "purchased", product: "com.jellypal.jelly.small", jelly: 250, tx: "sk:2000000123456789" };
+  saveFails = true;
+  iapQueue.push(failedTx);
+  await ev("iapPoll()");
+  check(!ackedTxs.includes(failedTx.tx), "failed save leaves payment unfinished");
+  const afterFailedSave = ev("jelly");
+  saveFails = false;
+  iapQueue.push(failedTx);
+  await ev("iapPoll()");
+  check(ev("jelly") === afterFailedSave && ackedTxs.includes(failedTx.tx),
+    "save retry finishes payment without crediting it twice");
+  check(ev(`sanitizeIapTransactions(${JSON.stringify(savedState.iapTx)}).includes('${failedTx.tx}')`),
+    "stable StoreKit transaction survives save validation on relaunch");
+  ev("saveReady = false");
+  iapQueue.push({ ...failedTx, tx: "sk:waiting-for-load" });
+  await ev("iapPoll()");
+  check(iapQueue.length === 1 && !ackedTxs.includes("sk:waiting-for-load"),
+    "payments wait for the player's saved state to load");
+  ev("saveReady = true");
+  await ev("iapPoll()");
 
   // cancelled purchases (code 2) stay silent; real failures surface
   const bangN = ev("bangs.length");

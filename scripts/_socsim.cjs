@@ -1083,6 +1083,23 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
   delete invokeCalls.focus_app;
   delete invokeMocks.agent_notice;
 
+  // MCP surface: a "focus" notice fires focus_app directly (no tap needed),
+  // and each poll mirrors live state into agent_status_write
+  invokeMocks.agent_notice = () => Promise.resolve(JSON.stringify({ seq: 11, kind: "focus", app: "Paseo" }));
+  ev("agentPollAt = 0;");
+  delete invokeCalls.focus_app;
+  frame(t += 16.7);
+  await new Promise((r) => setImmediate(r));
+  frame(t += 16.7);
+  check(invokeCalls.focus_app && invokeCalls.focus_app.name === "Paseo",
+    "focus notice invokes focus_app without a tap", JSON.stringify(invokeCalls.focus_app));
+  check(ev(`agentSeq`) === 11, "focus notice consumes the seq", ev(`agentSeq`));
+  delete invokeCalls.focus_app;
+  delete invokeMocks.agent_notice;
+  const st = invokeCalls.agent_status_write && invokeCalls.agent_status_write.json;
+  check(st && (() => { const s = JSON.parse(st); return s.v === "0.4.4" && typeof s.state === "string" && typeof s.jelly === "number" && typeof s.face === "string" && typeof s.t === "number"; })(),
+    "status board mirrors live state to status.json", st || "none");
+
   // an expired face's cause stamp dies with it — a lingering stamp used to
   // ghost-pop the old reason icon on the frame after expiry, and to
   // resurrect it on any later unstamped return to that same face
@@ -1222,6 +1239,71 @@ const check = (ok, name, extra) => { console.log((ok ? "PASS " : "FAIL ") + name
   check(ev(`fsActive`) === false, "fullscreen clear unflags fsActive");
   ev(`setHideMode(0)`);
   delete invokeCalls.set_capture_excluded;
+
+  // #7 hangul pipeline: say() keeps syllables, textW prices wide cells,
+  // drawText rasterizes through hanGlyph, long korean truncates by width
+  ev(`say("안녕하세요 젤리")`);
+  check(ev(`sayText`) === "안녕하세요 젤리", "say() keeps hangul syllables", ev(`sayText`));
+  ev(`say("hi <script> alert(1) 친구")`);
+  check(ev(`sayText`) === "HI SCRIPT ALERT1 친구", "say() still strips hostile glyphs, keeps the korean", ev(`sayText`));
+  check(ev(`textW("AB",1)`) === 11 && ev(`textW("가",1)`) === 10 && ev(`textW("A가",1)`) === 16,
+    "textW prices wide cells (11 vs 6)",
+    JSON.stringify([ev(`textW("AB",1)`), ev(`textW("가",1)`), ev(`textW("A가",1)`)]));
+  ev(`say("안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요안녕하세요")`);
+  check(ev(`textW(sayText,1)`) <= 204, "long korean say caps by width", ev(`textW(sayText,1)`));
+  ev(`sayUntil = performance.now() + 100;`);
+  const han0 = ev(`hanCache.size`);
+  ev(`drawText(ctx, "한A", 5, 5, 1, "#ffffff")`);
+  check(ev(`hanCache.size`) > han0, "drawText rasterizes hangul into hanGlyph cache", ev(`hanCache.size`));
+  check(ev(`isWide("ㅋ") && isWide("각") && !isWide("K") && !isWide("!")`), "isWide covers syllables + jamo only");
+  ev(`sayText = ""; sayUntil = 0;`);
+
+  // rename path: hidden input mirrors into buf, commit saves hangul names
+  ev(`owned.push(SPECIES[5].id);`);
+  ev(`(function(){
+    const id = SPECIES[5].id;
+    nameEdit = { i: 5, buf: "", inp: null };
+    nameEdit.buf = "젤리짱";
+    const saved = nameEdit.buf.trim().slice(0, 10);
+    if (saved) customNames[id] = saved;
+    nameEdit = null;
+    return customNames[id];
+  })()`);
+  check(ev(`customNames[SPECIES[5].id]`) === "젤리짱", "hangul name commits to customNames", ev(`customNames[SPECIES[5].id]`));
+  check(ev(`spName(SPECIES[5])`) === "젤리짱", "spName surfaces the hangul name");
+  check(ev(`sanitizeCustomNames((()=>{const o={};o[SPECIES[5].id]="젤리";return o})())[SPECIES[5].id]`) === "젤리",
+    "name sanitizer keeps hangul names", ev(`JSON.stringify(sanitizeCustomNames((()=>{const o={};o[SPECIES[5].id]="젤리";return o})()))`));
+  check(ev(`sanitizeCustomNames((()=>{const o={};o[SPECIES[5].id]="<bad>";return o})())[SPECIES[5].id]`) === undefined,
+    "name sanitizer still drops hostile names");
+  ev(`delete customNames[SPECIES[5].id];`);
+
+  // #11 trophies: achCheckAll pays jelly once per def over lifetime counters.
+  // pre-mark every def except the two under test — counters accumulated by
+  // earlier tests would otherwise unlock extra trophies in the same sweep
+  ev(`stats.pulls = 0; achDone = {}; for (const id of ACH_IDS) if (id !== "pull1" && id !== "pull25") achDone[id] = 1;`);
+  const achJelly0 = ev(`jelly`);
+  ev(`stats.pulls = 1;`);
+  ev(`achCheckAll();`);
+  check(ev(`achDone.pull1 === 1 && jelly === ${achJelly0} + ACH_DEFS.pull1.g`),
+    "trophy unlocks at the threshold and pays jelly once",
+    ev(`JSON.stringify({done:achDone.pull1,j:jelly,g:ACH_DEFS.pull1.g})`));
+  const achJelly1 = ev(`jelly`);
+  ev(`achCheckAll();`);
+  check(ev(`jelly`) === achJelly1, "an unlocked trophy never repays",
+    ev(`JSON.stringify({j:jelly})`));
+  check(ev(`stats.pulls = 24; achCheckAll(); achDone.pull25`) === undefined &&
+    ev(`stats.pulls = 25; achCheckAll(); achDone.pull25 === 1`),
+    "tiered trophies fire at their own thresholds", ev(`JSON.stringify(achDone)`));
+  check(ev(`sanitizeAchDone({pull1:1,bogus:1,night:true})`) &&
+    ev(`JSON.stringify(sanitizeAchDone({pull1:1,bogus:1,night:true}))`) === `{"pull1":1,"night":1}`,
+    "achDone sanitizer keeps known ids, drops bogus",
+    ev(`JSON.stringify(sanitizeAchDone({pull1:1,bogus:1,night:true}))`));
+  check(ev(`(()=>{const s=sanitizeStats({pulls:0,breeds:0,shiny:0,treats:0,plays:0,pets:5,photos:2,errands:3,quests:4,drops:1});return s.pets===5&&s.photos===2&&s.errands===3&&s.quests===4&&s.drops===1})()`),
+    "stats sanitizer keeps the new lifetime counters");
+  ev(`achSeenN = 0; questSeenN = 99;`);
+  check(ev(`missions.filter(q=>q.done).length > questSeenN || Object.keys(achDone).length > achSeenN`),
+    "quest badge also flags unseen trophies");
+  ev(`achDone = {}; stats.pulls = 0; achSeenN = 0; questSeenN = 0;`);
 
   // swallowed frame exceptions abort the rest of frameBody silently —
   // any FRAME crash logged during the whole run is a real regression
