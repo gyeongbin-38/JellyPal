@@ -6514,4 +6514,5 @@ target\debug\jellypal.exe
 - 제출용 screenshot 6개(1280×800, 2560×1600 각 3종)를 alpha 없는 opaque RGB PNG로 flatten. `check-store.cjs`가 PNG IHDR을 직접 읽어 exact 16:10 크기/8bit/color type 2/non-interlace까지 검사
 - support URL 차단 위험 완화: 구매 CTA 없는 `site/support.html` 추가, 연락 경로는 GitHub issue tracker로 변경, privacy/index에서 연결. Cloudflare Pages 라이브 `https://jellypal.fun/support.html` 확인. `submission.json`의 support URL도 갱신
 - Chromium 실제 canvas 프로브에서 warm frame cost는 baseline p95 0.7ms / crowded pals p95 0.8ms, 8ms 초과 frame 0. crowded pal x-direction reversal은 자연스러운 walk/토템 stack 동작 수준이었고 최종 동일 x는 y가 다른 intentional stack이라 crowd solver 회귀 아님
+- Mac 인계 패키지 생성: `dist/Jellypal_0.4.4_mac_handoff_build118.zip` (SHA-256 `8c1a722d99ab466e17202da488bf5c30e6a44aa017a5af6ed4d827b8d4bdb25f`). 내부 `Jellypal.app.tar.gz` hash를 ZIP packaging 후 다시 확인해 build 118 값과 일치
 - 남은 owner gate는 그대로: 배포용 인증서/provisioning으로 서명, StoreKit Sandbox purchase/cancel/failure/redelivery, macOS 12·13 및 Retina/외부 실기기, 최종 네이티브 screenshot 선택, Transporter upload, App Store Connect 가격/세금/연령/개인정보/수출/리뷰 연락처

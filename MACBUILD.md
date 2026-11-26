@@ -137,6 +137,9 @@ owner fields must be completed in the Apple account before submission.
 - Local candidate, native screenshots and logs:
   `dist/app-store-candidate-build118/` (ignored build output).
 - Archive SHA-256: `3765d25509671c89628c6c919500117c52c9e89aafa0d66a5c2d40bbeb36acaa`.
+- Local handoff bundle: `dist/Jellypal_0.4.4_mac_handoff_build118.zip`
+  (SHA-256 `8c1a722d99ab466e17202da488bf5c30e6a44aa017a5af6ed4d827b8d4bdb25f`).
+  The inner app archive hash was checked again after ZIP packaging.
 
 Build 116 and the older `dist/Jellypal_0.4.4_mac_handoff_20261126.zip` are
 superseded; do not upload them. The owner can use a Mac later for signing,
