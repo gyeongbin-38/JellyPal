@@ -9,9 +9,9 @@ Mac app. The source also rejects iOS/Android compilation.
 
 | Target | Release configuration | Verification status |
 |---|---|---|
-| Operating system | macOS 12.0 or newer | Native Mac testing still required |
-| Apple silicon Mac | arm64 | Universal CI configured; Mac build must run |
-| Intel Mac | x86_64 | Universal CI configured; Intel testing still required |
+| Operating system | macOS 12.0 or newer | Current Mac CI passed; macOS 12 itself still needs testing |
+| Apple silicon Mac | arm64 | Universal binary, sandbox launch and save verified on Mac CI |
+| Intel Mac | x86_64 | Universal binary, sandbox launch and save verified on Mac CI |
 | Hardware | MacBook Air/Pro, iMac, Mac mini, Mac Studio, Mac Pro meeting the OS/CPU requirements | This is not a claim of testing every model |
 | iPhone, iPad, Apple Vision Pro | Excluded | Register only macOS in App Store Connect |
 
@@ -41,7 +41,8 @@ On this GNU Windows host, the generated library-test executable also lacked
 the Common Controls v6 manifest and failed to load TaskDialogIndirect.
 All 10 native tests passed after adding that manifest to a temporary QA copy
 of the executable and placing WebView2Loader.dll beside it. The source and
-release binaries were not patched by this workaround. Mac CI remains required.
+release binaries were not patched by this workaround. Mac CI subsequently
+passed all native tests without this Windows-specific workaround.
 
 Layout tests run the real src/main.js/styles.css and Canvas renderer in
 Chromium with native IPC stubbed. Screenshots/results go to the temporary
@@ -105,10 +106,9 @@ owner fields must be completed in the Apple account before submission.
 
 ## Checks still required before upload
 
-- Run Mac CI store tests and the Universal build successfully.
 - Launch on macOS 12; verify login-item controls are hidden there.
 - Test login items on macOS 13 or newer.
-- Test Apple silicon and Intel: launch, save/relaunch, menu-bar summon, quit.
+- Manually test menu-bar summon, window dragging, focus and quit on a Mac.
 - Move between Retina and ordinary external displays; change display scaling
   and Dock location/auto-hide settings.
 - Check the nursery with system scrollbars set to always visible.
@@ -120,6 +120,19 @@ owner fields must be completed in the Apple account before submission.
   privacy and support URLs.
 - Capture submission screenshots from the final Mac app. Existing stylized
   marketing renders and Chromium QA captures are not native-device evidence.
+
+## Verified candidate (2026-11-26)
+
+- Version 0.4.4, build 116, bundle ID com.jellypal.store.
+- [Universal build and launch passed](https://github.com/gyeongbin-38/JellyPal/actions/runs/45800537018).
+- [Apple silicon and Intel sandbox launch/save passed](https://github.com/gyeongbin-38/JellyPal/actions/runs/45802249948).
+- Both verification hosts produced native screenshots. No frontend errors
+  appeared in their logs; the renderer heartbeat was present.
+- The candidate is before Apple distribution signing. Ad-hoc signatures used
+  for CI verification do not make it an upload-ready App Store package.
+- Local candidate, native screenshots and logs:
+  `dist/app-store-preflight-20261126/` (ignored build output).
+- Archive SHA-256: `8e0a545bdc4bf101272c4cb990cc4bd3d4344ae20bcc2996e9431574ed4bae07`.
 
 ## Official references
 
