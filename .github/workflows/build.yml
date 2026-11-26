@@ -10,10 +10,15 @@ on:
         required: false
         type: string
         default: ''
+      store_only:
+        description: 'Build only the macOS store candidate'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   check:
-    if: inputs.artifact_run_id == ''
+    if: inputs.artifact_run_id == '' && !inputs.store_only
     strategy:
       matrix:
         os: [windows-latest, macos-latest]
@@ -30,7 +35,7 @@ jobs:
           cargo test
 
   layout:
-    if: inputs.artifact_run_id == ''
+    if: inputs.artifact_run_id == '' && !inputs.store_only
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,7 +56,7 @@ jobs:
           retention-days: 14
 
   bundle:
-    if: inputs.artifact_run_id == ''
+    if: inputs.artifact_run_id == '' && !inputs.store_only
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -165,7 +170,7 @@ jobs:
         # run number gives that for free — re-tar so the artifact carries it
         run: |
           B="src-tauri/target/universal-apple-darwin/release/bundle/macos"
-          lipo -verify_arch x86_64 arm64 "$B/Jellypal.app/Contents/MacOS/jellypal"
+          lipo "$B/Jellypal.app/Contents/MacOS/jellypal" -verify_arch x86_64 arm64
           plutil -replace CFBundleVersion -string "$GITHUB_RUN_NUMBER" "$B/Jellypal.app/Contents/Info.plist"
           tar -czf "$B/Jellypal.app.tar.gz" -C "$B" Jellypal.app
       - uses: actions/upload-artifact@v4
