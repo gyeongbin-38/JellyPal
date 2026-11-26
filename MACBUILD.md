@@ -96,7 +96,12 @@ To inspect a downloaded candidate without signing:
 The build workflow also accepts an optional `artifact_run_id` to download a
 prior `jellypal-store` artifact and run it with ad-hoc App Sandbox signatures
 on both Apple silicon and Intel CI hosts. This verifies packaging, launch and
-save access; it does not replace StoreKit Sandbox or distribution signing.
+save access and attempts a native desktop screenshot when the runner allows
+screen capture. It does not replace StoreKit Sandbox or distribution signing.
+
+The proposed App Store Connect app record, description and consumable product
+IDs are in `src-tauri/macos-store/submission.json`. This is a draft; unset
+owner fields must be completed in the Apple account before submission.
 
 ## Checks still required before upload
 

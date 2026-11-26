@@ -227,6 +227,7 @@ jobs:
           APP_PID=$!
           sleep 25
           kill -0 "$APP_PID"
+          screencapture -x "$RUNNER_TEMP/store-check/native-screen.png" 2> "$RUNNER_TEMP/store-check/screenshot.log" || true
           kill "$APP_PID" || true
           echo "PASS: sandboxed store app stayed alive on $(uname -m)"
           STATE="$(find "$HOME/Library/Containers/com.jellypal.store" -name state.json -print -quit)"
@@ -243,5 +244,6 @@ jobs:
           name: store-verification-${{ matrix.os }}
           path: |
             ${{ runner.temp }}/store-check/*.log
+            ${{ runner.temp }}/store-check/*.png
             ${{ runner.temp }}/store-check/entitlements.plist
           retention-days: 14
