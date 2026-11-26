@@ -79,6 +79,25 @@ stamps a unique CFBundleVersion. The CI artifact is an unsigned submission
 candidate. Use `src-tauri/macos-store/sign.sh` on a Mac with the appropriate
 distribution certificates to produce the installer package.
 
+Signing requires the actual Mac App Store Connect distribution profile and
+matching certificates. The signing helper embeds the profile and adds the
+profile's application identifier and Team ID to the sandbox entitlements.
+It validates the resulting app and installer signatures. It never uploads.
+
+```sh
+bash src-tauri/macos-store/sign.sh /path/Jellypal.app \
+  "Apple Distribution: Your Name (TEAMID)" \
+  "3rd Party Mac Developer Installer: Your Name (TEAMID)" \
+  127 /path/Jellypal.provisionprofile
+```
+
+To inspect a downloaded candidate without signing:
+`bash src-tauri/macos-store/verify.sh /path/Jellypal.app`.
+The build workflow also accepts an optional `artifact_run_id` to download a
+prior `jellypal-store` artifact and run it with ad-hoc App Sandbox signatures
+on both Apple silicon and Intel CI hosts. This verifies packaging, launch and
+save access; it does not replace StoreKit Sandbox or distribution signing.
+
 ## Checks still required before upload
 
 - Run Mac CI store tests and the Universal build successfully.

@@ -4,9 +4,16 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      artifact_run_id:
+        description: 'Verify an existing jellypal-store artifact on Intel and Apple silicon; leave empty to build'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   check:
+    if: inputs.artifact_run_id == ''
     strategy:
       matrix:
         os: [windows-latest, macos-latest]
@@ -23,6 +30,7 @@ jobs:
           cargo test
 
   layout:
+    if: inputs.artifact_run_id == ''
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,6 +51,7 @@ jobs:
           retention-days: 14
 
   bundle:
+    if: inputs.artifact_run_id == ''
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -132,6 +141,7 @@ jobs:
   # binary, then the store config (sandbox entitlements, opaque card
   # window, com.jellypal.store) merges over tauri.conf.json.
   store:
+    if: inputs.artifact_run_id == ''
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -176,3 +186,57 @@ jobs:
             echo "FAIL: store build exited early"
             exit 1
           fi
+
+  verify-store:
+    if: github.event_name == 'workflow_dispatch' && inputs.artifact_run_id != ''
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: jellypal-store
+          path: store-artifact
+          run-id: ${{ inputs.artifact_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Inspect Universal bundle
+        run: |
+          mkdir -p "$RUNNER_TEMP/store-check"
+          tar -xzf store-artifact/Jellypal.app.tar.gz -C "$RUNNER_TEMP/store-check"
+          bash src-tauri/macos-store/verify.sh "$RUNNER_TEMP/store-check/Jellypal.app"
+          bash -n src-tauri/macos-store/sign.sh
+      - name: Run with App Sandbox enabled
+        run: |
+          APP="$RUNNER_TEMP/store-check/Jellypal.app"
+          codesign --force --sign - --entitlements src-tauri/macos-store/entitlements.plist "$APP"
+          codesign --verify --deep --strict "$APP"
+          codesign --display --entitlements - --xml "$APP" > "$RUNNER_TEMP/store-check/entitlements.plist" 2>/dev/null
+          /usr/libexec/PlistBuddy -c 'Print :com.apple.security.app-sandbox' "$RUNNER_TEMP/store-check/entitlements.plist" | grep -x true
+          "$APP/Contents/MacOS/jellypal" > "$RUNNER_TEMP/store-check/stdout.log" 2> "$RUNNER_TEMP/store-check/stderr.log" &
+          APP_PID=$!
+          sleep 25
+          kill -0 "$APP_PID"
+          kill "$APP_PID" || true
+          echo "PASS: sandboxed store app stayed alive on $(uname -m)"
+          STATE="$(find "$HOME/Library/Containers/com.jellypal.store" -name state.json -print -quit)"
+          test -n "$STATE"
+          node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); console.log("Sandbox save parsed")' "$STATE"
+          LOG="$(find "$HOME/Library/Containers/com.jellypal.store" -name crash.log -print -quit)"
+          if [ -n "$LOG" ]; then
+            cp "$LOG" "$RUNNER_TEMP/store-check/frontend.log"
+            if grep -E 'JSERR|JSREJ|FRAME ' "$LOG"; then exit 1; fi
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: store-verification-${{ matrix.os }}
+          path: |
+            ${{ runner.temp }}/store-check/*.log
+            ${{ runner.temp }}/store-check/entitlements.plist
+          retention-days: 14
