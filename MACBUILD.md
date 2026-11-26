@@ -123,26 +123,25 @@ owner fields must be completed in the Apple account before submission.
   but final native Mac captures are preferable; Chromium QA captures are not
   native-device evidence.
 
-## Verified candidate (2026-11-26)
+## Verified candidate (2026-11-27 KST)
 
-- Version 0.4.4, build 116, bundle ID com.jellypal.store.
-- [Universal build and launch passed](https://github.com/gyeongbin-38/JellyPal/actions/runs/45800537018).
-- [Apple silicon and Intel sandbox launch/save passed](https://github.com/gyeongbin-38/JellyPal/actions/runs/45802249948).
-- Both verification hosts produced native screenshots. No frontend errors
-  appeared in their logs; the renderer heartbeat was present.
+- Version 0.4.4, build 118, bundle ID com.jellypal.store.
+- Source SHA: `1385974e44ccf5233e8bed14a919c3cbb0a22683`.
+- [Universal build and launch passed](https://github.com/gyeongbin-38/JellyPal/actions/runs/45882185052).
+- [Apple silicon and Intel sandbox launch/save/heartbeat passed](https://github.com/gyeongbin-38/JellyPal/actions/runs/45884515281).
+- Verification hosts were macOS 26.7.2 arm64 and macOS 15.7.9 x86_64. Both
+  produced native screenshots; both `frontend.log` files contain the renderer
+  heartbeat and no JS error signature; stdout and stderr stayed empty.
 - The candidate is before Apple distribution signing. Ad-hoc signatures used
   for CI verification do not make it an upload-ready App Store package.
 - Local candidate, native screenshots and logs:
-  `dist/app-store-preflight-20261126/` (ignored build output).
-- Archive SHA-256: `8e0a545bdc4bf101272c4cb990cc4bd3d4344ae20bcc2996e9431574ed4bae07`.
+  `dist/app-store-candidate-build118/` (ignored build output).
+- Archive SHA-256: `3765d25509671c89628c6c919500117c52c9e89aafa0d66a5c2d40bbeb36acaa`.
 
-The owner can use a Mac later. Windows browser work can proceed with the
-explicit App ID and macOS-only App Store Connect record while signing,
-physical-device checks and StoreKit Sandbox testing wait for Mac access.
-A local handoff bundle preserves the verified app archive, signing helpers,
-submission draft, native screenshots, checksum and Korean instructions:
-`dist/Jellypal_0.4.4_mac_handoff_20261126.zip`.
-The inner app archive's SHA-256 was checked after ZIP packaging.
+Build 116 and the older `dist/Jellypal_0.4.4_mac_handoff_20261126.zip` are
+superseded; do not upload them. The owner can use a Mac later for signing,
+physical-device checks and StoreKit Sandbox testing while Windows browser
+work proceeds with the explicit App ID and macOS-only App Store Connect record.
 
 ## Official references
 

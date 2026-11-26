@@ -6506,3 +6506,12 @@ target\debug\jellypal.exe
 - 사이트: 62종 dex parity 반영 상태로 배포. App Store privacy URL용 `privacy.html` 추가 후 Cloudflare Pages 배포, https://jellypal.fun/privacy.html 라이브 확인
 - 검증: npm test 5/5, layout 9/9, verify 317/317, fresh/null/seeded/narrowprop/malformed GREEN, fuzz 1200 seed 424242 1020회 시나리오 통과, pal audit 62/62, rust check GREEN, site deps/surface/checkout GREEN
 - 남은 게이트: Windows release exe는 현재 소스보다 오래돼 package/cleanboot heartbeat는 로컬 재빌드 전까지 RED. Mac 후보는 GitHub Actions에서 새 빌드 필요. 실제 Mac에서 StoreKit Sandbox/디스플레이/서명/스크린샷/Transporter는 사람 계정으로 진행
+
+## 2026-11-27 build 118 verification + support/screenshot hardening
+- Mac App Store 후보 확정: version 0.4.4 / build 118 / `com.jellypal.store` / source `1385974e44ccf5233e8bed14a919c3cbb0a22683`. universal build는 run `45882185052`에서 성공, archive SHA-256 `3765d25509671c89628c6c919500117c52c9e89aafa0d66a5c2d40bbeb36acaa`
+- 같은 artifact를 workflow_dispatch run `45884515281`로 재검증: macOS 26.7.2 arm64와 macOS 15.7.9 x86_64에서 sandbox launch + sandboxed `state.json` parse + renderer heartbeat `tick` + native screenshot 통과. stdout/stderr empty, `JSERR|JSREJ|FRAME` 없음
+- verification gate를 강화: 35초 대기 후 `crash.log`의 heartbeat가 없으면 실패하도록 변경. 이전 25초 창은 첫 20초 heartbeat 근처라 log가 artifact에 빠질 수 있었음
+- 제출용 screenshot 6개(1280×800, 2560×1600 각 3종)를 alpha 없는 opaque RGB PNG로 flatten. `check-store.cjs`가 PNG IHDR을 직접 읽어 exact 16:10 크기/8bit/color type 2/non-interlace까지 검사
+- support URL 차단 위험 완화: 구매 CTA 없는 `site/support.html` 추가, 연락 경로는 GitHub issue tracker로 변경, privacy/index에서 연결. Cloudflare Pages 라이브 `https://jellypal.fun/support.html` 확인. `submission.json`의 support URL도 갱신
+- Chromium 실제 canvas 프로브에서 warm frame cost는 baseline p95 0.7ms / crowded pals p95 0.8ms, 8ms 초과 frame 0. crowded pal x-direction reversal은 자연스러운 walk/토템 stack 동작 수준이었고 최종 동일 x는 y가 다른 intentional stack이라 crowd solver 회귀 아님
+- 남은 owner gate는 그대로: 배포용 인증서/provisioning으로 서명, StoreKit Sandbox purchase/cancel/failure/redelivery, macOS 12·13 및 Retina/외부 실기기, 최종 네이티브 screenshot 선택, Transporter upload, App Store Connect 가격/세금/연령/개인정보/수출/리뷰 연락처

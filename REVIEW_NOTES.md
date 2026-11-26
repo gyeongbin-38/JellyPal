@@ -40,6 +40,6 @@ platform is macOS only; there are no iPhone, iPad, or visionOS builds.
 ## Submission evidence
 
 The build, signing and device checks still needed before upload are recorded
-in MACBUILD.md. Final submission screenshots must be captured from the final
-Mac app; existing stylized marketing renders and Chromium QA captures are
-not evidence of native macOS testing.
+in MACBUILD.md. The current draft screenshots are exact-size opaque RGB PNGs,
+but final native Mac captures are preferable; Chromium QA captures are not
+evidence of native macOS testing.
