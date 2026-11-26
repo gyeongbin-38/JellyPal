@@ -15,12 +15,32 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Frontend harness
-        run: node scripts/_sim.cjs
+        run: npm test
       - name: Rust check + tests
         working-directory: src-tauri
         run: |
           cargo check
           cargo test
+
+  layout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:layout
+        env:
+          JELLYPAL_LAYOUT_OUTPUT: ${{ runner.temp }}/jellypal-layout
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jellypal-layout
+          path: ${{ runner.temp }}/jellypal-layout
+          retention-days: 14
 
   bundle:
     runs-on: macos-latest
@@ -116,32 +136,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
       - run: npm ci
-      - name: Strip private API + Windows loader for store build
+      - name: Prepare macOS-only store build
+        run: npm run prepare:store
+      - name: Test native store backend
         run: |
-          sed -i '' 's/, "macos-private-api"//' src-tauri/Cargo.toml
-          # the Windows WebView2 loader has no business inside a Mac .app
-          sed -i '' '/"resources": {/,/}/d' src-tauri/tauri.conf.json
+          export TAURI_CONFIG="$(cat src-tauri/tauri.store.conf.json)"
+          cargo test --locked --features store --lib --manifest-path src-tauri/Cargo.toml
       - uses: tauri-apps/tauri-action@v0
         with:
-          args: --config src-tauri/tauri.store.conf.json --features store --bundles app
+          args: --config src-tauri/tauri.store.conf.json --features store --bundles app --target universal-apple-darwin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Stamp CFBundleVersion for App Store uploads
         # every upload needs a unique monotonic build number; the workflow
         # run number gives that for free — re-tar so the artifact carries it
         run: |
-          B="src-tauri/target/release/bundle/macos"
+          B="src-tauri/target/universal-apple-darwin/release/bundle/macos"
+          lipo -verify_arch x86_64 arm64 "$B/Jellypal.app/Contents/MacOS/jellypal"
           plutil -replace CFBundleVersion -string "$GITHUB_RUN_NUMBER" "$B/Jellypal.app/Contents/Info.plist"
           tar -czf "$B/Jellypal.app.tar.gz" -C "$B" Jellypal.app
       - uses: actions/upload-artifact@v4
         with:
           name: jellypal-store
-          path: src-tauri/target/release/bundle/macos/Jellypal.app.tar.gz
+          path: src-tauri/target/universal-apple-darwin/release/bundle/macos/Jellypal.app.tar.gz
           retention-days: 14
       - name: Smoke test — launch store app, verify it stays alive
         run: |
-          BIN="src-tauri/target/release/bundle/macos/Jellypal.app/Contents/MacOS/jellypal"
+          BIN="src-tauri/target/universal-apple-darwin/release/bundle/macos/Jellypal.app/Contents/MacOS/jellypal"
           "$BIN" &
           APP_PID=$!
           sleep 20

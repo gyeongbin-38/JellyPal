@@ -65,7 +65,6 @@ function fit() {
   ctx.imageSmoothingEnabled = false;
 }
 fit();
-addEventListener("resize", fit);
 
 // ---------- sprite engine (36x26 logical grid) ----------
 const SW = 36;
@@ -2613,12 +2612,24 @@ function floorAt(x) {
 }
 function clampPanelPoint(x, y, w, h) {
   const safe = usableRectAt(x + w / 2, y + h / 2);
-  const maxX = Math.max(safe.left + 4, safe.right - w - 4);
-  const maxY = Math.max(safe.top + 4, safe.bottom - h - 4);
+  // Narrow cards may have less than 8px left after the panel's borders.
+  const mx = Math.max(0, Math.min(4, (safe.right - safe.left - w) / 2));
+  const my = Math.max(0, Math.min(4, (safe.bottom - safe.top - h) / 2));
+  const maxX = Math.max(safe.left + mx, safe.right - w - mx);
+  const maxY = Math.max(safe.top + my, safe.bottom - h - my);
   return [
-    Math.round(Math.max(safe.left + 4, Math.min(maxX, x))),
-    Math.round(Math.max(safe.top + 4, Math.min(maxY, y))),
+    Math.round(Math.max(safe.left + mx, Math.min(maxX, x))),
+    Math.round(Math.max(safe.top + my, Math.min(maxY, y))),
   ];
+}
+// Keep the border box inside one display's work area. Tall nurseries scroll
+// at their original pixel size, so drawing and pointer coordinates still agree.
+function placePanel(el, x, y) {
+  const safe = usableRectAt(x, y);
+  el.style.maxHeight = `${Math.max(48, safe.bottom - safe.top - 8)}px`;
+  const [left, top] = clampPanelPoint(x, y, el.offsetWidth, el.offsetHeight);
+  el.style.left = `${left}px`;
+  el.style.top = `${top}px`;
 }
 function sanitizeMonitorPlatforms(value) {
   if (!Array.isArray(value)) return null;
@@ -2707,6 +2718,10 @@ let iapProds = []; // [{id,title,price,jelly}] — empty until the store answers
 // StoreKit redelivers the tx on relaunch; this list is the "already paid
 // out" proof that survives the restart
 let iapTxIds = [];
+function sanitizeIapTransactions(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter(t => typeof t === "string" && /^(?:sk:[A-Za-z0-9._:-]{1,128}|\d{1,20})$/.test(t)))].slice(-100);
+}
 const validGemGrant = (v) => Number.isSafeInteger(v) && GEM_PACK_AMOUNTS.has(v);
 const redeemErrorText = (error) => String((error && error.message) || error || "BAD CODE").toUpperCase();
 const redeemPending = new Set();
@@ -2890,8 +2905,10 @@ setInterval(claimGrants, 10 * 60 * 1000);
 // but the queue lives in the Rust StoreKit observer instead of a server.
 // Unfinished transactions are redelivered by the OS on relaunch, so a
 // crash between drain and ack can never eat a paid pack.
+let iapPolling = false;
 async function iapPoll() {
-  if (!STORE) return;
+  if (!STORE || !saveReady || iapPolling) return;
+  iapPolling = true;
   try {
     const evs = await invokeAsync("iap_drain");
     if (!Array.isArray(evs)) return;
@@ -2909,9 +2926,10 @@ async function iapPoll() {
           }
           dirty = true; // persist the tx id even for a zero-grant
         }
-        // ack retries every redelivery until it lands — finishing is the
-        // only thing that stops StoreKit from re-sending the purchase
-        invokeAsync("iap_ack", { tx: ev.tx }).catch(() => {});
+        // Save the balance and transaction ID before finishing payment. A
+        // failed write leaves it unfinished and eligible for the next poll.
+        await persist();
+        await invokeAsync("iap_ack", { tx: ev.tx });
       } else if (ev.kind === "restored") {
         bangs.push({ x: winW / 2, y: 100, life: 2, t: "PURCHASE RESTORED" });
       } else if (ev.kind === "failed" && ev.code !== 2) {
@@ -2919,7 +2937,7 @@ async function iapPoll() {
         bangs.push({ x: winW / 2, y: 100, life: 2, t: "PURCHASE FAILED" });
       }
     }
-  } catch {}
+  } catch {} finally { iapPolling = false; }
 }
 // ask StoreKit for the live catalog; product metadata lands in iapProds
 // when the request returns (the delegate callback is async)
@@ -3560,9 +3578,7 @@ invokeAsync("load_state").then((txt) => {
   else redeemedBound = [];
   if (typeof s.uid === "string" && /^JP[A-Z2-7]{24}$/.test(s.uid)) uid = s.uid;
   claimedNonces = sanitizeClaimedNonces(s.claimed);
-  iapTxIds = Array.isArray(s.iapTx)
-    ? s.iapTx.filter((t) => typeof t === "string" && /^\d{1,20}$/.test(t)).slice(-100)
-    : [];
+  iapTxIds = sanitizeIapTransactions(s.iapTx);
   ensureUid();
   claimGrants(); // any shop purchases waiting for this install pay out now
   // dragged panel positions — validated so a bad save can't park a
@@ -7426,6 +7442,20 @@ const RH = 290;
 rc.width = RW;
 rc.height = RH;
 
+function refreshViewportLayout() {
+  fit();
+  if (STORE) {
+    monPlats = [{ x: 0, top: 0, y: winH - 6, w: winW, h: winH - 6 }];
+    rebuildPlatforms();
+    reconcileAnchoredPlatforms(performance.now());
+  }
+  for (const [el, open] of [[ranch, ranchOpen], [nursery, nurseryOpen], [cardEl, !!cardTarget]]) {
+    if (open) placePanel(el, el.offsetLeft, el.offsetTop);
+  }
+  sendClickable();
+}
+addEventListener("resize", refreshViewportLayout);
+
 const ROW_H = 104;
 const PAGE_N = 12;          // 4 cols x 3 rows per page
 const FOOT_H = 28;          // pager/sort/filter bar above the baseboard
@@ -7610,9 +7640,11 @@ function fitRanch() {
   // fixed-size paged window: header + optional nursery + 3 rows + footer
   rc.height = 46 + nurseryH() + 3 * ROW_H + FOOT_H;
   ranchPage = Math.max(0, Math.min(ranchPage, pageCount() - 1));
+  if (ranchOpen) placePanel(ranch, ranch.offsetLeft, ranch.offsetTop);
 }
 
 rc.addEventListener("wheel", (e) => {
+  if (ranch.scrollHeight > ranch.clientHeight) return;
   e.preventDefault();
   ranchPage = Math.max(0, Math.min(ranchPage + (e.deltaY > 0 ? 1 : -1), pageCount() - 1));
   sfx.pop();
@@ -8200,6 +8232,7 @@ const babyCell = (k) => ({ x: 14 + (k % 4) * 112, y: 46 + Math.floor(k / 4) * RO
 function fitNursery() {
   const n = babyIdx().length;
   nc.height = n ? 46 + Math.ceil(n / 4) * ROW_H + 12 : 120;
+  if (nurseryOpen) placePanel(nursery, nursery.offsetLeft, nursery.offsetTop);
 }
 // photo album: fullscreen overlay browsing photo-mode PNGs saved on disk
 function openAlbum() {
@@ -8391,15 +8424,11 @@ function toggleNursery(force) {
   if (nurseryOpen) {
     fitNursery();
     if (panelPos.nursery) {
-      const [left, top] = clampPanelPoint(panelPos.nursery.x, panelPos.nursery.y, nursery.offsetWidth, nursery.offsetHeight);
-      nursery.style.left = `${left}px`;
-      nursery.style.top = `${top}px`;
+      placePanel(nursery, panelPos.nursery.x, panelPos.nursery.y);
     } else {
       // stack below the ranch when both windows are open
       const top = ranchOpen ? ranch.offsetTop + ranch.offsetHeight + 12 : petY - nc.height - 40;
-      const [left, safeTop] = clampPanelPoint(petX - NW / 2, top, NW, nc.height);
-      nursery.style.left = `${left}px`;
-      nursery.style.top = `${safeTop}px`;
+      placePanel(nursery, petX - NW / 2, top);
     }
   }
 }
@@ -8408,7 +8437,10 @@ function drawNursery(ms) {
   const t = ms / 1000;
   const babies = babyIdx();
   const wantH = babies.length ? 46 + Math.ceil(babies.length / 4) * ROW_H + 12 : 120;
-  if (nc.height !== wantH) nc.height = wantH;
+  if (nc.height !== wantH) {
+    nc.height = wantH;
+    placePanel(nursery, nursery.offsetLeft, nursery.offsetTop);
+  }
   const NHc = nc.height;
   nctx.imageSmoothingEnabled = false;
   nctx.clearRect(0, 0, NW, NHc);
@@ -8480,9 +8512,7 @@ nc.addEventListener("pointerdown", (e) => {
     const ox = e.clientX - nursery.offsetLeft, oy = e.clientY - nursery.offsetTop;
     capturePointer(nc, e.pointerId);
     const move = (ev) => {
-      const [left, top] = clampPanelPoint(ev.clientX - ox, ev.clientY - oy, nursery.offsetWidth, nursery.offsetHeight);
-      nursery.style.left = `${left}px`;
-      nursery.style.top = `${top}px`;
+      placePanel(nursery, ev.clientX - ox, ev.clientY - oy);
     };
     const up = () => {
       nc.removeEventListener("pointermove", move);
@@ -8565,15 +8595,11 @@ function openCard(target) {
   // beside whichever slime was clicked
   const saved = panelPos.card;
   if (saved) {
-    const [left, top] = clampPanelPoint(saved.x, saved.y, cardEl.offsetWidth, cardEl.offsetHeight);
-    cardEl.style.left = `${left}px`;
-    cardEl.style.top = `${top}px`;
+    placePanel(cardEl, saved.x, saved.y);
   } else {
     const tx = target === "pet" ? petX : target.x;
     const ty = target === "pet" ? petY : target.y;
-    const [left, top] = clampPanelPoint(tx + 64, ty - KH - 24, KW, KH);
-    cardEl.style.left = `${left}px`;
-    cardEl.style.top = `${top}px`;
+    placePanel(cardEl, tx + 64, ty - cardKH() - 24);
   }
   sfx.pop();
 }
@@ -8932,9 +8958,7 @@ kc.addEventListener("pointerdown", (e) => {
     const ox = e.clientX - cardEl.offsetLeft, oy = e.clientY - cardEl.offsetTop;
     capturePointer(kc, e.pointerId);
     const move = (ev) => {
-      const [left, top] = clampPanelPoint(ev.clientX - ox, ev.clientY - oy, cardEl.offsetWidth, cardEl.offsetHeight);
-      cardEl.style.left = `${left}px`;
-      cardEl.style.top = `${top}px`;
+      placePanel(cardEl, ev.clientX - ox, ev.clientY - oy);
     };
     const up = () => {
       kc.removeEventListener("pointermove", move);
@@ -9159,13 +9183,9 @@ function toggleRanch(force) {
     breedMode = false;
     breedSel = [];
     if (panelPos.ranch) {
-      const [left, top] = clampPanelPoint(panelPos.ranch.x, panelPos.ranch.y, ranch.offsetWidth, ranch.offsetHeight);
-      ranch.style.left = `${left}px`;
-      ranch.style.top = `${top}px`;
+      placePanel(ranch, panelPos.ranch.x, panelPos.ranch.y);
     } else {
-      const [left, top] = clampPanelPoint(petX - RW / 2, petY - rc.height - 40, RW, rc.height);
-      ranch.style.left = `${left}px`;
-      ranch.style.top = `${top}px`;
+      placePanel(ranch, petX - RW / 2, petY - rc.height - 40);
     }
   }
 }
@@ -9188,19 +9208,11 @@ rc.addEventListener("pointerdown", (e) => {
     const ox = e.clientX - ranch.offsetLeft, oy = e.clientY - ranch.offsetTop;
     capturePointer(rc, e.pointerId);
     const move = (ev) => {
-      const [nl, nt] = clampPanelPoint(ev.clientX - ox, ev.clientY - oy, ranch.offsetWidth, ranch.offsetHeight);
-      const dx = nl - ranch.offsetLeft, dy = nt - ranch.offsetTop;
-      ranch.style.left = `${nl}px`;
-      ranch.style.top = `${nt}px`;
+      const oldLeft = ranch.offsetLeft, oldTop = ranch.offsetTop;
+      placePanel(ranch, ev.clientX - ox, ev.clientY - oy);
+      const dx = ranch.offsetLeft - oldLeft, dy = ranch.offsetTop - oldTop;
       if (nurseryOpen) {
-        const [nurseryLeft, nurseryTop] = clampPanelPoint(
-          nursery.offsetLeft + dx,
-          nursery.offsetTop + dy,
-          nursery.offsetWidth,
-          nursery.offsetHeight,
-        );
-        nursery.style.left = `${nurseryLeft}px`;
-        nursery.style.top = `${nurseryTop}px`;
+        placePanel(nursery, nursery.offsetLeft + dx, nursery.offsetTop + dy);
       }
     };
     const up = () => {
@@ -9951,6 +9963,9 @@ function frame(now) {
   }
 }
 function frameBody(now) {
+  // Moving between Retina and non-Retina displays can change density without
+  // changing the logical viewport or delivering a resize event.
+  if (dpr !== (devicePixelRatio || 1)) refreshViewportLayout();
   // deep-idle throttle: pet is home, no companions, nothing animated,
   // no UI — the scene is static, so run at quarter rate and save the
   // battery. `prev` stays current so the next live frame gets a sane dt

@@ -1,86 +1,104 @@
-# JellyPal — macOS build & test
+# Jellypal: Mac App Store build and verification
 
-## 1. Toolchain
+## Distribution and compatible devices
 
-```bash
-xcode-select --install                       # clang + headers
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-brew install node gh
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh   # pick default
-```
+The store bundle ID is `com.jellypal.store`. In App Store Connect, select
+**macOS only** when creating the app. Do not add iOS or visionOS platforms.
+No iOS build is produced or submitted, so iPhone and iPad cannot install this
+Mac app. The source also rejects iOS/Android compilation.
 
-## 2. Get the code + build
+| Target | Release configuration | Verification status |
+|---|---|---|
+| Operating system | macOS 12.0 or newer | Native Mac testing still required |
+| Apple silicon Mac | arm64 | Universal CI configured; Mac build must run |
+| Intel Mac | x86_64 | Universal CI configured; Intel testing still required |
+| Hardware | MacBook Air/Pro, iMac, Mac mini, Mac Studio, Mac Pro meeting the OS/CPU requirements | This is not a claim of testing every model |
+| iPhone, iPad, Apple Vision Pro | Excluded | Register only macOS in App Store Connect |
 
-```bash
-gh auth login                                # repo is private
-gh repo clone gyeongbin-38/JellyPal
-cd JellyPal
+Login items use SMAppService on macOS 13+. The control is hidden on macOS 12.
+The store app uses an opaque 480x560 logical-pixel companion window. On small
+work areas it reduces its height and centers inside the menu-bar/Dock-safe
+area. The transparent desktop-wide overlay belongs to the direct build.
+
+## Local verification
+
+Use Node.js 24, Rust stable and the platform's Tauri build prerequisites.
+
+```sh
 npm ci
-npm run tauri build -- --bundles app         # add 'dmg' to also get an installer image
+npm test
+npx playwright install chromium
+npm run test:layout
+cd src-tauri
+cargo check --locked
+cargo test --locked --lib
 ```
 
-Binary lands at:
-`src-tauri/target/release/bundle/macos/Jellypal.app`
+For GNU Windows tools and a non-ASCII workspace path, the existing
+`node scripts/_rustcheck.cjs` uses an ASCII target/temp directory. Native
+Rust tests may need the same CARGO_TARGET_DIR and TEMP overrides.
+On this GNU Windows host, the generated library-test executable also lacked
+the Common Controls v6 manifest and failed to load TaskDialogIndirect.
+All 10 native tests passed after adding that manifest to a temporary QA copy
+of the executable and placing WebView2Loader.dll beside it. The source and
+release binaries were not patched by this workaround. Mac CI remains required.
 
-Dev loop instead: `npm run tauri dev` (recompiles on save).
+Layout tests run the real src/main.js/styles.css and Canvas renderer in
+Chromium with native IPC stubbed. Screenshots/results go to the temporary
+`jellypal-store-layout` directory; set JELLYPAL_LAYOUT_OUTPUT to change it.
+They do not verify native WKWebView, macOS window management, signing or live
+StoreKit purchases. CI uploads them as the jellypal-layout artifact.
 
-## 3. First run — the one permission that matters
+| Layout check | Conditions |
+|---|---|
+| Store card | 480x560, DPR 1 and 2 |
+| Small work areas | 480x484 and 480x493, DPR 1 and 2 |
+| Direct build | 1280x720, 1440x900, 1920x1080; DPR 1, 2, 1.5 |
+| Interaction | Ranch close, status card, settings, last row of a large nursery |
+| Position recovery | Saved position on a disconnected display; live viewport resize |
+| Native placement calculation | Retina, negative display origins, small 800x600-class work area |
 
-Launch the .app. macOS will ask for **Input Monitoring**
-(System Settings → Privacy & Security → Input Monitoring → enable Jellypal).
+## Build on a Mac
 
-- WITHOUT it: app still runs, slimes still walk — but the **typing-rewards
-  loop is dead** (rdev can't see global keystrokes, `hook.log` records the
-  failure) and global mouse-button tracking is off.
-- Running via `tauri dev`? The permission prompt targets the dev binary /
-  your terminal instead — same toggle, same effect.
+Run in a separate clean checkout/worktree: prepare:store modifies Cargo.toml
+and the base Tauri config. It does not modify player saves.
 
-Screen Recording is NOT required (window-top perching uses CGWindowList,
-which needs no permission; window titles just come back empty).
-
-Gatekeeper doesn't apply to locally-built apps — it runs straight away.
-
-## 4. What "correct" looks like
-
-- Transparent overlay, **no Dock icon** (by design — Accessory policy),
-  menu-bar tray icon with Summon/Quit
-- slimes walk along the bottom and perch on window top edges
-- hovering a slime makes it grabbable (click-through flips off);
-  clicking desktop passes through
-- typing anywhere earns jelly
-- Settings gear → RESET → SURE? → second tap wipes saves and relaunches
-  into true first-run (sprout only, 100 jelly + first-day bonuses)
-
-## 5. Diagnostics (same files as Windows)
-
-```
-~/Library/Application Support/com.jellypal.desktop/
-  clickdbg.json   # inside / rects / cursor / dragging / flipfail — 1s poll
-  crash.log       # JS errors + 20s heartbeat "tick"
-  hook.log        # written ONLY if rdev listen failed (permission!)
-  state.json      # the save
+```sh
+npm ci
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
+npm run prepare:store
+npm run tauri build -- --config src-tauri/tauri.store.conf.json --features store --bundles app --target universal-apple-darwin
 ```
 
-Watch live: `watch -n1 'cat "$HOME/Library/Application Support/com.jellypal.desktop/clickdbg.json"'`
+Output: `src-tauri/target/universal-apple-darwin/release/bundle/macos/Jellypal.app`
 
-- `flipfail` climbing → set_ignore_cursor_events calls failing (report it)
-- `rects` stuck at 0 past ~10s → frontend never sent clickable regions
-- `hook.log` exists → Input Monitoring permission missing
+Preparation removes the private macOS API feature and Windows loader resource.
+The store config enables App Sandbox, bundles the privacy manifest and sets
+macOS 12.0 as the minimum OS. CI checks both CPU architectures with lipo and
+stamps a unique CFBundleVersion. The CI artifact is an unsigned submission
+candidate. Use `src-tauri/macos-store/sign.sh` on a Mac with the appropriate
+distribution certificates to produce the installer package.
 
-## 6. Automated smoke test
+## Checks still required before upload
 
-```bash
-bash _qa_mac.sh
-```
+- Run Mac CI store tests and the Universal build successfully.
+- Launch on macOS 12; verify login-item controls are hidden there.
+- Test login items on macOS 13 or newer.
+- Test Apple silicon and Intel: launch, save/relaunch, menu-bar summon, quit.
+- Move between Retina and ordinary external displays; change display scaling
+  and Dock location/auto-hide settings.
+- Check the nursery with system scrollbars set to always visible.
+- Test StoreKit Sandbox purchases, cancellation, failure and redelivery after
+  force quitting, including a failed save before finishing payment.
+- Verify certificates/provisioning requirements, the sandbox/privacy manifest
+  and the final signed installer package.
+- Confirm macOS-only App Store Connect platform, bundle ID, four IAP products,
+  privacy and support URLs.
+- Capture submission screenshots from the final Mac app. Existing stylized
+  marketing renders and Chromium QA captures are not native-device evidence.
 
-Backs up every save (incl. legacy identifier dirs), cold-launches the
-binary, samples clickdbg for 20s, prints first-run state, checks for
-legacy-save resurrection, then restores your real save.
+## Official references
 
-## 7. Known macOS limits (not bugs)
-
-- Overlay won't float over **fullscreen Spaces** — that's an NSWindow
-  level restriction; it appears again on normal desktops.
-- Overlay covers the **primary display** only.
-- `active-win-pos-rs` window titles are empty without Screen Recording —
-  foreground-app detection still works via the process/app name.
+- [Apple: create an app and select platforms](https://developer.apple.com/help/app-store-connect/create-an-app-record/add-a-new-app/)
+- [Apple: add platforms later](https://developer.apple.com/help/app-store-connect/create-an-app-record/add-platforms/)
+- [Tauri: App Store distribution](https://v2.tauri.app/distribute/app-store/)
