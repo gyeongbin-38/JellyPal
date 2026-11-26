@@ -134,6 +134,14 @@ owner fields must be completed in the Apple account before submission.
   `dist/app-store-preflight-20261126/` (ignored build output).
 - Archive SHA-256: `8e0a545bdc4bf101272c4cb990cc4bd3d4344ae20bcc2996e9431574ed4bae07`.
 
+The owner can use a Mac later. Windows browser work can proceed with the
+explicit App ID and macOS-only App Store Connect record while signing,
+physical-device checks and StoreKit Sandbox testing wait for Mac access.
+A local handoff bundle preserves the verified app archive, signing helpers,
+submission draft, native screenshots, checksum and Korean instructions:
+`dist/Jellypal_0.4.4_mac_handoff_20261126.zip`.
+The inner app archive's SHA-256 was checked after ZIP packaging.
+
 ## Official references
 
 - [Apple: create an app and select platforms](https://developer.apple.com/help/app-store-connect/create-an-app-record/add-a-new-app/)
