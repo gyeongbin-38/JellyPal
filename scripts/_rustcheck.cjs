@@ -16,6 +16,18 @@ if (process.platform === "win32") {
   env.TEMP = "C:\\build\\jellypal-tmp";
   env.TMP = env.TEMP;
   fs.mkdirSync(env.TEMP, { recursive: true });
+  // tauri-winres/windres also cannot consume the repository's non-ASCII
+  // source path. Keep the checked-in config portable and override only this
+  // child process with an ASCII copy of the Windows icon.
+  if (/[^\x00-\x7f]/.test(process.cwd())) {
+    const asciiIcon = "C:\\build\\jellypal-icon.ico";
+    fs.copyFileSync(path.join("src-tauri", "icons", "icon.ico"), asciiIcon);
+    const conf = JSON.parse(fs.readFileSync(path.join("src-tauri", "tauri.conf.json"), "utf8"));
+    if (conf.bundle && Array.isArray(conf.bundle.icon) && conf.bundle.icon.length) {
+      conf.bundle.icon[0] = asciiIcon.replace(/\\/g, "/");
+      env.TAURI_CONFIG = JSON.stringify(conf);
+    }
+  }
 }
 
 function cargo(args, label) {

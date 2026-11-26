@@ -62,7 +62,8 @@ const getEl = (id) => {
   return els[id];
 };
 
-let rafCb = null;
+let rafSeq = 0;
+const rafPending = new Map();
 const pendingTimers = [];
 const listeners = {};
 
@@ -72,7 +73,8 @@ global.innerHeight = 1080;
 global.devicePixelRatio = 1;
 global.addEventListener = (ev, fn) => { (listeners[ev] = listeners[ev] || []).push(fn); };
 global.removeEventListener = () => {};
-global.requestAnimationFrame = (cb) => { rafCb = cb; return 1; };
+global.requestAnimationFrame = (cb) => { const id = ++rafSeq; rafPending.set(id, cb); return id; };
+global.cancelAnimationFrame = (id) => { rafPending.delete(id); };
 global.performance = require("perf_hooks").performance;
 global.document = {
   getElementById: getEl,
@@ -94,16 +96,16 @@ global.URL = { createObjectURL: () => "blob:", revokeObjectURL() {} };
 
 // Tauri API
 const tauriState = {
-  ver: 2, jelly: 5000, active: 0,
-  owned: [0, 1, 2, 3, 4, 6, 30],
-  pals: [{ sp: 3 }, { sp: 4 }], // two summoned companions
+  ver: 2, jelly: 5000, active: "sprout",
+  owned: ["sprout", "berry", "pebble", "tide", "ember", "shade"],
+  pals: ["tide", "ember"], // two summoned companions
 }; // emulate a dev save
 global.__TAURI__ = {
   core: {
     invoke: (cmd, args) => {
       calls.push(cmd);
       if (cmd === "set_clickable") clickableBatches.push(args && args.rects);
-      if (cmd === "load_state") return Promise.resolve(tauriState);
+      if (cmd === "load_state") return Promise.resolve(JSON.stringify(tauriState));
       if (cmd === "get_monitors") return Promise.resolve([{ x: 0, y: 0, w: 1920, h: 1080 }]);
       if (cmd === "is_demo") return Promise.resolve(false);
       if (cmd === "save_png") {
@@ -127,23 +129,47 @@ try {
   process.exit(1);
 }
 
-(async () => {
-  await new Promise((r) => setImmediate(r));
-  let t = 0;
-  for (let i = 0; i < 600; i++) {
-    if (!rafCb) { console.log("frame", i, ": no rAF queued — loop dead?"); break; }
-    const cb = rafCb; rafCb = null;
+async function pumpFrames(count, startT) {
+  let t = startT;
+  for (let i = 0; i < count; i++) {
+    if (!rafPending.size) throw new Error(`frame ${i}: no rAF queued — loop dead?`);
+    if (rafPending.size !== 1) throw new Error(`frame ${i}: ${rafPending.size} rAF callbacks queued — parallel frame loops`);
+    const cbs = [...rafPending.values()];
+    rafPending.clear();
     t += 16.7;
     try {
-      cb(t);
+      for (const cb of cbs) cb(t);
     } catch (e) {
-      console.log("\n=== FRAME", i, "THREW ===");
-      console.log(e.stack.split("\n").slice(0, 6).join("\n"));
-      process.exit(2);
+      e.simFrame = i;
+      throw e;
     }
     if (i % 50 === 0) await new Promise((r) => setImmediate(r));
   }
+  return t;
+}
+
+(async () => {
+  await new Promise((r) => setImmediate(r));
+  let t = 0;
+  try {
+    t = await pumpFrames(600, t);
+  } catch (e) {
+    console.log("\n=== FRAME", e.simFrame ?? "?", "THREW ===");
+    console.log(e.stack.split("\n").slice(0, 6).join("\n"));
+    process.exit(2);
+  }
   console.log("600 frames clean");
+
+  // stalled-frame recovery regression: the occlusion watchdog can invoke
+  // frame() while a native rAF is still pending. Recovery must cancel that
+  // pending callback; the old path queued a second loop and doubled every
+  // subsequent frame's update/render cost.
+  t += 450;
+  __SIM_E(`frame(${t})`);
+  if (rafPending.size !== 1) throw new Error(`watchdog recovery left ${rafPending.size} rAF callbacks queued`);
+  t = await pumpFrames(30, t);
+  console.log("watchdog recovery keeps one frame loop");
+
   const badClickable = clickableBatches.some((rects) =>
     !Array.isArray(rects)
       || rects.length > 64
@@ -192,6 +218,39 @@ try {
     process.exit(2);
   } finally {
     process.off("unhandledRejection", onUnhandled);
+  }
+
+  // crowded-pal regression: parked companions used to keep clipping through
+  // each other because the separation shove explicitly exempted two parked
+  // pals. Pin the full trio almost on top of one another; the crowd solver
+  // should ease them back to readable slime-width gaps without launching any.
+  try {
+    const n = __SIM_E(`
+      if (pals.length < 3) spawnPal(6);
+      pals.forEach((p, ci) => {
+        p.x = 960 + (ci - 0.5) * 2;
+        p.y = winH;
+        p.vx = 0; p.vy = 0; p.fly = false; p.plat = null;
+        p.walkT = null; p.walkV = 0; p.walkWhy = null; p.nextT = 1e15;
+        p.restUntil = 0; p.hideUntil = 0; p.settleUntil = 1e15;
+        p.web = 0; p.stackOn = null; p.follow = null; p.tag = null;
+        p.chatMate = null; p.scene = null; p.group = null; p.act = null;
+        p.accAct = null; p.propGoal = null; p.hopWind = 0;
+        p.socCd = 1e15; p.playCd = 1e15; p.chatCd = 1e15; p.hiCd = 1e15; p.stackCd = 1e15;
+      });
+      pals.length
+    `);
+    if (n < 3) throw new Error(`expected three summoned pals, got ${n}`);
+    t = await pumpFrames(180, t);
+    const gap = __SIM_E(`Math.min(...pals.flatMap((p, pi) => pals.slice(pi + 1).map((q) => Math.abs(q.x - p.x))))`);
+    const yGap = __SIM_E(`Math.max(...pals.flatMap((p, pi) => pals.slice(pi + 1).map((q) => Math.abs(q.y - p.y))))`);
+    if (!Number.isFinite(gap) || yGap >= 18 || gap < 30) {
+      throw new Error(`parked pals stayed clumped: x gap ${gap}, y gap ${yGap}`);
+    }
+    console.log(`crowded pals separate cleanly (${gap.toFixed(1)}px gap)`);
+  } catch (e) {
+    console.log("crowded pal regression FAILED:", e.stack.split("\n").slice(0, 4).join("\n"));
+    process.exit(2);
   }
   process.exit(0);
 })();

@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jellypal privacy — local-first desktop companion</title>
+<meta name="description" content="How Jellypal handles local saves, optional purchases, weather, updates, and license redemption.">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;700;800;900&family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="components.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    background:
+      radial-gradient(circle at 82% 8%, rgba(143, 232, 192, .08), transparent 28rem),
+      var(--night);
+    color: var(--ink);
+    font-family: var(--font-body);
+    font-weight: 500;
+    line-height: 1.62;
+  }
+  .skip {
+    position: absolute; left: -999px; top: 0; z-index: 5;
+    background: var(--jelly); color: var(--night); padding: 10px 16px; font-weight: 800;
+  }
+  .skip:focus { left: 12px; top: 12px; }
+  a { color: var(--jelly); text-underline-offset: 4px; }
+  a:hover { color: var(--jelly-bright); }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 26px 0; }
+  .brand { display: flex; align-items: center; gap: 12px; color: var(--ink); text-decoration: none; }
+  .brand img { width: 28px; height: 28px; image-rendering: pixelated; }
+  .brand .px { color: var(--jelly); font-size: 14px; }
+  .bar nav { display: flex; gap: 22px; font-size: 14px; font-weight: 800; }
+  .bar nav a { color: var(--dim); text-decoration: none; }
+  .bar nav a:hover { color: var(--jelly); box-shadow: 0 2px 0 var(--jelly); }
+
+  .hero {
+    margin: 34px 0 72px;
+    padding: clamp(28px, 5vw, 54px);
+    background: linear-gradient(180deg, rgba(37, 29, 78, .94), rgba(23, 18, 46, .96));
+    box-shadow: 0 22px 60px -34px rgba(0, 0, 0, .85), inset 0 0 0 1px rgba(143, 232, 192, .12);
+    position: relative;
+    overflow: hidden;
+  }
+  .hero::after {
+    content: "";
+    position: absolute;
+    right: clamp(18px, 5vw, 54px);
+    bottom: 22px;
+    width: 10px; height: 10px;
+    background: var(--jelly);
+    box-shadow: -18px 0 0 var(--jelly-shadow), -36px 0 0 var(--edge), -18px -18px 0 rgba(143, 232, 192, .4);
+  }
+  .hero h1 {
+    max-width: 13ch;
+    font-size: clamp(34px, 6vw, 64px);
+    line-height: 1.02;
+    letter-spacing: -0.03em;
+    text-wrap: balance;
+    font-weight: 900;
+  }
+  .hero .lede { max-width: 62ch; margin-top: 22px; color: var(--ink); font-size: clamp(17px, 2vw, 20px); line-height: 1.58; }
+  .hero .lede strong { color: var(--jelly-bright); }
+  .meta { display: flex; flex-wrap: wrap; gap: 10px 22px; margin-top: 26px; color: var(--dim); font-size: 13px; font-weight: 800; }
+
+  .doc { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: clamp(34px, 6vw, 84px); align-items: start; padding-bottom: 88px; }
+  .contents { position: sticky; top: 24px; border-top: 1px solid var(--edge); padding-top: 8px; }
+  .contents a { display: block; margin-top: 13px; color: var(--dim); font-size: 14px; font-weight: 800; text-decoration: none; }
+  .contents a:hover { color: var(--jelly); transform: translateX(3px); }
+  .sections { max-width: 70ch; }
+  section.policy { padding: 34px 0 38px; border-top: 1px solid var(--edge); }
+  section.policy:first-child { border-top-color: var(--jelly-shadow); }
+  section.policy + section.policy { margin-top: 8px; }
+  h2 { font-size: clamp(23px, 3vw, 32px); line-height: 1.15; letter-spacing: -0.018em; text-wrap: balance; font-weight: 900; }
+  h2 + p { margin-top: 14px; }
+  p { color: var(--dim); max-width: 68ch; }
+  p + p, p + ul, ul + p { margin-top: 13px; }
+  ul { margin: 13px 0 0 1.15em; color: var(--dim); }
+  li + li { margin-top: 7px; }
+  li::marker { color: var(--jelly); }
+  strong { color: var(--ink); }
+  .note {
+    margin-top: 18px;
+    padding: 14px 0 0;
+    border-top: 1px dashed var(--edge);
+    color: var(--dim);
+    font-size: 14px;
+  }
+  footer { border-top: 1px solid var(--edge); padding: 28px 0 42px; color: var(--dim); font-size: 13px; }
+  footer .wrap { display: flex; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
+
+  ::-webkit-scrollbar { width: 12px; height: 12px; }
+  ::-webkit-scrollbar-track { background: var(--night); }
+  ::-webkit-scrollbar-thumb { background: var(--edge); border: 3px solid var(--night); }
+  ::-webkit-scrollbar-thumb:hover { background: var(--jelly-shadow); }
+
+  @media (max-width: 780px) {
+    .bar { align-items: flex-start; }
+    .bar nav { flex-direction: column; gap: 8px; text-align: right; }
+    .hero { margin-top: 12px; }
+    .doc { display: block; }
+    .contents { position: static; margin-bottom: 34px; }
+    .contents nav { columns: 2; column-gap: 28px; }
+  }
+  @media (max-width: 460px) {
+    .wrap { padding: 0 18px; }
+    .contents nav { columns: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .contents a:hover { transform: none; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#policy">Skip to the policy</a>
+<header class="wrap bar">
+  <a class="brand" href="./" aria-label="Jellypal home">
+    <img src="favicon.png" alt="" width="28" height="28">
+    <span class="px">JELLYPAL</span>
+  </a>
+  <nav aria-label="Site">
+    <a href="./">Home</a>
+    <a href="https://gyeongbin.itch.io/jellypal">Support</a>
+  </nav>
+</header>
+
+<main class="wrap">
+  <div class="hero pxframe">
+    <h1>Privacy that stays on your desktop.</h1>
+    <p class="lede"><strong>The Mac App Store version of Jellypal does not send us analytics, personal data, save data, keystrokes, screen contents, or usage tracking.</strong> Your collection lives on your Mac. Apple handles optional jelly-pack purchases.</p>
+    <div class="meta">
+      <span>Effective November 27, 2026</span>
+      <span>Applies to Jellypal for macOS and direct-download builds</span>
+    </div>
+  </div>
+
+  <div class="doc" id="policy">
+    <aside class="contents" aria-label="Policy contents">
+      <nav>
+        <a href="#mac-store">Mac App Store</a>
+        <a href="#local">On your device</a>
+        <a href="#direct">Direct download</a>
+        <a href="#never">Never collected</a>
+        <a href="#retention">Retention + deletion</a>
+        <a href="#contact">Questions</a>
+      </nav>
+    </aside>
+
+    <div class="sections">
+      <section class="policy" id="mac-store">
+        <h2>Mac App Store version</h2>
+        <p>The store build has no account system, advertising, analytics, tracking SDK, update probe, weather probe, or Jellypal-operated network service. It does not send your save, activity, keystrokes, screen contents, or purchase history to us.</p>
+        <p>Optional jelly packs are Apple in-app purchases. Apple processes the payment and receipt. Jellypal receives only the store transaction result needed to unlock the purchased jelly in the app; it does not receive your name, card number, Apple ID password, or billing address.</p>
+        <p class="note">Signing in to the App Store, iCloud, Game Center, or Apple services is controlled by Apple and covered by Apple's own privacy policy.</p>
+      </section>
+
+      <section class="policy" id="local">
+        <h2>What stays on your device</h2>
+        <p>Jellypal stores the information it needs to run locally on your computer:</p>
+        <ul>
+          <li>your slime collection, jelly balance, settings, names, accessories, room decorations, and achievement progress;</li>
+          <li>panel positions and window-size preferences;</li>
+          <li>photos you explicitly take in photo mode;</li>
+          <li>an anonymous install identifier used only for direct-build license redemption.</li>
+        </ul>
+        <p>This information is not uploaded by the Mac App Store version.</p>
+      </section>
+
+      <section class="policy" id="direct">
+        <h2>Direct-download builds</h2>
+        <p>The separate direct-download Windows/macOS build can use network features that are removed from the Mac App Store version:</p>
+        <ul>
+          <li><strong>Version check:</strong> the app may download a tiny text file containing the newest version number.</li>
+          <li><strong>Weather:</strong> when weather is enabled, the app may use coarse IP-based location and Open-Meteo to choose rain or snow. This is approximate regional weather lookup, not precise GPS location. You can turn weather off in settings.</li>
+          <li><strong>Jelly code redemption:</strong> if you choose to redeem a code, the app sends that code and its anonymous install identifier to the Jellypal redemption service. The service stores a cryptographic hash of the identifier, not the identifier itself, to prevent one license being reused across unrelated installs.</li>
+        </ul>
+        <p>The desktop-overlay flavor may read window positions and limited foreground app or window-title text locally so slimes can perch and react. That information is used on the device and is not uploaded. The Mac App Store companion-window flavor does not enumerate other apps' windows.</p>
+        <p>Gumroad, Stripe, Paddle, or another checkout provider may process a direct-build purchase under its own privacy policy. Jellypal does not receive your payment card details.</p>
+      </section>
+
+      <section class="policy" id="never">
+        <h2>What Jellypal does not collect</h2>
+        <p>Jellypal does not collect or transmit:</p>
+        <ul>
+          <li>the contents of what you type;</li>
+          <li>screenshots, screen recordings, files, contacts, or browsing history;</li>
+          <li>precise location;</li>
+          <li>advertising identifiers or cross-app tracking data;</li>
+          <li>analytics events, crash telemetry, or behavioral profiles.</li>
+        </ul>
+        <p>The desktop pet counts typing activity locally so jelly can drip. It does not upload which keys you pressed or what you wrote.</p>
+      </section>
+
+      <section class="policy" id="retention">
+        <h2>Retention and deletion</h2>
+        <p>Local save data stays on your device until you delete it, reset it in settings, or remove the app's data container. Uninstalling the app may not remove operating-system-controlled application data in every case.</p>
+        <p>Direct-build redemption records are kept only as long as needed to honor purchased licenses and prevent duplicate redemption. Because the service stores hashes rather than your anonymous install identifier, it cannot use those records to identify you or your computer.</p>
+      </section>
+
+      <section class="policy" id="contact">
+        <h2>Questions and support</h2>
+        <p>For help, bug reports, or privacy questions, use the public <a href="https://gyeongbin.itch.io/jellypal">Jellypal itch.io page</a>. Product downloads and updates remain available from <a href="./">jellypal.fun</a>.</p>
+        <p>If this policy changes, the updated version will replace this page and the effective date above will change.</p>
+      </section>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Jellypal — small, local, verifiable.</span>
+    <span><a href="./">Home</a> · <a href="https://gyeongbin.itch.io/jellypal">Support</a></span>
+  </div>
+</footer>
+</body>
+</html>

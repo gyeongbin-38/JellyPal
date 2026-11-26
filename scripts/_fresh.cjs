@@ -59,7 +59,7 @@ const getEl = (id) => {
       addEventListener(ev, fn) { (e.listeners[ev] = e.listeners[ev] || []).push(fn); },
       removeEventListener() {}, appendChild() {}, remove() {},
       setPointerCapture() {}, releasePointerCapture() {},
-      getBoundingClientRect() { return { left: 0, top: 0, width: 320, height: 400 }; },
+      getBoundingClientRect() { return { left: parseFloat(e.style.left) || 0, top: parseFloat(e.style.top) || 0, width: e.offsetWidth || e.width, height: e.offsetHeight || e.height }; },
       classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
       querySelector() { return null; }, querySelectorAll() { return []; },
       width: 320, height: 400,

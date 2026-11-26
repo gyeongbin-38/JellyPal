@@ -1,0 +1,37 @@
+{
+  "status": "draft-not-submitted",
+  "appRecord": {
+    "name": "Jellypal",
+    "primaryLanguage": "en-US",
+    "bundleId": "com.jellypal.store",
+    "sku": "jellypal-macos",
+    "platforms": ["macOS"]
+  },
+  "release": {
+    "version": "0.4.4",
+    "minimumMacOS": "12.0",
+    "architectures": ["arm64", "x86_64"],
+    "primaryCategory": "Entertainment"
+  },
+  "listingDraft": {
+    "subtitle": "A tiny desktop slime companion",
+    "description": "Meet Jellypal, a small pixel-art slime companion for your Mac. Pet your pal, collect new species, decorate their rooms, and breed baby hybrids. Earn jelly while the app is open and use it to grow your collection.\n\nKeep your companion nearby in a movable desktop window. Visit the Ranch to browse your collection, dress up your pals, and check their moods. A focus timer helps your companion keep you company through work and breaks.\n\nPlay locally without creating an account. Optional jelly packs are available through Apple's in-app purchases.",
+    "keywords": "desktop,pet,slime,companion,pixel,virtual,collection,relax,focus",
+    "supportUrl": "https://jellypal.fun/",
+    "privacyPolicyUrl": "https://jellypal.fun/privacy.html"
+  },
+  "consumablePurchases": [
+    {"productId": "com.jellypal.jelly.small", "name": "Jelly Pack S", "description": "250 jelly for your collection", "jelly": 250, "price": null},
+    {"productId": "com.jellypal.jelly.medium", "name": "Jelly Pack M", "description": "500 jelly for your collection", "jelly": 500, "price": null},
+    {"productId": "com.jellypal.jelly.large", "name": "Jelly Pack L", "description": "1000 jelly for your collection", "jelly": 1000, "price": null},
+    {"productId": "com.jellypal.jelly.xl", "name": "Jelly Pack XL", "description": "2500 jelly for your collection", "jelly": 2500, "price": null}
+  ],
+  "ownerFieldsRequired": [
+    "Apple account login and app registration",
+    "Mac App Store Connect distribution profile and matching app/installer certificates",
+    "Confirm the drafted support and privacy policy URLs in App Store Connect",
+    "App pricing, in-app purchase prices, contracts, tax and banking setup as applicable",
+    "Age rating questionnaire, privacy disclosures and export compliance",
+    "App Review contact information and final native Mac screenshots"
+  ]
+}

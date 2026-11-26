@@ -65,7 +65,6 @@ function fit() {
   ctx.imageSmoothingEnabled = false;
 }
 fit();
-addEventListener("resize", fit);
 
 // ---------- sprite engine (36x26 logical grid) ----------
 const SW = 36;
@@ -1991,7 +1990,7 @@ const ACH_DEFS = {
   decor3:   { t: "INTERIOR",      d: "PLACE 3 PROPS IN ONE ROOM",  n: 3,    v: () => Math.max(0, ...Object.values(roomProps).map((r) => Array.isArray(r) ? r.length : 0)), g: 30 },
   dye1:     { t: "DYE JOB",       d: "DYE A NAMEPLATE",            n: 1,    v: () => Object.keys(nameDye).length, g: 20 },
   locked1:  { t: "TAILOR-MADE",   d: "EQUIP A SPECIES-LOCKED GEAR",n: 1,    v: () => Object.values(accEquip).filter((a) => a && ACCS.find((x) => x.id === a && x.only)).length, g: 40 },
-  night:    { t: "NIGHT OWL",     d: "HANG OUT PAST 3AM",          n: 1,    v: () => { const h = new Date().getHours(); return h >= 3 && h < 5 && state !== "sleeping" ? 1 : 0; }, g: 30, sec: true },
+  night:    { t: "NIGHT OWL",     d: "HANG OUT PAST 3AM",          n: 1,    v: () => { const h = new Date().getHours(); return h >= 3 && h < 5 && Date.now() - bootT >= 600000 && state !== "sleeping" ? 1 : 0; }, g: 30, sec: true },
 };
 const ACH_IDS = Object.keys(ACH_DEFS);
 const ACH_PAGE = 7;       // trophy rows per panel page
@@ -2613,12 +2612,43 @@ function floorAt(x) {
 }
 function clampPanelPoint(x, y, w, h) {
   const safe = usableRectAt(x + w / 2, y + h / 2);
-  const maxX = Math.max(safe.left + 4, safe.right - w - 4);
-  const maxY = Math.max(safe.top + 4, safe.bottom - h - 4);
+  // Narrow cards may have less than 8px left after the panel's borders.
+  const mx = Math.max(0, Math.min(4, (safe.right - safe.left - w) / 2));
+  const my = Math.max(0, Math.min(4, (safe.bottom - safe.top - h) / 2));
+  const maxX = Math.max(safe.left + mx, safe.right - w - mx);
+  const maxY = Math.max(safe.top + my, safe.bottom - h - my);
   return [
-    Math.round(Math.max(safe.left + 4, Math.min(maxX, x))),
-    Math.round(Math.max(safe.top + 4, Math.min(maxY, y))),
+    Math.round(Math.max(safe.left + mx, Math.min(maxX, x))),
+    Math.round(Math.max(safe.top + my, Math.min(maxY, y))),
   ];
+}
+// Keep the border box inside one display's work area. Tall nurseries scroll
+// at their original pixel size, so drawing and pointer coordinates still agree.
+function panelCanvasPos(c, e) {
+  const r = c.getBoundingClientRect();
+  const sx = r.width ? c.width / r.width : 1;
+  const sy = r.height ? c.height / r.height : 1;
+  return [(e.clientX - r.left) * sx, (e.clientY - r.top) * sy];
+}
+function placePanel(el, x, y) {
+  const safe = usableRectAt(x, y);
+  let scale = 1;
+  for (let pass = 0; pass < 2; pass++) {
+    el.style.maxHeight = `${Math.max(48, (safe.bottom - safe.top - 8) / scale)}px`;
+    const fit = (safe.right - safe.left) / Math.max(1, el.offsetWidth);
+    scale = Number.isFinite(fit) && fit > 0 ? Math.min(1, fit) : 1;
+  }
+  el.style.transformOrigin = "0 0";
+  el.style.transform = scale < 0.999 ? `scale(${scale})` : "";
+  el.style.maxHeight = `${Math.max(48, (safe.bottom - safe.top - 8) / scale)}px`;
+  const rect = el.getBoundingClientRect();
+  const [left, top] = clampPanelPoint(x, y, rect.width, rect.height);
+  el.style.left = `${left}px`;
+  el.style.top = `${top}px`;
+}
+function panelScreenRect(el) {
+  const r = el.getBoundingClientRect();
+  return [r.left, r.top, r.width, r.height];
 }
 function sanitizeMonitorPlatforms(value) {
   if (!Array.isArray(value)) return null;
@@ -2707,6 +2737,10 @@ let iapProds = []; // [{id,title,price,jelly}] — empty until the store answers
 // StoreKit redelivers the tx on relaunch; this list is the "already paid
 // out" proof that survives the restart
 let iapTxIds = [];
+function sanitizeIapTransactions(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter(t => typeof t === "string" && /^(?:sk:[A-Za-z0-9._:-]{1,128}|\d{1,20})$/.test(t)))].slice(-100);
+}
 const validGemGrant = (v) => Number.isSafeInteger(v) && GEM_PACK_AMOUNTS.has(v);
 const redeemErrorText = (error) => String((error && error.message) || error || "BAD CODE").toUpperCase();
 const redeemPending = new Set();
@@ -2890,8 +2924,10 @@ setInterval(claimGrants, 10 * 60 * 1000);
 // but the queue lives in the Rust StoreKit observer instead of a server.
 // Unfinished transactions are redelivered by the OS on relaunch, so a
 // crash between drain and ack can never eat a paid pack.
+let iapPolling = false;
 async function iapPoll() {
-  if (!STORE) return;
+  if (!STORE || !saveReady || iapPolling) return;
+  iapPolling = true;
   try {
     const evs = await invokeAsync("iap_drain");
     if (!Array.isArray(evs)) return;
@@ -2909,9 +2945,10 @@ async function iapPoll() {
           }
           dirty = true; // persist the tx id even for a zero-grant
         }
-        // ack retries every redelivery until it lands — finishing is the
-        // only thing that stops StoreKit from re-sending the purchase
-        invokeAsync("iap_ack", { tx: ev.tx }).catch(() => {});
+        // Save the balance and transaction ID before finishing payment. A
+        // failed write leaves it unfinished and eligible for the next poll.
+        await persist();
+        await invokeAsync("iap_ack", { tx: ev.tx });
       } else if (ev.kind === "restored") {
         bangs.push({ x: winW / 2, y: 100, life: 2, t: "PURCHASE RESTORED" });
       } else if (ev.kind === "failed" && ev.code !== 2) {
@@ -2919,7 +2956,7 @@ async function iapPoll() {
         bangs.push({ x: winW / 2, y: 100, life: 2, t: "PURCHASE FAILED" });
       }
     }
-  } catch {}
+  } catch {} finally { iapPolling = false; }
 }
 // ask StoreKit for the live catalog; product metadata lands in iapProds
 // when the request returns (the delegate callback is async)
@@ -3560,9 +3597,7 @@ invokeAsync("load_state").then((txt) => {
   else redeemedBound = [];
   if (typeof s.uid === "string" && /^JP[A-Z2-7]{24}$/.test(s.uid)) uid = s.uid;
   claimedNonces = sanitizeClaimedNonces(s.claimed);
-  iapTxIds = Array.isArray(s.iapTx)
-    ? s.iapTx.filter((t) => typeof t === "string" && /^\d{1,20}$/.test(t)).slice(-100)
-    : [];
+  iapTxIds = sanitizeIapTransactions(s.iapTx);
   ensureUid();
   claimGrants(); // any shop purchases waiting for this install pay out now
   // dragged panel positions — validated so a bad save can't park a
@@ -4566,6 +4601,65 @@ function platUnder(x, y) {
     if (x > q.x - 20 && x < q.x + q.w + 20 && q.y >= y - 4 && (!best || q.y < best.y)) best = q;
   }
   return best || monitorPlatformAt(x, y) || { x: 0, top: 0, y: winH, w: winW, h: winH };
+}
+// Crowd separation runs once after every pal has updated and before any pal
+// draws. The old in-loop shove moved already-drawn neighbors, so crowded pals
+// corrected each other one frame late and visibly jittered. This solver is
+// deliberately positional and rate-limited: no velocities, no teleport pops,
+// and parked pals still ease apart instead of clipping forever.
+function palCrowdSolid(p, now) {
+  // Final approach to a prop errand is allowed to close inside the crowd
+  // gap. Otherwise a slime aiming for an occupied cushion/snack could never
+  // cross the arrival radius that lets it notice the spot is taken.
+  const errandClose = p && p.propGoal && p.walkT !== null && Math.abs(p.walkT - p.x) < 44;
+  const sp = p && SPECIES[p.sp];
+  return p && sp && owned.includes(sp.id) && p !== palHeld && !p.fly && !p.stackOn && !errandClose &&
+    !(now < (p.hideUntil || 0)) && !(now < (p.web || 0));
+}
+function clampPalCrowdX(p) {
+  const pl = p.plat || platUnder(p.x, p.y);
+  p.x = clampPlatformX(p.x, pl, palEdge(p));
+}
+function resolvePalCrowding(now, dt) {
+  if (pals.length < 2) return;
+  const GAP = 34;
+  for (let iter = 0; iter < 2; iter++) {
+    let touched = false;
+    for (let a = 0; a < pals.length - 1; a++) {
+      const p = pals[a];
+      if (!palCrowdSolid(p, now)) continue;
+      for (let b = a + 1; b < pals.length; b++) {
+        const q = pals[b];
+        if (!palCrowdSolid(q, now)) continue;
+        // Chases and choreographed scenes own their actors' spacing; forcing
+        // a body gap there would make tag uncatchable and fight the script.
+        if (p.tag || q.tag || p.scene || q.scene || p.group || q.group) continue;
+        if (Math.abs(p.y - q.y) >= 18) continue;
+        const dx = q.x - p.x;
+        const adx = Math.abs(dx);
+        if (adx >= GAP) continue;
+        // Exact overlap has no geometric direction. Array order is stable, so
+        // the later pal always yields right instead of the pair vibrating on
+        // a random sign flip.
+        const dir = Math.sign(dx) || 1;
+        const overlap = GAP - adx;
+        const pPark = now < (p.restUntil || 0) || now < (p.settleUntil || 0);
+        const qPark = now < (q.restUntil || 0) || now < (q.settleUntil || 0);
+        const step = Math.min(overlap, 72 * dt * (pPark && qPark ? 0.7 : 1));
+        let pw = 0.5, qw = 0.5;
+        if (pPark !== qPark) {
+          if (pPark) { pw = 0; qw = 1; }
+          else { pw = 1; qw = 0; }
+        }
+        p.x -= dir * step * pw;
+        q.x += dir * step * qw;
+        clampPalCrowdX(p);
+        clampPalCrowdX(q);
+        touched = true;
+      }
+    }
+    if (!touched) break;
+  }
 }
 function anchorSupport(x, y) {
   // Window platforms are replaced as a batch every scan. Follow a nearby
@@ -7426,6 +7520,20 @@ const RH = 290;
 rc.width = RW;
 rc.height = RH;
 
+function refreshViewportLayout() {
+  fit();
+  if (STORE) {
+    monPlats = [{ x: 0, top: 0, y: winH - 6, w: winW, h: winH - 6 }];
+    rebuildPlatforms();
+    reconcileAnchoredPlatforms(performance.now());
+  }
+  for (const [el, open] of [[ranch, ranchOpen], [nursery, nurseryOpen], [cardEl, !!cardTarget]]) {
+    if (open) placePanel(el, el.offsetLeft, el.offsetTop);
+  }
+  sendClickable();
+}
+addEventListener("resize", refreshViewportLayout);
+
 const ROW_H = 104;
 const PAGE_N = 12;          // 4 cols x 3 rows per page
 const FOOT_H = 28;          // pager/sort/filter bar above the baseboard
@@ -7610,9 +7718,11 @@ function fitRanch() {
   // fixed-size paged window: header + optional nursery + 3 rows + footer
   rc.height = 46 + nurseryH() + 3 * ROW_H + FOOT_H;
   ranchPage = Math.max(0, Math.min(ranchPage, pageCount() - 1));
+  if (ranchOpen) placePanel(ranch, ranch.offsetLeft, ranch.offsetTop);
 }
 
 rc.addEventListener("wheel", (e) => {
+  if (ranch.scrollHeight > ranch.clientHeight) return;
   e.preventDefault();
   ranchPage = Math.max(0, Math.min(ranchPage + (e.deltaY > 0 ? 1 : -1), pageCount() - 1));
   sfx.pop();
@@ -7620,8 +7730,7 @@ rc.addEventListener("wheel", (e) => {
 
 // move-cursor affordance over the draggable title strip
 rc.addEventListener("pointermove", (e) => {
-  const r = rc.getBoundingClientRect();
-  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const [mx, my] = panelCanvasPos(rc, e);
   const onBtn = [PULL_R, BREED_R, SHOP_R, RESET_R, CLOSE_R]
     .some((R) => mx >= R[0] && mx <= R[0] + R[2] && my >= R[1] && my <= R[1] + R[3]);
   rc.style.cursor = my < 42 && !onBtn ? "move" : "default";
@@ -8200,6 +8309,7 @@ const babyCell = (k) => ({ x: 14 + (k % 4) * 112, y: 46 + Math.floor(k / 4) * RO
 function fitNursery() {
   const n = babyIdx().length;
   nc.height = n ? 46 + Math.ceil(n / 4) * ROW_H + 12 : 120;
+  if (nurseryOpen) placePanel(nursery, nursery.offsetLeft, nursery.offsetTop);
 }
 // photo album: fullscreen overlay browsing photo-mode PNGs saved on disk
 function openAlbum() {
@@ -8391,15 +8501,11 @@ function toggleNursery(force) {
   if (nurseryOpen) {
     fitNursery();
     if (panelPos.nursery) {
-      const [left, top] = clampPanelPoint(panelPos.nursery.x, panelPos.nursery.y, nursery.offsetWidth, nursery.offsetHeight);
-      nursery.style.left = `${left}px`;
-      nursery.style.top = `${top}px`;
+      placePanel(nursery, panelPos.nursery.x, panelPos.nursery.y);
     } else {
       // stack below the ranch when both windows are open
       const top = ranchOpen ? ranch.offsetTop + ranch.offsetHeight + 12 : petY - nc.height - 40;
-      const [left, safeTop] = clampPanelPoint(petX - NW / 2, top, NW, nc.height);
-      nursery.style.left = `${left}px`;
-      nursery.style.top = `${safeTop}px`;
+      placePanel(nursery, petX - NW / 2, top);
     }
   }
 }
@@ -8408,7 +8514,10 @@ function drawNursery(ms) {
   const t = ms / 1000;
   const babies = babyIdx();
   const wantH = babies.length ? 46 + Math.ceil(babies.length / 4) * ROW_H + 12 : 120;
-  if (nc.height !== wantH) nc.height = wantH;
+  if (nc.height !== wantH) {
+    nc.height = wantH;
+    placePanel(nursery, nursery.offsetLeft, nursery.offsetTop);
+  }
   const NHc = nc.height;
   nctx.imageSmoothingEnabled = false;
   nctx.clearRect(0, 0, NW, NHc);
@@ -8471,8 +8580,7 @@ function drawNursery(ms) {
 nc.addEventListener("pointerdown", (e) => {
   lastUiTap = Date.now();
   if (e.button !== 0) return;
-  const r = nc.getBoundingClientRect();
-  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const [mx, my] = panelCanvasPos(nc, e);
   const inR = (R) => mx >= R[0] && mx <= R[0] + R[2] && my >= R[1] && my <= R[1] + R[3];
   if (inR(NC_CLOSE)) { toggleNursery(false); return; }
   // header grip: drag the title strip to move the nursery window
@@ -8480,9 +8588,7 @@ nc.addEventListener("pointerdown", (e) => {
     const ox = e.clientX - nursery.offsetLeft, oy = e.clientY - nursery.offsetTop;
     capturePointer(nc, e.pointerId);
     const move = (ev) => {
-      const [left, top] = clampPanelPoint(ev.clientX - ox, ev.clientY - oy, nursery.offsetWidth, nursery.offsetHeight);
-      nursery.style.left = `${left}px`;
-      nursery.style.top = `${top}px`;
+      placePanel(nursery, ev.clientX - ox, ev.clientY - oy);
     };
     const up = () => {
       nc.removeEventListener("pointermove", move);
@@ -8527,8 +8633,7 @@ nc.addEventListener("pointerdown", (e) => {
   }
 });
 nc.addEventListener("pointermove", (e) => {
-  const r = nc.getBoundingClientRect();
-  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const [mx, my] = panelCanvasPos(nc, e);
   const onX = mx >= NC_CLOSE[0] && mx <= NC_CLOSE[0] + NC_CLOSE[2] && my >= NC_CLOSE[1] && my <= NC_CLOSE[1] + NC_CLOSE[3];
   nc.style.cursor = my < 42 && !onX ? "move" : "default";
 });
@@ -8536,8 +8641,7 @@ nc.addEventListener("pointermove", (e) => {
 nc.addEventListener("contextmenu", (e) => {
   e.preventDefault();
   if (infoPick !== null) return;
-  const r = nc.getBoundingClientRect();
-  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const [mx, my] = panelCanvasPos(nc, e);
   if (my < 42) return;
   const babies = babyIdx();
   for (let k = 0; k < babies.length; k++) {
@@ -8565,15 +8669,11 @@ function openCard(target) {
   // beside whichever slime was clicked
   const saved = panelPos.card;
   if (saved) {
-    const [left, top] = clampPanelPoint(saved.x, saved.y, cardEl.offsetWidth, cardEl.offsetHeight);
-    cardEl.style.left = `${left}px`;
-    cardEl.style.top = `${top}px`;
+    placePanel(cardEl, saved.x, saved.y);
   } else {
     const tx = target === "pet" ? petX : target.x;
     const ty = target === "pet" ? petY : target.y;
-    const [left, top] = clampPanelPoint(tx + 64, ty - KH - 24, KW, KH);
-    cardEl.style.left = `${left}px`;
-    cardEl.style.top = `${top}px`;
+    placePanel(cardEl, tx + 64, ty - cardKH() - 24);
   }
   sfx.pop();
 }
@@ -8864,8 +8964,7 @@ function drawCard(now) {
 kc.addEventListener("pointerdown", (e) => {
   lastUiTap = Date.now();
   if (e.button !== 0) return;
-  const r = kc.getBoundingClientRect();
-  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const [mx, my] = panelCanvasPos(kc, e);
   const inR = (R) => mx >= R[0] && mx <= R[0] + R[2] && my >= R[1] && my <= R[1] + R[3];
   if (inR(KC_CLOSE)) { closeCard(); sfx.pop(); return; }
   const homeR = cardHomeR();
@@ -8932,9 +9031,7 @@ kc.addEventListener("pointerdown", (e) => {
     const ox = e.clientX - cardEl.offsetLeft, oy = e.clientY - cardEl.offsetTop;
     capturePointer(kc, e.pointerId);
     const move = (ev) => {
-      const [left, top] = clampPanelPoint(ev.clientX - ox, ev.clientY - oy, cardEl.offsetWidth, cardEl.offsetHeight);
-      cardEl.style.left = `${left}px`;
-      cardEl.style.top = `${top}px`;
+      placePanel(cardEl, ev.clientX - ox, ev.clientY - oy);
     };
     const up = () => {
       kc.removeEventListener("pointermove", move);
@@ -8950,8 +9047,7 @@ kc.addEventListener("pointerdown", (e) => {
   }
 });
 kc.addEventListener("pointermove", (e) => {
-  const r = kc.getBoundingClientRect();
-  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const [mx, my] = panelCanvasPos(kc, e);
   const onX = mx >= KC_CLOSE[0] && mx <= KC_CLOSE[0] + KC_CLOSE[2] && my >= KC_CLOSE[1] && my <= KC_CLOSE[1] + KC_CLOSE[3];
   kc.style.cursor = my < 30 && !onX ? "move" : "default";
 });
@@ -9159,13 +9255,9 @@ function toggleRanch(force) {
     breedMode = false;
     breedSel = [];
     if (panelPos.ranch) {
-      const [left, top] = clampPanelPoint(panelPos.ranch.x, panelPos.ranch.y, ranch.offsetWidth, ranch.offsetHeight);
-      ranch.style.left = `${left}px`;
-      ranch.style.top = `${top}px`;
+      placePanel(ranch, panelPos.ranch.x, panelPos.ranch.y);
     } else {
-      const [left, top] = clampPanelPoint(petX - RW / 2, petY - rc.height - 40, RW, rc.height);
-      ranch.style.left = `${left}px`;
-      ranch.style.top = `${top}px`;
+      placePanel(ranch, petX - RW / 2, petY - rc.height - 40);
     }
   }
 }
@@ -9174,9 +9266,7 @@ rc.addEventListener("pointerdown", (e) => {
   lastUiTap = Date.now();
   if (e.button !== 0) return;
   endNameEdit(); // any ranch click abandons an in-progress rename
-  const r = rc.getBoundingClientRect();
-  const mx = e.clientX - r.left;
-  const my = e.clientY - r.top;
+  const [mx, my] = panelCanvasPos(rc, e);
   const inR = (R) => mx >= R[0] && mx <= R[0] + R[2] && my >= R[1] && my <= R[1] + R[3];
   if (inR(CLOSE_R)) { toggleRanch(false); return; }
   // a bulk results sheet swallows its dismissal click
@@ -9188,19 +9278,11 @@ rc.addEventListener("pointerdown", (e) => {
     const ox = e.clientX - ranch.offsetLeft, oy = e.clientY - ranch.offsetTop;
     capturePointer(rc, e.pointerId);
     const move = (ev) => {
-      const [nl, nt] = clampPanelPoint(ev.clientX - ox, ev.clientY - oy, ranch.offsetWidth, ranch.offsetHeight);
-      const dx = nl - ranch.offsetLeft, dy = nt - ranch.offsetTop;
-      ranch.style.left = `${nl}px`;
-      ranch.style.top = `${nt}px`;
+      const oldLeft = ranch.offsetLeft, oldTop = ranch.offsetTop;
+      placePanel(ranch, ev.clientX - ox, ev.clientY - oy);
+      const dx = ranch.offsetLeft - oldLeft, dy = ranch.offsetTop - oldTop;
       if (nurseryOpen) {
-        const [nurseryLeft, nurseryTop] = clampPanelPoint(
-          nursery.offsetLeft + dx,
-          nursery.offsetTop + dy,
-          nursery.offsetWidth,
-          nursery.offsetHeight,
-        );
-        nursery.style.left = `${nurseryLeft}px`;
-        nursery.style.top = `${nurseryTop}px`;
+        placePanel(nursery, nursery.offsetLeft + dx, nursery.offsetTop + dy);
       }
     };
     const up = () => {
@@ -9426,8 +9508,7 @@ rc.addEventListener("pointerdown", (e) => {
 // walking around, otherwise the bestiary card
 rc.addEventListener("contextmenu", (e) => {
   e.preventDefault();
-  const r = rc.getBoundingClientRect();
-  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const [mx, my] = panelCanvasPos(rc, e);
   if (my < 42 || infoPick !== null || accPick !== null || decorPick !== null || shopMode || pullAnim) return;
   const items = pageItems();
   for (let k = 0; k < items.length; k++) {
@@ -9730,9 +9811,9 @@ function sendClickable() {
   // dismiss handlers below instead of falling through to the desktop (where
   // they'd silently click whatever app sits underneath)
   if (treatAim || infoPick !== null || albumOpen || redeemMode || settingsOpen || gemShop) rects.push([0, 0, winW, winH]);
-  if (ranchOpen) rects.push([ranch.offsetLeft, ranch.offsetTop, ranch.offsetWidth, ranch.offsetHeight]);
-  if (nurseryOpen) rects.push([nursery.offsetLeft, nursery.offsetTop, nursery.offsetWidth, nursery.offsetHeight]);
-  if (cardTarget) rects.push([cardEl.offsetLeft, cardEl.offsetTop, cardEl.offsetWidth, cardEl.offsetHeight]);
+  if (ranchOpen) rects.push(panelScreenRect(ranch));
+  if (nurseryOpen) rects.push(panelScreenRect(nursery));
+  if (cardTarget) rects.push(panelScreenRect(cardEl));
   invokeQuiet("set_clickable", { rects });
 }
 sendClickable();
@@ -9861,11 +9942,21 @@ let prev = performance.now();
 // frame wrapper: rAF is re-queued BEFORE the body runs, so a throw can
 // never kill the loop — it just skips that frame's tail (which is how a
 // render-section error can still leave the screen frozen). catch it,
-// log it once per signature to crash.log, keep the loop alive.
+// log it once per signature to crash.log, keep the loop alive. the queue
+// is single-flight: the watchdog used to call frame() while a native rAF
+// was already pending, spawning parallel loops and doubling render cost
 const crashSeen = {};
 let lastBeat = 0;
+let rafId = 0;
+function queueFrame() {
+  if (!rafId) rafId = requestAnimationFrame(frame);
+}
 function frame(now) {
-  requestAnimationFrame(frame);
+  // Native rAF consumption makes this cancel a no-op; watchdog/manual entry
+  // uses the same line to retire the still-pending callback before requeueing.
+  if (rafId && typeof cancelAnimationFrame === "function") cancelAnimationFrame(rafId);
+  rafId = 0;
+  queueFrame();
   // battery cap: skip whole frames while the saver says we're idle —
   // rAF stays queued (cheap), the world just ticks slower
   const cap = saverCapMs();
@@ -9951,6 +10042,9 @@ function frame(now) {
   }
 }
 function frameBody(now) {
+  // Moving between Retina and non-Retina displays can change density without
+  // changing the logical viewport or delivering a resize event.
+  if (dpr !== (devicePixelRatio || 1)) refreshViewportLayout();
   // deep-idle throttle: pet is home, no companions, nothing animated,
   // no UI — the scene is static, so run at quarter rate and save the
   // battery. `prev` stays current so the next live frame gets a sane dt
@@ -14316,27 +14410,20 @@ function frameBody(now) {
         }
       }
     }
-    // body separation: grounded pals on the same deck shouldn't clip
-    // through each other — a soft mutual shove keeps a slime-width gap
-    // (reads as jostling, and it's what used to make crowds look fake)
+    // body separation runs once in resolvePalCrowding after the update pass
+    // and before drawing; this per-pal scan only detects walking jams while
+    // overlap is still visible to the logic. moving neighbors here used to
+    // reposition already-drawn pals, which is the crowd jitter this split removes
     if (!p.fly && !p.stackOn && p !== palHeld && !nappingP) {
       let jamQ = null;
       for (const q of pals) {
         if (q === p || q.fly || q === palHeld || q.stackOn === p || p.stackOn === q) continue;
         if (now < (q.hideUntil || 0)) continue; // a pal in the box has no body to shove
-        // exact overlap reads as ddx=0 and used to kill both the push and
-        // the jam check — a deterministic nudge keeps them separable
+        // exact overlap reads as ddx=0 and used to kill the jam check — a
+        // deterministic nudge keeps them separable
         let ddx = p.x - q.x;
         if (Math.abs(ddx) <= 0.01) ddx = ((pals.indexOf(p) - pals.indexOf(q)) || 1) * 0.12;
         if (Math.abs(p.y - q.y) < 18 && Math.abs(ddx) < 34) {
-          const push = (34 - Math.abs(ddx)) * Math.sign(ddx) * dt * 2.2;
-          // a napping or settled pal stays put — the moving one absorbs
-          // the full shove, both ways; two parked pals just overlap
-          const qPark = now < (q.restUntil || 0) || now < (q.settleUntil || 0);
-          const pPark = now < (p.restUntil || 0) || now < (p.settleUntil || 0);
-          if (qPark && !pPark) p.x += push * 2;
-          else if (pPark && !qPark) q.x -= push * 2;
-          else if (!pPark) { p.x += push; q.x -= push; }
           // jammed: p's target lies past q and q isn't moving out of the
           // way — two slimes can't walk through each other
           const s = Math.sign(q.x - p.x);
@@ -14645,6 +14732,16 @@ function frameBody(now) {
       }
     }
 
+  }
+
+  // Movement and scene steps can create fresh overlap this frame. Resolve it
+  // only after every pal has finished updating, then draw from the corrected
+  // positions — no neighbor is moved after its sprite already reached canvas.
+  resolvePalCrowding(now, dt);
+  for (let i = pals.length - 1; i >= 0; i--) {
+    const p = pals[i];
+    const psp = SPECIES[p.sp];
+    if (!psp || !owned.includes(psp.id)) continue;
     // draw — base scale NOT blobSize().scale: that one already carries the
     // active pet's baby factor and would shrink every pal. skipped while
     // the pal is hiding inside the box (the box rustles instead)
@@ -15587,12 +15684,16 @@ function drawRedeem(c, W, H, t) {
   drawText(c, shown.slice(-30), bx + 22, by + 35, 1, "#5c4632", null, true);
   drawText(c, "ENTER = REDEEM   ESC = CANCEL", bx + 140 - textW("ENTER = REDEEM   ESC = CANCEL", 1) / 2, by + 60, 1, "#8a6b4a");
 }
-requestAnimationFrame(frame);
+queueFrame();
 // rAF watchdog: a transparent always-on-top window can get mis-classed as
 // occluded by the compositor, which silently stops rAF — the screen looks
 // frozen while nothing is actually wrong. if no frame ran for >400ms,
 // drive one from a timer; harmless when rAF is healthy
 setInterval(() => {
   const t = performance.now();
-  if (t - prev > 400) frame(t);
+  if (t - prev > 400) {
+    if (rafId && typeof cancelAnimationFrame === "function") cancelAnimationFrame(rafId);
+    rafId = 0;
+    frame(t);
+  }
 }, 250);

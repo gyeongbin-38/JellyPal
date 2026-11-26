@@ -37,8 +37,11 @@ gets fixed or reverted — it does not ship.
 4. **LOG** — append the session block to `PROGRESS.md`: what, why, test
    count, build status.
 5. **SHIP** — batched, not per-pulse (see Autonomy). `cargo build
-   --release` + `node dist.cjs` when a coherent user-facing batch
-   accumulates. No butler push, no PRs, unless asked.
+   --release`, then `node _candidatepolicy.cjs <candidate-exe>` before copying
+   the candidate into the release path, then `node dist.cjs` when a coherent
+   user-facing batch accumulates. The candidate gate verifies every exact
+   self-test flag/marker before its first launch, so an unknown flag cannot
+   fall through to the real profile. No butler push, no PRs, unless asked.
 
 ## What gets implemented — priority queue, top first
 
@@ -78,9 +81,29 @@ gets fixed or reverted — it does not ship.
 | Check | Command | Covers |
 |---|---|---|
 | syntax | `node --check src/main.js` | parse errors |
+| Rust | `node _rustcheck.cjs` | backend compile, with ASCII Windows target/temp paths |
 | sprites | `node _sprcheck.cjs` | row widths + palette chars |
-| behavior | `node _verify.cjs` | 93+ driven scenarios |
+| asset refs | `node _audit.cjs` | drawn sprite and treat IDs resolve to the SPR table |
+| package inputs | `node dist.cjs --check` | version/README/DLL/source freshness without writing a ZIP |
+| candidate gate | `node _candidatepolicy.cjs --self-test` | fail-closed preflight + exact exit/stdout/stderr policy-result contract |
+| input policy | `node _inputpolicy.cjs` | shipped-exe bounded geometry, safe counters + poison/setup recovery |
+| network policy | `node _networkpolicy.cjs` | shipped-exe bounded requests/output + checked child exit status |
+| save policy | `node _savepolicy.cjs` | shipped-exe serialized RESET/save/load + bounded filesystem containment |
+| photo policy | `node _photopolicy.cjs` | shipped-exe bounded reads, directory/catalog/PNG + non-recursive atomic writes |
+| log policy | `node _logpolicy.cjs` | shipped-exe bounded crash/panic records + atomic hard-link-safe writes |
+| migration policy | `node _migrationpolicy.cjs` | shipped-exe reparse/depth/size + non-recursive atomic-copy containment |
+| dev unlock | `node unlock.cjs --self-test` | marker-only profile safety + catalog/checkpoint output |
+| behavior | `node _verify.cjs` | driven social/state + treat scenarios, with explicit pass count |
+| settings | `node _voltest.cjs` | volume, autostart/reset failure UI, and failed-save retry behavior |
+| breeding | `node _breedflow.cjs` | real click path, cooldown, reveal/wedge recovery |
+| props | `node _proptest.cjs` | real drag/drop path, put-away removal vs normal-drop retention |
+| eating | `node _eatsim.cjs` | typing wake/reward, home silence, crumb floor anchoring |
 | frame soak | `node _sim.cjs` | 600 clean frames |
+| fuzz smoke | `node _fuzz.cjs 1200 424242` | deterministic mixed pointer/input/state/platform churn + invariants |
+| grant worker | `node server/test.cjs` | signed grants, license binding, retry/ack idempotency |
+| site checkout | `node _payck.cjs` | pack links, checkout syntax, license/UID routing hooks |
+| site surface | `node _mcheck.cjs` | download copy, hashes, controls, ranch DOM hooks |
+| site JS | `node _deps.cjs` | browser-script syntax + ranch/pals shared dependencies |
 | real save | `node _repro.cjs` | 7200 frames on actual state.json — run when persistence/load touched |
 
 Rules:

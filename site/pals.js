@@ -246,51 +246,6 @@ const FACES = {
     m: [[16,15],[19,15],[17,16],[18,16]],
     k: [[7,14],[8,14],[28,14],[29,14]],
   },
-  happy: {
-    e: [[10,12],[11,11],[12,11],[13,12],[22,12],[23,11],[24,11],[25,12]],
-    m: [[15,15],[16,15],[17,15],[18,15],[19,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],
-        [16,17],[17,17],[18,17],[19,17]],
-    k: [[6,14],[7,14],[8,14],[9,14],[27,14],[28,14],[29,14],[30,14]],
-  },
-  love: {
-    v: [[10,10],[12,10],[10,11],[11,11],[12,11],[11,12],
-        [23,10],[25,10],[23,11],[24,11],[25,11],[24,12]],
-    m: [[15,15],[16,15],[17,15],[18,15],[19,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],
-        [16,17],[17,17],[18,17],[19,17]],
-    k: [[6,14],[7,14],[8,14],[28,14],[29,14],[30,14]],
-  },
-  star: {
-    c: [[11,10],[10,11],[12,11],[11,12],[10,13],[12,13],
-        [24,10],[23,11],[25,11],[24,12],[23,13],[25,13]],
-    m: [[15,14],[16,14],[17,14],[18,14],[19,14],[20,14],[15,15],[16,15],[17,15],[18,15],[19,15],[20,15],
-        [16,16],[17,16],[18,16],[19,16],[17,17],[18,17]],
-    k: [[6,14],[7,14],[8,14],[6,15],[7,15],[28,14],[29,14],[30,14],[29,15],[30,15]],
-  },
-  wink: {
-    e: [[10,11],[11,12],[12,12],[13,11],
-        [23,10],[24,10],[25,10],[23,11],[24,11],[25,11],[23,12],[24,12],[25,12],
-        [23,13],[24,13],[25,13],[24,14]],
-    w: [[23,10],[23,11]],
-    m: [[15,15],[16,16],[17,16],[18,16],[19,15],[20,14]],
-    k: [[7,14],[8,14],[7,15],[8,15],[28,14],[29,14],[28,15],[29,15]],
-  },
-  sleeping: {
-    e: [[10,13],[11,14],[12,14],[13,13],[22,13],[23,14],[24,14],[25,13]],
-    m: [[17,16],[18,16]],
-    k: [[7,14],[8,14],[28,14],[29,14]],
-  },
-  shock: {
-    e: [[10,10],[11,10],[12,10],[10,11],[11,11],[12,11],[10,12],[11,12],[12,12],
-        [23,10],[24,10],[25,10],[23,11],[24,11],[25,11],[23,12],[24,12],[25,12]],
-    w: [[10,10],[23,10]],
-    m: [[16,14],[17,14],[18,14],[16,15],[17,15],[18,15],[16,16],[17,16],[18,16]],
-    k: [[7,14],[8,14],[28,14],[29,14]],
-  },
-  content: {
-    e: [[10,12],[11,13],[12,13],[13,12],[22,12],[23,13],[24,13],[25,12]],
-    m: [[15,16],[17,15],[19,15],[21,16],[16,17],[20,17]],
-    k: [[6,14],[7,14],[8,14],[7,15],[8,15],[27,14],[28,14],[29,14],[28,15],[29,15]],
-  },
   munch: {
     e: [[10,12],[11,11],[12,11],[13,12],[22,12],[23,11],[24,11],[25,12]],
     m: [[15,14],[16,14],[17,14],[18,14],[19,14],[20,14],[15,15],[16,15],[17,15],[18,15],[19,15],[20,15],
@@ -302,6 +257,7 @@ const FACES = {
     m: [[16,15],[19,15],[17,16],[18,16]],
     k: [[7,14],[8,14],[28,14],[29,14]],
   },
+  // squeezed >_< effort face, two flail frames: stub arms swap sides
   held1: {
     e: [[9,10],[10,11],[11,12],[10,13],[9,14],[26,10],[25,11],[24,12],[25,13],[26,14]],
     m: [[14,16],[15,15],[16,16],[17,15],[18,16],[19,15],[20,16],[21,15]],
@@ -312,6 +268,302 @@ const FACES = {
     e: [[9,10],[10,11],[11,12],[10,13],[9,14],[26,10],[25,11],[24,12],[25,13],[26,14]],
     m: [[14,16],[15,15],[16,16],[17,15],[18,16],[19,15],[20,16],[21,15]],
     a: [[1,13],[2,13],[33,13],[34,13]],
+  },
+  sleeping: {
+    e: [[10,13],[11,14],[12,14],[13,13],[22,13],[23,14],[24,14],[25,13]],
+    m: [[17,16],[18,16]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  grumpy: {
+    e: [[10,11],[11,11],[12,11],[13,11],[10,12],[11,12],[12,12],[13,12],
+        [22,11],[23,11],[24,11],[25,11],[22,12],[23,12],[24,12],[25,12],
+        [9,9],[10,10],[26,9],[25,10]],
+    m: [[15,16],[16,16],[17,16],[18,16],[19,16],[20,16]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  happy: {
+    e: [[10,12],[11,11],[12,11],[13,12],[22,12],[23,11],[24,11],[25,12]],
+    m: [[15,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],[16,17],[19,17]],
+    k: [[6,14],[7,14],[8,14],[9,14],[27,14],[28,14],[29,14],[30,14],[17,17],[18,17]],
+  },
+  laugh: {
+    e: [[9,10],[10,11],[11,12],[10,13],[9,14],[26,10],[25,11],[24,12],[25,13],[26,14]],
+    m: [[15,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],[15,17],[20,17],[16,18],[17,18],[18,18],[19,18]],
+    k: [[7,14],[8,14],[28,14],[29,14],[17,17],[18,17]],
+  },
+  dizzy: {
+    e: [[10,10],[12,10],[11,11],[10,12],[12,12],[23,10],[25,10],[24,11],[23,12],[25,12]],
+    m: [[15,16],[16,15],[17,16],[18,15],[19,16],[20,15]],
+  },
+  shock: {
+    e: [[10,10],[11,10],[12,10],[10,11],[11,11],[12,11],[10,12],[11,12],[12,12],
+        [23,10],[24,10],[25,10],[23,11],[24,11],[25,11],[23,12],[24,12],[25,12]],
+    w: [[10,10],[23,10]],
+    m: [[16,14],[17,14],[18,14],[16,15],[17,15],[18,15],[16,16],[17,16],[18,16]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // heart-eyes: nuzzle / siren-charmed / being adored
+  love: {
+    v: [[10,10],[12,10],[10,11],[11,11],[12,11],[11,12],
+        [23,10],[25,10],[23,11],[24,11],[25,11],[24,12]],
+    m: [[15,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],[16,17],[19,17]],
+    k: [[6,14],[7,14],[8,14],[28,14],[29,14],[30,14],[17,17],[18,17]],
+  },
+  // star-eyed excitement: gems, treats, reveals
+  star: {
+    c: [[11,10],[10,11],[12,11],[11,12],[10,13],[12,13],
+        [24,10],[23,11],[25,11],[24,12],[23,13],[25,13]],
+    m: [[15,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],[15,17],[20,17],[16,18],[17,18],[18,18],[19,18]],
+    k: [[6,14],[7,14],[8,14],[6,15],[7,15],[28,14],[29,14],[30,14],[29,15],[30,15],[17,17],[18,17]],
+  },
+  // one eye closed in a playful wink + crooked smirk
+  wink: {
+    e: [[10,11],[11,12],[12,12],[13,11],
+        [23,11],[24,11],[22,12],[23,12],[24,12],[25,12],[22,13],[23,13],[24,13],[25,13],[23,14],[24,14]],
+    w: [[23,12]],
+    u: [[23,13],[24,13]],
+    m: [[15,15],[16,16],[17,16],[18,16],[19,15],[20,14]],
+    k: [[7,14],[8,14],[7,15],[8,15],[28,14],[29,14],[28,15],[29,15]],
+  },
+  // teary eyes — mistreated, mourning a departed pal
+  cry: {
+    e: [[11,11],[12,11],[10,12],[11,12],[12,12],[13,12],[10,13],[11,13],[12,13],[13,13],
+        [23,11],[24,11],[22,12],[23,12],[24,12],[25,12],[22,13],[23,13],[24,13],[25,13]],
+    w: [[11,12],[23,12]],
+    d: [[11,15],[11,16],[24,15],[24,16],[12,17],[23,17]],
+    m: [[15,16],[16,15],[17,16],[18,15],[19,16],[20,15]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // puffed-cheek pout: mildly sulking, not full grumpy
+  pout: {
+    e: [[10,12],[11,11],[12,12],[13,12],[22,12],[23,12],[24,11],[25,12]],
+    m: [[16,16],[19,16],[17,17],[18,17]],
+    k: [[6,14],[7,14],[8,14],[6,15],[7,15],[8,15],[28,14],[29,14],[30,14],[28,15],[29,15],[30,15]],
+  },
+  // pure contentment: closed-eye curve + little cat omega mouth
+  content: {
+    e: [[10,12],[11,13],[12,13],[13,12],[22,12],[23,13],[24,13],[25,12]],
+    m: [[15,16],[17,15],[19,15],[21,16],[16,17],[20,17]],
+    k: [[6,14],[7,14],[8,14],[7,15],[8,15],[27,14],[28,14],[29,14],[28,15],[29,15]],
+  },
+  // tongue-out goofball: burps, tail-chases, extra silly moods
+  blep: {
+    e: [[10,12],[11,11],[12,11],[13,12],[22,12],[23,11],[24,11],[25,12]],
+    m: [[15,15],[16,15],[17,15],[18,15],[19,15],[20,15],
+        [16,16],[19,16],[16,17],[19,17],[17,18],[18,18]],
+    v: [[17,16],[18,16],[17,17],[18,17]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // smug half-lidded smirk: nailed the pounce, dodged your poke, knows it
+  smug: {
+    e: [[9,10],[10,10],[25,10],[26,10],
+        [10,11],[11,11],[12,11],[13,11],[10,12],[11,12],[12,12],[13,12],
+        [22,11],[23,11],[24,11],[25,11],[22,12],[23,12],[24,12],[25,12]],
+    w: [[10,11],[22,11]],
+    m: [[15,16],[16,16],[17,16],[18,16],[19,16],[20,15],[21,14]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // side-eye: narrowed eyes slid toward the glare target — jealousy,
+  // rival watch, unimpressed by whatever just happened over there
+  sideeye: {
+    e: [[11,11],[12,11],[13,11],[11,12],[12,12],[13,12],[11,13],[12,13],[13,13],
+        [24,11],[25,11],[26,11],[24,12],[25,12],[26,12],[24,13],[25,13],[26,13]],
+    w: [[11,11],[24,11]],
+    m: [[16,16],[17,16],[18,16],[19,16]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // doze: half-lidded droop — walking to a nap spot, about to drift off
+  doze: {
+    e: [[10,12],[11,12],[12,12],[13,12],[10,13],[11,13],[12,13],[13,13],
+        [22,12],[23,12],[24,12],[25,12],[22,13],[23,13],[24,13],[25,13]],
+    w: [[10,12],[22,12]],
+    u: [[10,14],[11,14],[12,14],[13,14],[22,14],[23,14],[24,14],[25,14]],
+    m: [[16,16],[17,16],[18,16],[19,16]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // yawn: closed arcs + big open O — wakes from a nap groggy
+  yawn: {
+    e: [[10,13],[11,14],[12,14],[13,13],[22,13],[23,14],[24,14],[25,13]],
+    m: [[16,15],[17,15],[18,15],[19,15],[15,16],[20,16],[15,17],[20,17],
+        [16,18],[17,18],[18,18],[19,18]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // pumped: wide bright eyes + open grin — race start, treat spotted,
+  // about to do something at full speed
+  excited: {
+    e: [[10,10],[11,10],[12,10],[13,10],[10,11],[11,11],[12,11],[13,11],[10,12],[11,12],[12,12],[13,12],
+        [22,10],[23,10],[24,10],[25,10],[22,11],[23,11],[24,11],[25,11],[22,12],[23,12],[24,12],[25,12]],
+    w: [[10,10],[11,10],[22,10],[23,10]],
+    u: [[10,13],[11,13],[12,13],[13,13],[22,13],[23,13],[24,13],[25,13]],
+    m: [[15,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],[15,17],[20,17],[16,18],[17,18],[18,18],[19,18]],
+    k: [[6,14],[7,14],[8,14],[9,14],[27,14],[28,14],[29,14],[30,14],[17,17],[18,17]],
+  },
+  // mischief: one squinted eye + crooked smirk — plotting the shove,
+  // the tag, the sneak. up to no good and proud of it
+  mischief: {
+    e: [[10,12],[11,12],[12,12],[13,12],[10,13],[11,13],[12,13],[13,13],
+        [22,10],[23,10],[24,10],[25,10],[22,11],[23,11],[24,11],[25,11],[22,12],[23,12],[24,12],[25,12]],
+    w: [[10,12],[22,10]],
+    m: [[15,16],[16,16],[17,16],[18,16],[19,15],[20,14]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // downcast: inner corners up, outer ends droop + little frown —
+  // lost the race, ignored too long, missing a departed friend
+  sad: {
+    e: [[10,11],[11,11],[12,11],[13,11],[10,12],[11,12],[12,12],[13,12],[12,13],[13,13],
+        [22,11],[23,11],[24,11],[25,11],[22,12],[23,12],[24,12],[25,12],[22,13],[23,13]],
+    w: [[10,11],[22,11]],
+    m: [[16,16],[17,16],[18,16],[19,16],[15,17],[20,17]],
+  },
+  // gasp: wide eyes + small round O — synergy pops, reveals, surprises
+  gasp: {
+    e: [[10,10],[11,10],[12,10],[10,11],[11,11],[12,11],[10,12],[11,12],[12,12],
+        [23,10],[24,10],[25,10],[23,11],[24,11],[25,11],[23,12],[24,12],[25,12]],
+    w: [[10,10],[23,10]],
+    m: [[17,15],[18,15],[16,16],[19,16],[16,17],[19,17],[17,18],[18,18]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // stuffed: puffed cheeks after a snack — content arcs, huge blush,
+  // tiny satisfied mouth
+  stuffed: {
+    e: [[10,12],[11,13],[12,13],[13,12],[22,12],[23,13],[24,13],[25,12]],
+    m: [[17,16],[18,16]],
+    k: [[6,14],[7,14],[8,14],[9,14],[6,15],[7,15],[8,15],[9,15],
+        [27,14],[28,14],[29,14],[30,14],[27,15],[28,15],[29,15],[30,15]],
+  },
+  // embar: flustered closed-eye arcs + a tiny w smile buried in a huge
+  // blush — after a nuzzle, a cuddle, or being handed a gift
+  embar: {
+    e: [[10,12],[11,13],[12,13],[13,12],[22,12],[23,13],[24,13],[25,12]],
+    m: [[16,16],[19,16],[17,17],[18,17]],
+    k: [[6,14],[7,14],[8,14],[9,14],[6,15],[7,15],[8,15],[9,15],[6,16],[7,16],
+        [27,14],[28,14],[29,14],[30,14],[27,15],[28,15],[29,15],[30,15],[29,16],[30,16]],
+  },
+  // jealous: narrowed eyes slid toward whoever got the attention, flat
+  // mouth with the far corner pulled down — the held pal, the eaten
+  // treat, the gift that went to someone else
+  jealous: {
+    m: [[16,16],[17,16],[18,16],[19,16],[20,17]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // curious: one eye open, one squinted (generated), tiny o mouth —
+  // first sight of a new species or a strange contraption landing
+  curious: {
+    m: [[17,16],[18,16],[17,17],[18,17]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // worry: brow over the eyes + wavy little frown + a cold sweat bead —
+  // a buddy hurled through the air, a pet crying, a pal in trouble
+  worry: {
+    m: [[16,17],[17,16],[18,17],[19,16],[20,17]],
+    d: [[23,15]],
+  },
+  // hmph: eyes slid away (generated), puffed cheeks + tiny pout — the
+  // shoved pal, the stepped-on pal, the tag loser sulking off
+  hmph: {
+    m: [[16,16],[19,16],[17,17],[18,17]],
+    k: [[6,15],[7,15],[8,15],[9,15],[6,16],[7,16],[8,16],
+        [27,15],[28,15],[29,15],[30,15],[28,16],[29,16],[30,16]],
+  },
+  // drool: plain eager eyes + open mouth with a drip at the corner —
+  // snack incoming, bowl in sight, lunch actually happening soon
+  drool: {
+    m: [[15,15],[16,15],[17,15],[18,15],[19,15],[20,15],
+        [16,16],[17,16],[18,16],[19,16],[17,17],[18,17]],
+    d: [[21,17],[21,18]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // plead: watery beg — tall glossy eyes + tiny mouth. the treat you
+  // can't have, the pal who got held first, PLEASE pick me
+  plead: {
+    e: [[10,10],[11,10],[12,10],[10,11],[11,11],[12,11],[10,12],[11,12],[12,12],[10,13],[11,13],[12,13],
+        [23,10],[24,10],[25,10],[23,11],[24,11],[25,11],[23,12],[24,12],[25,12],[23,13],[24,13],[25,13]],
+    w: [[10,10],[11,10],[10,11],[23,10],[24,10],[23,11]],
+    m: [[17,16],[18,16]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // serious: game face — lids down, brow set, flat mouth. mid-race,
+  // mid-tag, mid-staredown
+  serious: {
+    m: [[16,16],[17,16],[18,16],[19,16]],
+    g: [[9,9],[10,10],[26,9],[25,10]],
+  },
+  // tearjoy: laughing so hard it leaks — squeezed eyes + open grin +
+  // tears flung from the corners
+  tearjoy: {
+    e: [[9,10],[10,11],[11,12],[10,13],[9,14],[26,10],[25,11],[24,12],[25,13],[26,14]],
+    m: [[15,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],[15,17],[20,17],[16,18],[17,18],[18,18],[19,18]],
+    d: [[8,12],[8,13],[27,12],[27,13]],
+    k: [[7,14],[8,14],[28,14],[29,14],[17,17],[18,17]],
+  },
+  // meh: lidded side glance + flat wide mouth — profoundly unimpressed
+  meh: {
+    m: [[16,16],[17,16],[18,16],[19,16],[20,16]],
+  },
+  // sneeze: scrunched eyes + open O + spray drops. pollen, dust,
+  // a nose full of tickle
+  sneeze: {
+    e: [[9,10],[10,11],[11,12],[10,13],[9,14],[26,10],[25,11],[24,12],[25,13],[26,14]],
+    m: [[16,15],[17,15],[18,15],[19,15],[16,16],[17,16],[18,16],[19,16],[17,17],[18,17]],
+    d: [[13,18],[14,18],[21,18],[22,18],[15,19],[20,19]],
+  },
+  // ---- frame-2 variants: the looping second frame of animated faces.
+  // same eyes/feel as the base, one detail moved — laugh rocks its
+  // mouth shut, the drip falls, hearts bob, sparkles twinkle
+  happy2: {
+    e: [[10,12],[11,11],[12,11],[13,12],[22,12],[23,11],[24,11],[25,12]],
+    m: [[15,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],[17,17],[18,17]],
+    k: [[6,14],[7,14],[8,14],[9,14],[27,14],[28,14],[29,14],[30,14],[17,15],[18,15]],
+  },
+  laugh2: {
+    e: [[9,10],[10,11],[11,12],[10,13],[9,14],[26,10],[25,11],[24,12],[25,13],[26,14]],
+    m: [[15,16],[20,16],[16,17],[17,17],[18,17],[19,17]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  love2: {
+    v: [[10,11],[12,11],[10,12],[11,12],[12,12],[11,13],
+        [23,11],[25,11],[23,12],[24,12],[25,12],[24,13]],
+    m: [[15,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],[16,17],[19,17]],
+    k: [[6,14],[7,14],[8,14],[28,14],[29,14],[30,14],[17,17],[18,17]],
+  },
+  star2: {
+    c: [[10,10],[12,10],[11,11],[10,12],[12,12],
+        [23,10],[25,10],[24,11],[23,12],[25,12]],
+    m: [[15,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],[15,17],[20,17],[16,18],[17,18],[18,18],[19,18]],
+    k: [[6,14],[7,14],[8,14],[6,15],[7,15],[28,14],[29,14],[30,14],[29,15],[30,15],[17,17],[18,17]],
+  },
+  dizzy2: {
+    e: [[11,10],[10,11],[12,11],[11,12],[24,10],[23,11],[25,11],[24,12]],
+    m: [[15,16],[16,15],[17,16],[18,15],[19,16],[20,15]],
+  },
+  drool2: {
+    m: [[15,15],[16,15],[17,15],[18,15],[19,15],[20,15],
+        [16,16],[17,16],[18,16],[19,16],[17,17],[18,17]],
+    d: [[21,18],[21,19]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  sleeping2: {
+    e: [[10,13],[11,14],[12,14],[13,13],[22,13],[23,14],[24,14],[25,13]],
+    m: [[17,16],[18,16],[17,17],[18,17]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  cry2: {
+    e: [[11,11],[12,11],[10,12],[11,12],[12,12],[13,12],[10,13],[11,13],[12,13],[13,13],
+        [23,11],[24,11],[22,12],[23,12],[24,12],[25,12],[22,13],[23,13],[24,13],[25,13]],
+    w: [[11,12],[23,12]],
+    d: [[11,16],[11,17],[24,16],[24,17],[12,18],[23,18]],
+    m: [[16,15],[17,16],[18,16],[19,15]],
+    k: [[7,14],[8,14],[28,14],[29,14]],
+  },
+  // excited2/worry2: eyes come from the species stamp (EYE_EXPR) — only
+  // the mouth/detail lives here
+  excited2: {
+    m: [[15,15],[20,15],[15,16],[16,16],[17,16],[18,16],[19,16],[20,16],[16,17],[19,17]],
+    k: [[6,14],[7,14],[8,14],[9,14],[27,14],[28,14],[29,14],[30,14],[17,17],[18,17]],
+  },
+  worry2: {
+    m: [[16,16],[17,17],[18,16],[19,17],[20,16]],
+    d: [[12,15]],
   },
 };
 
@@ -357,11 +609,11 @@ function wingImg(frame, base) {
 }
 
 const EYE_TPL = [
-  [".ee.", "wwee", "weee", "eeew", ".uu."],
-  ["wee.", "wwee", "weee", "eewe", ".uu."],
-  ["....", ".we.", ".ee.", ".ee.", "...."],
-  [".ee.", "wwee", "weee", "eece", ".uu."],
-  ["....", "eeee", "weee", "eeew", ".uu."],
+  { g: ["....", ".ee.", "eeee", "eeue", ".ee."], w: [[1, 2]] },
+  { g: [".ee.", "eeee", "eeee", "eeue", ".ee."], w: [[1, 1], [2, 3]] },
+  { g: ["....", ".ee.", ".ee.", ".ee.", "...."], w: [[1, 1]] },
+  { g: [".ee.", "eeee", "eeee", "eece", ".ee."], w: [[1, 1]] },
+  { g: ["....", "....", "eeee", "eeue", ".ee."], w: [[1, 3]] },
 ];
 function eyeStyle(i) {
   const id = SPECIES[i] && SPECIES[i].id;
@@ -371,21 +623,101 @@ function eyeStyle(i) {
   const r = ((s * 1664525 + 1013904223) >>> 0) / 4294967296;
   return r < 0.40 ? 0 : r < 0.60 ? 1 : r < 0.74 ? 2 : r < 0.87 ? 3 : 4;
 }
+// same generated eyes as main.js — clean 4x5 templates symmetric around 17.5
 const EYE_BASE = { idle: [10, 22], lookL: [9, 21], lookR: [11, 23] };
+const EYE_EXPR = {
+  excited:  { perk: true },
+  gasp:     { perk: true },
+  sad:      { slant: true },
+  sideeye:  { dx: -2 },
+  doze:     { lid: 2 },
+  mischief: { lid: 2, side: 0 },
+  jealous:  { dx: -2, lid: 2 },
+  curious:  { lid: 2, side: 1 },
+  worry:    { slant: true },
+  hmph:     { dx: 2, lid: 2 },
+  drool:    {},
+  serious:  { lid: 3 },
+  meh:      { lid: 2, dx: -1 },
+  excited2: { perk: true },
+  drool2:   {},
+  worry2:   { slant: true },
+};
 function faceSet(spIdx) {
   if (spIdx == null) return FACES;
   const c = (faceSet.c ||= {});
   if (c[spIdx]) return c[spIdx];
   const tpl = EYE_TPL[eyeStyle(spIdx)];
   const set = Object.assign({}, FACES);
+  let topR = 5, botR = -1;
+  for (let y = 0; y < 5; y++) {
+    if (tpl.g[y] !== "....") { if (y < topR) topR = y; botR = y; }
+  }
+  const stamp = (px, bi, bx, spec) => {
+    const dx = (spec && spec.dx) || 0;
+    const dy = (spec && spec.dy) || 0;
+    const sideMatch = !spec || spec.side == null || spec.side === bi;
+    const lid = sideMatch && spec && spec.lid ? spec.lid : 0;
+    const slant = sideMatch && spec && spec.slant;
+    const perk = sideMatch && spec && spec.perk;
+    const buf = Array.from({ length: 5 }, () => new Array(4).fill("."));
+    let r0 = topR, r1 = botR;
+    if (perk && topR >= 2) {
+      buf[topR - 1][1] = "e";
+      buf[topR - 1][2] = "e";
+      r0 = topR - 1;
+    }
+    for (let y = 0; y < 5; y++) {
+      for (let x = 0; x < 4; x++) {
+        const ch = tpl.g[y][x];
+        if (ch !== ".") buf[y][bi ? 3 - x : x] = ch;
+      }
+    }
+    if (lid) {
+      const keepStart = Math.max(r0 + (r1 - r0 + 1 >= 4 ? 1 : 0), r1 - lid + 1);
+      for (let y = 0; y < keepStart; y++) buf[y].fill(".");
+      for (let x = 0; x < 4; x++) {
+        if (buf[keepStart][x] !== ".") buf[keepStart][x] = "e";
+      }
+      r0 = keepStart;
+    }
+    if (slant) {
+      const outerX = bi ? 3 : 0;
+      const outerIn = bi ? 2 : 1;
+      if (buf[r0][outerX] !== ".") buf[r0][outerX] = ".";
+      else if (r0 + 1 <= r1 && buf[r0 + 1][outerX] !== ".") buf[r0 + 1][outerX] = ".";
+      if (buf[r0][outerIn] !== ".") buf[r0][outerIn] = "e";
+    }
+    const ws = Array.isArray(tpl.w) ? tpl.w : (bi ? tpl.w.r : tpl.w.l);
+    for (const [wx, wy] of ws) {
+      if (lid && wy <= r0) {
+        if (wy + 1 <= r1 && buf[wy + 1][wx] !== ".") buf[wy + 1][wx] = "w";
+        continue;
+      }
+      if (wy >= 0 && wy < 5 && buf[wy][wx] !== ".") buf[wy][wx] = "w";
+    }
+    if (perk && topR >= 2 && buf[topR][1] !== ".") {
+      for (const [wx, wy] of ws) if (wy >= topR + 1 && buf[wy][wx] === "w") buf[wy][wx] = "e";
+      buf[topR][1] = "w";
+    }
+    for (let y = 0; y < 5; y++) {
+      for (let x = 0; x < 4; x++) {
+        const ch = buf[y][x];
+        if (ch !== ".") px[ch].push([bx + x + dx, 10 + y + dy]);
+      }
+    }
+  };
   for (const f in EYE_BASE) {
     const px = { e: [], w: [], u: [], c: [] };
-    for (const bx of EYE_BASE[f])
-      for (let y = 0; y < 5; y++)
-        for (let x = 0; x < 4; x++) {
-          const ch = tpl[y][x];
-          if (ch !== ".") px[ch].push([bx + x, 10 + y]);
-        }
+    stamp(px, 0, EYE_BASE[f][0], null);
+    stamp(px, 1, EYE_BASE[f][1], null);
+    set[f] = Object.assign({}, FACES[f], px);
+  }
+  for (const f in EYE_EXPR) {
+    const spec = EYE_EXPR[f];
+    const px = { e: [], w: [], u: [], c: [] };
+    stamp(px, 0, 10, spec);
+    stamp(px, 1, 22, spec);
     set[f] = Object.assign({}, FACES[f], px);
   }
   return (c[spIdx] = set);
@@ -399,6 +731,8 @@ function mixRgb(a, b, f) {
 }
 const SWEAT = hexRgb("#8fd4f0");
 const FIXED = { d: SWEAT, c: hexRgb("#ffd75e"), g: hexRgb("#2f2f3a"), v: hexRgb("#ff8fb8") };
+const EYE_CH = { e: 1, w: 1, u: 1, c: 1 };
+const NO_GRAIN = { e: 1, w: 1, u: 1, c: 1, m: 1, v: 1, d: 1, g: 1 };
 
 const shapeVarCache = {};
 function shapeVar(i) {
@@ -425,7 +759,22 @@ function shapeVar(i) {
     nx = Math.max(CX - lim, Math.min(CX + lim, nx));
     return [Math.max(0, Math.min(SW - 1, nx)), ny];
   };
-  return (shapeVarCache[i] = { hw, tfm });
+  let fdy = (SH - 1 - Math.round((SH - 1 - 12) * hs)) - 12;
+  if (hw[Math.max(0, Math.min(SH - 1, 10 + fdy))] <= 11 && 16 + fdy <= SH - 3) fdy += 1;
+  let fdx = Math.round(lean * (1 - (12 + fdy) / SH));
+  const eyeMinW = Math.min(
+    hw[Math.max(0, Math.min(SH - 1, 11 + fdy))] || 0,
+    hw[Math.max(0, Math.min(SH - 1, 12 + fdy))] || 0,
+    hw[Math.max(0, Math.min(SH - 1, 13 + fdy))] || 0,
+    hw[Math.max(0, Math.min(SH - 1, 14 + fdy))] || 0,
+  );
+  const maxShift = Math.max(0, eyeMinW - 9);
+  fdx = Math.max(-maxShift, Math.min(maxShift, fdx));
+  const faceTfm = (x, y) => [
+    Math.max(0, Math.min(SW - 1, x + fdx)),
+    Math.max(0, Math.min(SH - 1, y + fdy)),
+  ];
+  return (shapeVarCache[i] = { hw, tfm, faceTfm });
 }
 
 const animCache = {};
@@ -453,20 +802,25 @@ function buildSprite(faceName, pal, top, hw, sil, spIdx) {
   for (let y = 0; y < SH; y++) {
     for (let x = CX - hhw[y]; x < CX + hhw[y]; x++) {
       let c = "b";
-      const dx = x - 12, dy = y - 6;
-      if (dx * dx + dy * dy < 20) c = "l";
-      if (y >= 21 || (x - CX >= 8 && y >= 17)) c = "s";
-      if (c === "b") {
-        const gx = (x - CX) / Math.max(5, hw[y] * 0.7), gy = (y - 12) / 7.5;
+      const dx = x - 10, dy = y - 4;
+      if (dx * dx + dy * dy < 14) c = "l";
+      if (y >= 21 || (x - CX >= 8 + ((x * 31 + y * 17) & 3) && y >= 17)) c = "s";
+      if (c === "b" && y >= 15) {
+        const gx = (x - CX) / Math.max(5, hhw[y] * 0.7), gy = (y - 19) / 6.5;
         const d2 = gx * gx + gy * gy;
-        if (d2 < 1 && (d2 < 0.75 || ((x + y) & 1) === 0)) c = "i";
+        const dh = (x * 31 + y * 17) & 3;
+        if (d2 < 0.55) c = "i";
+        else if (d2 < 0.8) { if (dh !== 0) c = "i"; }
+        else if (d2 < 1.0) { if (dh === 0) c = "i"; }
       }
       grid[y][x] = c;
     }
   }
   const tfm = v ? v.tfm : (x, y) => [x, y];
-  const F = faceSet(spIdx)[faceName];
-  for (const [x, y, ch] of top || []) { const [nx, ny] = tfm(x, y); grid[ny][nx] = ch; }
+  const ftfm = v ? v.faceTfm : (x, y) => [x, y];
+  const fset = faceSet(spIdx);
+  const F = fset[faceName] || fset.idle;
+  for (const [x, y, ch] of top || []) { const [nx, ny] = ch === "g" ? ftfm(x, y) : tfm(x, y); grid[ny][nx] = ch; }
   for (const [x, y] of F.a || []) { const [nx, ny] = tfm(x, y); grid[ny][nx] = "b"; }
   for (let y = 0; y < SH; y++) {
     for (let x = 0; x < SW; x++) {
@@ -484,7 +838,7 @@ function buildSprite(faceName, pal, top, hw, sil, spIdx) {
   }
   for (const ch in F) {
     if (ch === "a") continue;
-    for (const [x, y] of F[ch]) { const [nx, ny] = tfm(x, y); grid[ny][nx] = ch; }
+    for (const [x, y] of F[ch]) { const [nx, ny] = ftfm(x, y); grid[ny][nx] = ch; }
   }
   const off = document.createElement("canvas");
   const SS = 2;
@@ -498,41 +852,54 @@ function buildSprite(faceName, pal, top, hw, sil, spIdx) {
   const bl = bR ? bR[0] * 0.299 + bR[1] * 0.587 + bR[2] * 0.114 : 128;
   const lift = bR && bl < 76 ? Math.min(0.3, (76 - bl) / 76 * 0.34) : 0;
   const bIn = sil ? null : mixRgb(mixRgb(bR, lR, 0.24), WHT, 0.14 + lift);
-  const iIn = sil ? null : mixRgb(mixRgb(bR, lR, 0.74), WHT, 0.20 + lift);
+  const iIn = sil ? null : mixRgb(mixRgb(bR, lR, 0.30), WHT, 0.18 + lift);
   const sIn = sil ? null : mixRgb(mixRgb(sR, lR, 0.32), WHT, 0.16 + lift * 0.6);
   const oIn = sil ? null : mixRgb(oR, mixRgb(bR, lR, 0.35), 0.45 + lift);
   const lIn = sil ? null : mixRgb(lR, WHT, 0.16);
-  const uIn = sil ? null : mixRgb(hexRgb(pal.e || "#26262e"), lR, 0.45);
-  const ALPHA = { i: 215, b: 242, s: 232, l: 250 };
+  const eIn = sil ? null : hexRgb(pal.e || "#26262e");
+  const uIn = sil ? null : mixRgb(eIn, lR, 0.28);
+  const colorOf = (ch) => sil ? hexRgb(pal[ch] || pal.b)
+    : ch === "i" ? iIn : ch === "b" ? bIn : ch === "s" ? sIn : ch === "o" ? oIn
+    : ch === "l" ? lIn : ch === "u" ? uIn : (FIXED[ch] || hexRgb(pal[ch] || pal.b));
+  const ALPHA = { i: 252, b: 252, s: 253, l: 254 };
   const cellAt = (x, y) => (x < 0 || y < 0 || x >= SW || y >= SH) ? "." : grid[y][x];
   for (let y = 0; y < SH; y++) {
     for (let x = 0; x < SW; x++) {
       const c = grid[y][x];
       if (c === ".") continue;
-      const rgb = sil ? hexRgb(pal[c] || pal.b)
-        : c === "i" ? iIn
-        : c === "b" ? bIn
-        : c === "s" ? sIn
-        : c === "o" ? oIn
-        : c === "l" ? lIn
-        : c === "u" ? uIn
-        : (FIXED[c] || hexRgb(pal[c] || pal.b));
+      const rgb = colorOf(c);
       const baseA = sil ? 255 : (ALPHA[c] !== undefined ? ALPHA[c] : 255);
+      const eyeOrth = !sil && (c === "e" || c === "u")
+        ? (EYE_CH[cellAt(x - 1, y)] ? 1 : 0) + (EYE_CH[cellAt(x + 1, y)] ? 1 : 0)
+          + (EYE_CH[cellAt(x, y - 1)] ? 1 : 0) + (EYE_CH[cellAt(x, y + 1)] ? 1 : 0)
+        : 0;
       for (let qy = 0; qy < SS; qy++) {
+        const offY = qy === 0 ? -1 : qy === SS - 1 ? 1 : 0;
         for (let qx = 0; qx < SS; qx++) {
-          const nx = cellAt(x + (qx ? 1 : -1), y), ny = cellAt(x, y + (qy ? 1 : -1));
-          const nc = cellAt(x + (qx ? 1 : -1), y + (qy ? 1 : -1));
+          const offX = qx === 0 ? -1 : qx === SS - 1 ? 1 : 0;
+          const nx = offX ? cellAt(x + offX, y) : c;
+          const ny = offY ? cellAt(x, y + offY) : c;
+          const nc = (offX || offY) ? cellAt(x + offX, y + offY) : c;
           let r = rgb[0], g = rgb[1], b = rgb[2], a = baseA;
           if (nx === "." || ny === "." || nc === ".") {
             a = baseA * 0.45;
-            r = mixRgb(rgb, oIn || rgb, 0.4)[0]; g = mixRgb(rgb, oIn || rgb, 0.4)[1]; b = mixRgb(rgb, oIn || rgb, 0.4)[2];
-          } else if (nx === "o" || ny === "o") {
+            const fm = mixRgb(rgb, oIn || rgb, 0.4);
+            r = fm[0]; g = fm[1]; b = fm[2];
+          } else if (!sil && (c === "e" || c === "u") && eyeOrth >= 2 && offX && offY && !EYE_CH[nx] && !EYE_CH[ny]) {
+            const mx = mixRgb(rgb, colorOf(nx), 0.42);
+            r = mx[0]; g = mx[1]; b = mx[2];
+          } else if (!sil && c === "k" && (offX || offY) && (nx !== "k" || ny !== "k")) {
+            const out = nx !== "k" ? nx : ny;
+            const ext = (nx !== "k" && ny !== "k") ? 0.52 : 0.28;
+            const mx = mixRgb(rgb, colorOf(out), ext);
+            r = mx[0]; g = mx[1]; b = mx[2];
+          } else if (!NO_GRAIN[c] && (nx === "o" || ny === "o")) {
             r *= 0.86; g *= 0.86; b *= 0.86;
           } else if ((nx === "l" || ny === "l" || nc === "i") && (c === "b" || c === "i")) {
             r = Math.min(255, r * 1.06); g = Math.min(255, g * 1.06); b = Math.min(255, b * 1.06);
           }
-          const n2 = (((x * 2 + qx) * 73856093) ^ ((y * 2 + qy) * 19349663)) >>> 0;
-          const dt2 = ((n2 % 11) - 5) * 1.6;
+          const n2 = (((x * SS + qx) * 73856093) ^ ((y * SS + qy) * 19349663)) >>> 0;
+          const dt2 = NO_GRAIN[c] ? 0 : ((n2 % 11) - 5) * 1.4;
           const i2 = ((y * SS + qy) * SW * SS + (x * SS + qx)) * 4;
           img.data[i2] = Math.max(0, Math.min(255, r + dt2));
           img.data[i2 + 1] = Math.max(0, Math.min(255, g + dt2));

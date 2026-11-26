@@ -27,7 +27,7 @@
 | **itch.io** | [gyeongbin.itch.io/jellypal](https://gyeongbin.itch.io/jellypal) — auto-updates via the itch app |
 | **GitHub** | [Releases](https://github.com/gyeongbin-38/JellyPal/releases) |
 
-**Windows 10/11 64-bit**, WebView2 Runtime (preinstalled on Win11). ~1.6 MB. **macOS (Apple Silicon)** dmg on [Releases](https://github.com/gyeongbin-38/JellyPal/releases) — unsigned, right-click → Open. Build your own: [MACBUILD.md](MACBUILD.md).
+**Windows 10/11 64-bit**, WebView2 Runtime (preinstalled on Win11). ~1.7 MB. **macOS (Apple Silicon)** dmg on [Releases](https://github.com/gyeongbin-38/JellyPal/releases) — unsigned, right-click → Open. Build your own: [MACBUILD.md](MACBUILD.md).
 
 ## What it does
 
@@ -73,6 +73,8 @@ site/           jellypal.fun — marketing page + hosted downloads
 
 `%APPDATA%\com.jellypal.desktop\` — `state.json` (collection, jelly, props),
 `photos/` (photo mode shots), `clickdbg.json` / `crash.log` (diagnostics).
+Rejected rollback/corrupt generations are copied to `recovery/` before a
+fresh save can replace them.
 Settings → RESET → SURE? wipes it all.
 
 ---

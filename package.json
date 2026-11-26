@@ -4,9 +4,13 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test": "node scripts/_sim.cjs && node scripts/_storesim.cjs && node scripts/check-store.cjs",
+    "prepare:store": "node scripts/prepare-store.cjs",
+    "test:layout": "node scripts/check-layout.cjs"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2"
+    "@tauri-apps/cli": "^2",
+    "playwright": "1.63.0"
   }
 }

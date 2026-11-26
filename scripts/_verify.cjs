@@ -46,7 +46,7 @@ const getEl = (id) => {
       addEventListener(ev, fn) { (e.listeners[ev] = e.listeners[ev] || []).push(fn); },
       removeEventListener() {}, appendChild() {}, remove() {},
       setPointerCapture() {}, releasePointerCapture() {},
-      getBoundingClientRect() { return { left: 0, top: 0, width: 320, height: 400 }; },
+      getBoundingClientRect() { return { left: parseFloat(e.style.left) || 0, top: parseFloat(e.style.top) || 0, width: e.offsetWidth || e.width, height: e.offsetHeight || e.height }; },
       classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
       querySelector() { return null; }, querySelectorAll() { return []; },
       width: 320, height: 400,
@@ -920,6 +920,23 @@ const check = (name, ok, extra = "") => {
     check("napping blocker is hopped, never stepped", hopped && !E("pals[1].stepped") && E("pals[1].restUntil") > tNow,
       `stepped=${E("pals[1].stepped")} rest=${E("pals[1].restUntil > 0")}`);
     E(`if (pals[0]._sp0 != null) { pals[0].sp = pals[0]._sp0; delete pals[0]._sp0; }`);
+
+    // two parked pals used to be exempt from separation and could clip into
+    // one blob forever. The crowd solver now eases even settled pals apart —
+    // positionally, without launching either one
+    E(`pals.forEach((p, pi) => {
+       p.x = plats[0].x + 500 + pi * 2; p.y = plats[0].y; p.plat = plats[0];
+       p.vx = 0; p.vy = 0; p.fly = false; p.walkT = null; p.walkV = 0; p.nextT = ${tNow} + 999999;
+       p.restUntil = 0; p.hideUntil = 0; p.settleUntil = ${tNow} + 5000; p.web = 0;
+       p.stackOn = null; p.follow = null; p.tag = null; p.chatMate = null; p.scene = null; p.group = null;
+       p.act = null; p.accAct = null; p.propGoal = null; p.hopWind = 0;
+       p.socCd = ${tNow} + 999999; p.playCd = ${tNow} + 999999; p.chatCd = ${tNow} + 999999;
+     })`);
+    await pump(45);
+    const crowdGap = Math.abs(E("pals[1].x") - E("pals[0].x"));
+    check("parked crowd separates without launching", crowdGap >= 30 && !E("pals[0].fly") && !E("pals[1].fly"),
+      `gap=${crowdGap.toFixed(1)} fly=${E("pals[0].fly")},${E("pals[1].fly")}`);
+    E(`pals.forEach((p) => { p.settleUntil = 0; p.walkT = null; p.fly = false; })`);
 
     // pal nap cooldown scales with its own sleep axis (and night/baby multipliers)
     E(`cushion = { x: plats[0].x + 320, y: plats[0].y, plat: plats[0] }; cushionNap = 0;
