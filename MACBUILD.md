@@ -88,7 +88,7 @@ It validates the resulting app and installer signatures. It never uploads.
 ```sh
 bash src-tauri/macos-store/sign.sh /path/Jellypal.app \
   "Apple Distribution: Your Name (TEAMID)" \
-  "3rd Party Mac Developer Installer: Your Name (TEAMID)" \
+  "Mac Installer Distribution: Your Name (TEAMID)" \
   127 /path/Jellypal.provisionprofile
 ```
 
@@ -118,8 +118,10 @@ owner fields must be completed in the Apple account before submission.
   and the final signed installer package.
 - Confirm macOS-only App Store Connect platform, bundle ID, four IAP products,
   privacy and support URLs.
-- Capture submission screenshots from the final Mac app. Existing stylized
-  marketing renders and Chromium QA captures are not native-device evidence.
+- Confirm submission screenshots represent the final Mac app. The existing
+  stylized renders are exact-size opaque RGB assets validated by check-store,
+  but final native Mac captures are preferable; Chromium QA captures are not
+  native-device evidence.
 
 ## Verified candidate (2026-11-26)
 

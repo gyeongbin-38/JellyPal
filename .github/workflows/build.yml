@@ -225,7 +225,7 @@ jobs:
           /usr/libexec/PlistBuddy -c 'Print :com.apple.security.app-sandbox' "$RUNNER_TEMP/store-check/entitlements.plist" | grep -x true
           "$APP/Contents/MacOS/jellypal" > "$RUNNER_TEMP/store-check/stdout.log" 2> "$RUNNER_TEMP/store-check/stderr.log" &
           APP_PID=$!
-          sleep 25
+          sleep 35
           kill -0 "$APP_PID"
           screencapture -x "$RUNNER_TEMP/store-check/native-screen.png" 2> "$RUNNER_TEMP/store-check/screenshot.log" || true
           kill "$APP_PID" || true
@@ -234,10 +234,10 @@ jobs:
           test -n "$STATE"
           node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); console.log("Sandbox save parsed")' "$STATE"
           LOG="$(find "$HOME/Library/Containers/com.jellypal.store" -name crash.log -print -quit)"
-          if [ -n "$LOG" ]; then
-            cp "$LOG" "$RUNNER_TEMP/store-check/frontend.log"
-            if grep -E 'JSERR|JSREJ|FRAME ' "$LOG"; then exit 1; fi
-          fi
+          test -n "$LOG"
+          cp "$LOG" "$RUNNER_TEMP/store-check/frontend.log"
+          grep -Eq '\] tick$' "$LOG"
+          if grep -E 'JSERR|JSREJ|FRAME ' "$LOG"; then exit 1; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -17,9 +17,14 @@
     "subtitle": "A tiny desktop slime companion",
     "description": "Meet Jellypal, a small pixel-art slime companion for your Mac. Pet your pal, collect new species, decorate their rooms, and breed baby hybrids. Earn jelly while the app is open and use it to grow your collection.\n\nKeep your companion nearby in a movable desktop window. Visit the Ranch to browse your collection, dress up your pals, and check their moods. A focus timer helps your companion keep you company through work and breaks.\n\nPlay locally without creating an account. Optional jelly packs are available through Apple's in-app purchases.",
     "keywords": "desktop,pet,slime,companion,pixel,virtual,collection,relax,focus",
-    "supportUrl": "https://jellypal.fun/",
+    "supportUrl": "https://jellypal.fun/support.html",
     "privacyPolicyUrl": "https://jellypal.fun/privacy.html"
   },
+  "screenshotDrafts": [
+    {"file": "assets/store-shot1-2560.png", "size": "2560x1600", "shows": "companion window earning jelly on a desktop"},
+    {"file": "assets/store-shot2-2560.png", "size": "2560x1600", "shows": "species Ranch collection"},
+    {"file": "assets/store-shot3-2560.png", "size": "2560x1600", "shows": "rare shiny companion moment"}
+  ],
   "consumablePurchases": [
     {"productId": "com.jellypal.jelly.small", "name": "Jelly Pack S", "description": "250 jelly for your collection", "jelly": 250, "price": null},
     {"productId": "com.jellypal.jelly.medium", "name": "Jelly Pack M", "description": "500 jelly for your collection", "jelly": 500, "price": null},
